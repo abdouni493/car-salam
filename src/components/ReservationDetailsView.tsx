@@ -5,6 +5,7 @@ import { ArrowLeft, Calendar, Clock, MapPin, Fuel, Camera, FileText, CreditCard,
 import { ReservationsService } from '../services/ReservationsService';
 import { DatabaseService } from '../services/DatabaseService';
 import { supabase } from '../supabase';
+import { formatAmount } from '../utils/format';
 
 interface ReservationDetailsViewProps {
   lang: Language;
@@ -128,9 +129,9 @@ export const ReservationDetailsView: React.FC<ReservationDetailsViewProps> = ({ 
                '⏳ En attente'}
             </span>
             <div className="text-sm text-saas-text-muted">
-              <p>💰 {lang === 'fr' ? 'Total:' : 'المجموع:'} {reservation.totalPrice.toLocaleString()} {lang === 'fr' ? 'DA' : 'د.ج'}</p>
-              <p>💳 {lang === 'fr' ? 'Payé:' : 'مدفوع:'} {reservation.advancePayment.toLocaleString()} {lang === 'fr' ? 'DA' : 'د.ج'}</p>
-              <p>⚠️ {lang === 'fr' ? 'Reste:' : 'متبقي:'} {reservation.remainingPayment.toLocaleString()} {lang === 'fr' ? 'DA' : 'د.ج'}</p>
+              <p>💰 {lang === 'fr' ? 'Total:' : 'المجموع:'} {formatAmount(reservation.totalPrice)} {lang === 'fr' ? 'DA' : 'د.ج'}</p>
+              <p>💳 {lang === 'fr' ? 'Payé:' : 'مدفوع:'} {formatAmount(reservation.advancePayment)} {lang === 'fr' ? 'DA' : 'د.ج'}</p>
+              <p>⚠️ {lang === 'fr' ? 'Reste:' : 'متبقي:'} {formatAmount(reservation.remainingPayment)} {lang === 'fr' ? 'DA' : 'د.ج'}</p>
             </div>
           </div>
 
@@ -344,7 +345,7 @@ const InspectionsTab: React.FC<{ lang: Language; reservation: ReservationDetails
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             <div className="bg-blue-50 rounded-lg p-4">
               <p className="font-bold text-blue-900">⛽ {lang === 'fr' ? 'Kilométrage' : 'العداد'}</p>
-              <p className="text-2xl font-black text-blue-700">{reservation.departureInspection.mileage.toLocaleString()} km</p>
+              <p className="text-2xl font-black text-blue-700">{formatAmount(reservation.departureInspection.mileage)} km</p>
             </div>
             <div className="bg-green-50 rounded-lg p-4">
               <p className="font-bold text-green-900">🛢️ {lang === 'fr' ? 'Carburant' : 'الوقود'}</p>
@@ -478,7 +479,7 @@ const InspectionsTab: React.FC<{ lang: Language; reservation: ReservationDetails
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             <div className="bg-blue-50 rounded-lg p-4">
               <p className="font-bold text-blue-900">⛽ {lang === 'fr' ? 'Kilométrage' : 'العداد'}</p>
-              <p className="text-2xl font-black text-blue-700">{reservation.returnInspection.mileage.toLocaleString()} km</p>
+              <p className="text-2xl font-black text-blue-700">{formatAmount(reservation.returnInspection.mileage)} km</p>
             </div>
             <div className="bg-green-50 rounded-lg p-4">
               <p className="font-bold text-green-900">📏 {lang === 'fr' ? 'Distance' : 'المسافة'}</p>
@@ -650,15 +651,15 @@ const PaymentsTab: React.FC<{ lang: Language; reservation: ReservationDetails; o
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white rounded-lg p-4 text-center border border-saas-border">
           <p className="text-sm text-saas-text-muted">{lang === 'fr' ? 'Montant Total' : 'المبلغ الإجمالي'}</p>
-          <p className="text-2xl font-black text-saas-text-main">{reservation.totalPrice.toLocaleString()} DA</p>
+          <p className="text-2xl font-black text-saas-text-main">{formatAmount(reservation.totalPrice)} DA</p>
         </div>
         <div className="bg-green-50 rounded-lg p-4 text-center border border-green-200">
           <p className="text-sm text-green-700">{lang === 'fr' ? 'Montant Payé' : 'المبلغ المدفوع'}</p>
-          <p className="text-2xl font-black text-green-700">{reservation.advancePayment.toLocaleString()} DA</p>
+          <p className="text-2xl font-black text-green-700">{formatAmount(reservation.advancePayment)} DA</p>
         </div>
         <div className="bg-orange-50 rounded-lg p-4 text-center border border-orange-200">
           <p className="text-sm text-orange-700">{lang === 'fr' ? 'Reste à Payer' : 'المبلغ المتبقي'}</p>
-          <p className="text-2xl font-black text-orange-700">{reservation.remainingPayment.toLocaleString()} DA</p>
+          <p className="text-2xl font-black text-orange-700">{formatAmount(reservation.remainingPayment)} DA</p>
         </div>
         <div className="bg-blue-50 rounded-lg p-4 text-center border border-blue-200">
           {typeof reservation.cautionEnabled === 'undefined' || reservation.cautionEnabled ? (
@@ -666,7 +667,7 @@ const PaymentsTab: React.FC<{ lang: Language; reservation: ReservationDetails; o
               <p className="text-sm text-blue-700">{lang === 'fr' ? 'Caution' : 'الضمان'}</p>
               {/* Display caution in DZD */}
               <p className="text-2xl font-black text-blue-700">
-                {((reservation as any).cautionAmountDzd || reservation.deposit).toLocaleString()} DA
+                {formatAmount((reservation as any).cautionAmountDzd || reservation.deposit)} DA
               </p>
               {/* Display caution in EUR if currency is EUR */}
               {(reservation as any).cautionCurrency === 'EUR' && (reservation as any).euroRate && (
@@ -689,7 +690,7 @@ const PaymentsTab: React.FC<{ lang: Language; reservation: ReservationDetails; o
           <div className="bg-purple-50 rounded-lg p-4 text-center border border-purple-200">
             <p className="text-sm text-purple-700">{lang === 'fr' ? 'Assurance' : 'التأمين'}</p>
             <p className="text-2xl font-black text-purple-700">
-              {Math.round((reservation.totalPrice) * ((reservation as any).assurancePercentage || 0) / 100).toLocaleString()} DA
+              {formatAmount(Math.round((reservation.totalPrice) * ((reservation as any).assurancePercentage || 0) / 100))} DA
             </p>
             <p className="text-xs text-purple-600 mt-1">({(reservation as any).assurancePercentage}%)</p>
           </div>
@@ -723,7 +724,7 @@ const PaymentsTab: React.FC<{ lang: Language; reservation: ReservationDetails; o
                     <DollarSign className="w-5 h-5 text-green-600" />
                   </div>
                   <div>
-                    <p className="font-bold text-saas-text-main">{payment.amount.toLocaleString()} DA</p>
+                    <p className="font-bold text-saas-text-main">{formatAmount(payment.amount)} DA</p>
                     <p className="text-sm text-saas-text-muted">{payment.date} • {payment.method === 'cash' ? (lang === 'fr' ? 'Espèces' : 'نقدي') : payment.method === 'card' ? (lang === 'fr' ? 'Carte' : 'بطاقة') : (lang === 'fr' ? 'Virement' : 'تحويل')}</p>
                     {payment.note && <p className="text-xs text-saas-text-muted">{payment.note}</p>}
                   </div>
@@ -809,12 +810,12 @@ const FinancialTab: React.FC<{ lang: Language; reservation: ReservationDetails }
       <div className="space-y-4">
         <div className="flex justify-between items-center py-2 border-b border-slate-200">
           <span className="font-bold">{lang === 'fr' ? 'Location de base' : 'التأجير الأساسي'}</span>
-          <span className="font-bold">{(reservation.totalPrice - reservation.additionalFees).toLocaleString()} DA</span>
+          <span className="font-bold">{formatAmount(reservation.totalPrice - reservation.additionalFees)} DA</span>
         </div>
         {reservation.additionalServices.map((service: any) => (
           <div key={service.id} className="flex justify-between items-center py-2 border-b border-slate-200">
             <span>🛎️ {service.name || service.service_name}</span>
-            <span>{Number(service.price).toLocaleString()} DA</span>
+            <span>{formatAmount(Number(service.price))} DA</span>
           </div>
         ))}
         {(reservation.protectionAssurance || reservation.protectionAssuranceName) && (
@@ -822,28 +823,28 @@ const FinancialTab: React.FC<{ lang: Language; reservation: ReservationDetails }
             <span>🛡️ {reservation.protectionAssurance?.name || reservation.protectionAssuranceName}
               {reservation.protectionAssurancePrice != null && reservation.totalDays > 0 && (
                 <span className="text-slate-400 text-sm ml-1">
-                  ({(reservation.protectionAssurancePrice).toLocaleString()} DA/{lang === 'fr' ? 'j' : 'ي'} × {reservation.totalDays})
+                  ({formatAmount(reservation.protectionAssurancePrice)} DA/{lang === 'fr' ? 'j' : 'ي'} × {reservation.totalDays})
                 </span>
               )}
             </span>
-            <span>{Math.round((reservation.protectionAssurancePrice || 0) * (reservation.totalDays || 0)).toLocaleString()} DA</span>
+            <span>{formatAmount(Math.round((reservation.protectionAssurancePrice || 0) * (reservation.totalDays || 0)))} DA</span>
           </div>
         )}
         {reservation.excessMileage > 0 && (
           <div className="flex justify-between items-center py-2 border-b border-slate-200 text-red-600">
             <span>{lang === 'fr' ? 'Kilométrage excédentaire' : 'عداد الكيلومترات الزائد'}</span>
-            <span>{reservation.excessMileage.toLocaleString()} DA</span>
+            <span>{formatAmount(reservation.excessMileage)} DA</span>
           </div>
         )}
         {reservation.missingFuel > 0 && (
           <div className="flex justify-between items-center py-2 border-b border-slate-200 text-red-600">
             <span>{lang === 'fr' ? 'Carburant manquant' : 'الوقود المفقود'}</span>
-            <span>{reservation.missingFuel.toLocaleString()} DA</span>
+            <span>{formatAmount(reservation.missingFuel)} DA</span>
           </div>
         )}
         <div className="flex justify-between items-center py-4 border-t-2 border-slate-300 text-lg font-black">
           <span>{lang === 'fr' ? 'TOTAL GÉNÉRAL' : 'المجموع الكلي'}</span>
-          <span>{(reservation.totalPrice + reservation.additionalFees).toLocaleString()} DA</span>
+          <span>{formatAmount(reservation.totalPrice + reservation.additionalFees)} DA</span>
         </div>
       </div>
     </div>
@@ -857,7 +858,7 @@ const FinancialTab: React.FC<{ lang: Language; reservation: ReservationDetails }
           <div className="space-y-3">
             <div className="flex justify-between items-center py-2 border-b border-blue-200">
               <span className="text-blue-700 font-bold">{lang === 'fr' ? 'Montant (DA):' : 'المبلغ (DA):'}</span>
-              <span className="font-black text-blue-900">{((reservation as any).cautionAmountDzd || reservation.deposit).toLocaleString()} DA</span>
+              <span className="font-black text-blue-900">{formatAmount((reservation as any).cautionAmountDzd || reservation.deposit)} DA</span>
             </div>
             {(reservation as any).cautionCurrency === 'EUR' && (reservation as any).euroRate && (
               <>
@@ -888,7 +889,7 @@ const FinancialTab: React.FC<{ lang: Language; reservation: ReservationDetails }
             </div>
             <div className="flex justify-between items-center py-2">
               <span className="text-purple-700 font-bold">{lang === 'fr' ? 'Montant:' : 'المبلغ:'}</span>
-              <span className="font-black text-purple-900">{Math.round((reservation.totalPrice) * ((reservation as any).assurancePercentage || 0) / 100).toLocaleString()} DA</span>
+              <span className="font-black text-purple-900">{formatAmount(Math.round((reservation.totalPrice) * ((reservation as any).assurancePercentage || 0) / 100))} DA</span>
             </div>
           </div>
         </div>
@@ -902,7 +903,7 @@ const FinancialTab: React.FC<{ lang: Language; reservation: ReservationDetails }
         <div className="flex justify-between items-center py-2 border-b border-red-200 mb-3">
           <span className="font-black text-slate-900">{reservation.protectionAssurance?.name || reservation.protectionAssuranceName}</span>
           <span className="font-black text-red-700">
-            {(reservation.protectionAssurancePrice || reservation.protectionAssurance?.pricePerDay || 0).toLocaleString()} DA/{lang === 'fr' ? 'jour' : 'يوم'}
+            {formatAmount(reservation.protectionAssurancePrice || reservation.protectionAssurance?.pricePerDay || 0)} DA/{lang === 'fr' ? 'jour' : 'يوم'}
           </span>
         </div>
         {reservation.protectionAssurance && reservation.protectionAssurance.items.length > 0 ? (
@@ -973,11 +974,11 @@ const PaymentModal: React.FC<{ lang: Language; reservation: ReservationDetails; 
           <div className="bg-gradient-to-r from-saas-primary-start/10 to-saas-primary-end/10 rounded-xl p-4 border border-saas-primary-start/20">
             <div className="flex justify-between items-center mb-2">
               <span className="font-bold text-saas-text-main">{lang === 'fr' ? 'Reste à payer:' : 'المبلغ المتبقي:'}</span>
-              <span className="font-black text-saas-text-main">{reservation.remainingPayment.toLocaleString()} DA</span>
+              <span className="font-black text-saas-text-main">{formatAmount(reservation.remainingPayment)} DA</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="font-bold text-saas-text-main">{lang === 'fr' ? 'Après paiement:' : 'بعد الدفع:'}</span>
-              <span className={`font-black ${newRemaining === 0 ? 'text-green-600' : 'text-orange-600'}`}>{newRemaining.toLocaleString()} DA</span>
+              <span className={`font-black ${newRemaining === 0 ? 'text-green-600' : 'text-orange-600'}`}>{formatAmount(newRemaining)} DA</span>
             </div>
           </div>
 
@@ -1685,7 +1686,7 @@ export const CompletionModal: React.FC<{ lang: Language; reservation: Reservatio
               </div>
               <div>
                 <p className="font-bold text-saas-text-main">{lang === 'fr' ? 'Kilométrage Actuel' : 'العداد الحالي'}</p>
-                <p className="text-saas-text-muted">{reservation.car.mileage.toLocaleString()} km</p>
+                <p className="text-saas-text-muted">{formatAmount(reservation.car.mileage)} km</p>
               </div>
             </div>
           </div>
@@ -1844,7 +1845,7 @@ export const CompletionModal: React.FC<{ lang: Language; reservation: Reservatio
               </div>
               <div className="bg-red-100 rounded-lg p-4">
                 <p className="font-bold text-red-900">
-                  {lang === 'fr' ? 'Total Frais de Clôture (TTC)' : 'إجمالي رسوم الإغلاق (شامل الضريبة)'}: {totalFees.toLocaleString()} DA
+                  {lang === 'fr' ? 'Total Frais de Clôture (TTC)' : 'إجمالي رسوم الإغلاق (شامل الضريبة)'}: {formatAmount(totalFees)} DA
                 </p>
               </div>
             </div>

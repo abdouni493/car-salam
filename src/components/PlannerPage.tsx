@@ -6,6 +6,7 @@ import { Calendar, Users, Car as CarIcon, Plus, Search, Filter, Eye, Edit, Trash
 import { ReservationDetailsView } from './ReservationDetailsView';
 import { CreateReservationForm } from './CreateReservationForm';
 import { EditReservationForm } from './EditReservationForm';
+import { formatAmount } from '../utils/format';
 import { ActivationModal, CompletionModal } from './ReservationDetailsView';
 import { ReservationTimelineView } from './ReservationTimelineView';
 import { ConditionsPersonalizer } from './ConditionsPersonalizer';
@@ -394,15 +395,15 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
           </div>
           <div class="detail">
             <span class="label">${lang === 'fr' ? 'Prix Total:' : 'السعر الإجمالي:'}</span>
-            <span>${reservation.totalPrice.toLocaleString()} ${lang === 'fr' ? 'DA' : 'د.ج'}</span>
+            <span>${formatAmount(reservation.totalPrice)} ${lang === 'fr' ? 'DA' : 'د.ج'}</span>
           </div>
           <div class="detail">
             <span class="label">${lang === 'fr' ? 'Acompte:' : 'الدفعة المقدمة:'}</span>
-            <span>${reservation.advancePayment.toLocaleString()} ${lang === 'fr' ? 'DA' : 'د.ج'}</span>
+            <span>${formatAmount(reservation.advancePayment)} ${lang === 'fr' ? 'DA' : 'د.ج'}</span>
           </div>
           <div class="detail">
             <span class="label">${lang === 'fr' ? 'Reste à Payer:' : 'المبلغ المتبقي:'}</span>
-            <span>${reservation.remainingPayment.toLocaleString()} ${lang === 'fr' ? 'DA' : 'د.ج'}</span>
+            <span>${formatAmount(reservation.remainingPayment)} ${lang === 'fr' ? 'DA' : 'د.ج'}</span>
           </div>
         </div>
         
