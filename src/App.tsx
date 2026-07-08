@@ -151,7 +151,7 @@ export default function App() {
       // Commandes du site en attente d'acceptation (badge planificateur)
       try {
         const orders = await DatabaseService.getWebsiteOrders();
-        setWebOrdersCount(orders.filter(o => o.status === 'pending').length);
+        setWebOrdersCount(orders.filter(o => o.status === 'website_reservation').length);
       } catch (err) {
         console.error('Error loading website orders count:', err);
         setWebOrdersCount(0);

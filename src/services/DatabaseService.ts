@@ -985,11 +985,13 @@ export class DatabaseService {
             )
           )
         `)
-        // load both new pending orders and those we've already accepted so they stay visible here
-        .in('status', ['pending', 'accepted'])
+        // L'interface « Website commandes » n'affiche que les commandes en attente
+        // d'acceptation (statut dédié 'website_reservation') et celles annulées
+        // ('cancelled'). Dès qu'une commande est acceptée elle passe à 'pending'
+        // et quitte cette interface pour rejoindre le planificateur.
+        .in('status', ['website_reservation', 'cancelled'])
         // seules les commandes provenant du site public (source='website') —
-        // pas les réservations créées par l'agence qui seraient encore 'pending'.
-        // Colonne ajoutée par 20260708_reservation_source.sql.
+        // pas les réservations créées par l'agence.
         .eq('source', 'website')
         .order('created_at', { ascending: false });
 
@@ -1014,7 +1016,7 @@ export class DatabaseService {
                 )
               )
             `)
-            .in('status', ['pending', 'accepted'])
+            .in('status', ['website_reservation', 'cancelled'])
             .order('created_at', { ascending: false });
           if (retry.error) { console.warn('Website orders retry failed:', retry.error); return []; }
           return this.mapWebsiteOrders(retry.data || []);
@@ -1112,7 +1114,8 @@ export class DatabaseService {
   }
 
   static async createWebsiteOrder(order: Omit<WebsiteOrder, 'id' | 'created_at'>): Promise<WebsiteOrder> {
-    // Website orders are actually reservations with pending status
+    // Website orders are reservations awaiting agency acceptance: dedicated
+    // 'website_reservation' status + source='website'.
     const reservationData = {
       client_id: (order as any).clientId,
       car_id: order.carId,
@@ -1125,7 +1128,8 @@ export class DatabaseService {
       total_days: order.totalDays,
       total_price: order.totalPrice,
       additional_fees: order.servicesTotal,
-      status: 'pending',
+      status: 'website_reservation',
+      source: 'website',
     };
 
     const { data, error } = await supabase

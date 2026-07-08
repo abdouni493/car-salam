@@ -93,6 +93,9 @@ export class ReservationsService {
         protection_assurance_price: data.protectionAssurancePrice || 0,
         created_by: data.createdBy || null,
         created_by_name: data.createdByName || null,
+        // Réservation créée manuellement depuis le planificateur (agence),
+        // par opposition aux commandes du site public (source = 'website').
+        source: 'agency',
       }])
       .select()
       .single();

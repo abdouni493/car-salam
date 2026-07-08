@@ -484,7 +484,10 @@ export interface WebsiteOrder {
   protectionAssurance?: ProtectionAssurance;
   protectionAssuranceName?: string;
   assuranceTotal?: number;
-  status: 'pending' | 'accepted' | 'confirmed' | 'processing' | 'completed' | 'cancelled';
+  // 'website_reservation' = nouvelle commande du site en attente d'acceptation.
+  // Une fois acceptée elle devient 'pending' (réservation du planificateur) ;
+  // annulée elle passe à 'cancelled'.
+  status: 'website_reservation' | 'pending' | 'accepted' | 'confirmed' | 'processing' | 'completed' | 'cancelled';
   createdAt: string;
   source: 'website';
 }

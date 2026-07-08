@@ -438,11 +438,13 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
     if (!reservation.client || !reservation.car) return false;
 
     // Les commandes du site public ne rejoignent le planificateur qu'une fois
-    // ACCEPTÉES par l'agence : on masque les 'pending' (en attente d'acceptation)
-    // et les 'cancelled' (refusées). Les réservations de l'agence ne sont pas
-    // concernées (elles s'affichent dès leur création).
+    // ACCEPTÉES par l'agence : on masque celles encore en attente d'acceptation
+    // (statut 'website_reservation') et celles annulées ('cancelled'), qui restent
+    // gérées dans l'interface « Website commandes ». Une fois acceptée, la commande
+    // passe au statut 'pending' et s'affiche ici avec le badge « 🌐 Site web ».
+    // Les réservations de l'agence ne sont pas concernées (affichées dès création).
     if (reservation.source === 'website' &&
-        (reservation.status === 'pending' || reservation.status === 'cancelled')) {
+        (reservation.status === 'website_reservation' || reservation.status === 'cancelled')) {
       return false;
     }
 
@@ -475,8 +477,9 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
   });
 
   // Nombre de commandes du site public en attente d'acceptation (pour l'alerte).
+  // Une commande en attente porte désormais le statut dédié 'website_reservation'.
   const pendingWebOrdersCount = reservations.filter(
-    r => r.source === 'website' && r.status === 'pending'
+    r => r.source === 'website' && r.status === 'website_reservation'
   ).length;
 
   // Recharge les réservations (après acceptation/annulation d'une commande site).
@@ -681,32 +684,6 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
           <Plus className="w-4 h-4" />
           {lang === 'fr' ? 'Nouvelle Réservation' : 'حجز جديد'}
         </button>
-
-        {/* Add New Reservation - Alternative order (Tarification first) */}
-        <button
-          onClick={() => setCurrentView('create-alt')}
-          className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold rounded-lg transition-all"
-          title={lang === 'fr' ? 'Nouvelle réservation (tarification avant le client)' : 'حجز جديد (التسعير قبل العميل)'}
-        >
-          <Plus className="w-4 h-4" />
-          {lang === 'fr' ? 'Réservation (Tarif. d\'abord)' : 'حجز (التسعير أولا)'}
-        </button>
-
-        {/* Commandes du site web (avec compteur de nouvelles commandes) */}
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={() => setCurrentView('web-orders')}
-          className="relative flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 text-white font-bold rounded-lg transition-all"
-          title={lang === 'fr' ? 'Commandes reçues du site web' : 'الطلبات الواردة من الموقع'}
-        >
-          🌐 {lang === 'fr' ? 'Commandes Site' : 'طلبات الموقع'}
-          {pendingWebOrdersCount > 0 && (
-            <span className="absolute -top-2 -right-2 min-w-[22px] h-[22px] px-1.5 flex items-center justify-center bg-red-500 text-white text-xs font-black rounded-full border-2 border-white shadow-lg animate-pulse">
-              {pendingWebOrdersCount}
-            </span>
-          )}
-        </motion.button>
       </div>
 
       {/* Alerte : nouvelles commandes du site web en attente d'acceptation */}
@@ -1091,8 +1068,8 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                     : 'bg-slate-100 text-slate-700'
                 }`}>
                   {reservation.source === 'website'
-                    ? (lang === 'fr' ? '🌐 Site web' : '🌐 الموقع')
-                    : (lang === 'fr' ? '🏢 Agence' : '🏢 الوكالة')}
+                    ? (lang === 'fr' ? '🌐 Réservation du site web' : '🌐 حجز من الموقع')
+                    : (lang === 'fr' ? '🏢 Créée à l\'agence' : '🏢 أنشئت في الوكالة')}
                 </span>
               </div>
             </div>

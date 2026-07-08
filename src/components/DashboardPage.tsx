@@ -466,9 +466,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ lang, isAuthLoadin
 
   const reservationAlerts = getReservationAlerts(reservations);
 
-  // Commandes du site public en attente d'acceptation par l'agence.
+  // Commandes du site public en attente d'acceptation par l'agence
+  // (statut dédié 'website_reservation').
   const pendingWebOrdersCount = reservations.filter(
-    r => r.source === 'website' && r.status === 'pending'
+    r => r.source === 'website' && r.status === 'website_reservation'
   ).length;
 
   // Apply alert filter
@@ -534,7 +535,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ lang, isAuthLoadin
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            onClick={() => navigate('/planner', { state: { openWebOrders: true } })}
+            onClick={() => navigate('/website-commandes')}
             className="w-full flex items-center gap-4 bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 rounded-3xl px-6 py-5 text-left text-white shadow-xl shadow-indigo-500/20 transition-all"
           >
             <motion.span
@@ -552,8 +553,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ lang, isAuthLoadin
               </p>
               <p className="text-indigo-100 text-sm font-medium">
                 {lang === 'fr'
-                  ? 'En attente de votre acceptation — cliquez pour les traiter dans le planificateur'
-                  : 'في انتظار موافقتك — انقر لمعالجتها في المخطط'}
+                  ? 'En attente de votre acceptation — cliquez pour les traiter dans « Website commandes »'
+                  : 'في انتظار موافقتك — انقر لمعالجتها في « طلبات الموقع »'}
               </p>
             </div>
             <span className="px-5 py-2.5 bg-white/20 backdrop-blur border border-white/30 font-bold rounded-xl text-sm whitespace-nowrap">

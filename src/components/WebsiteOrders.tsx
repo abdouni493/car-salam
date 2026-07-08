@@ -15,7 +15,7 @@ interface WebsiteOrdersProps {
 export const WebsiteOrders: React.FC<WebsiteOrdersProps> = ({ lang, onOrdersChanged }) => {
   const [orders, setOrders] = useState<WebsiteOrder[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState<string>('pending');
+  const [filterStatus, setFilterStatus] = useState<string>('website_reservation');
   const [selectedOrder, setSelectedOrder] = useState<WebsiteOrder | null>(null);
   const [showOrderDetails, setShowOrderDetails] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
@@ -60,21 +60,22 @@ export const WebsiteOrders: React.FC<WebsiteOrdersProps> = ({ lang, onOrdersChan
   const handleConfirmOrder = async (orderId: string) => {
     try {
       setIsProcessing(orderId);
-      
-      // Update the website order status in database to 'accepted' instead of confirmed
-      await DatabaseService.updateWebsiteOrderStatus(orderId, 'accepted');
 
-      // Update local state
-      setOrders(prev => prev.map(order =>
-        order.id === orderId ? { ...order, status: 'accepted' as const } : order
-      ));
+      // Accepter une commande du site : elle passe au statut 'pending' et rejoint
+      // le planificateur (avec le badge « 🌐 Site web ») pour l'inspection. Elle
+      // quitte donc cette interface qui ne liste que 'website_reservation'/'cancelled'.
+      await DatabaseService.updateWebsiteOrderStatus(orderId, 'pending');
+
+      // Retirer la commande acceptée de la liste locale (elle n'appartient plus ici)
+      setOrders(prev => prev.filter(order => order.id !== orderId));
 
       if (selectedOrder?.id === orderId) {
-        setSelectedOrder(prev => prev ? { ...prev, status: 'accepted' } : null);
+        setShowOrderDetails(false);
+        setSelectedOrder(null);
       }
 
       onOrdersChanged?.();
-      console.log(`Order ${orderId} accepted and will appear in Planner as accepted`);
+      console.log(`Order ${orderId} accepted → moved to Planner as pending`);
     } catch (err) {
       console.error('Error accepting order:', err);
       alert(lang === 'fr' ? 'Erreur lors de l\'acceptation de la commande' : 'خطأ في قبول الطلب');
@@ -174,12 +175,8 @@ export const WebsiteOrders: React.FC<WebsiteOrdersProps> = ({ lang, onOrdersChan
             className="px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
             <option value="all">{lang === 'fr' ? 'Tous les statuts' : 'جميع الحالات'}</option>
-            <option value="pending">{lang === 'fr' ? 'En attente' : 'في الانتظار'}</option>
-            <option value="accepted">{lang === 'fr' ? 'Accepté' : 'مقبول'}</option>
-            <option value="confirmed">{lang === 'fr' ? 'Confirmé' : 'مؤكد'}</option>
-            <option value="processing">{lang === 'fr' ? 'En traitement' : 'قيد المعالجة'}</option>
-            <option value="completed">{lang === 'fr' ? 'Terminé' : 'مكتمل'}</option>
-            <option value="cancelled">{lang === 'fr' ? 'Annulé' : 'ملغي'}</option>
+            <option value="website_reservation">{lang === 'fr' ? 'Nouvelles (à traiter)' : 'جديدة (للمعالجة)'}</option>
+            <option value="cancelled">{lang === 'fr' ? 'Annulées' : 'ملغاة'}</option>
           </select>
         </div>
       </div>
@@ -192,20 +189,8 @@ export const WebsiteOrders: React.FC<WebsiteOrdersProps> = ({ lang, onOrdersChan
               <Clock className="w-6 h-6 text-yellow-600" />
             </div>
             <div>
-              <p className="text-sm text-yellow-600 font-bold">{lang === 'fr' ? 'En attente' : 'في الانتظار'}</p>
-              <p className="text-2xl font-black text-yellow-900">{orders.filter(o => o.status === 'pending').length}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-gradient-to-r from-teal-50 to-cyan-50 rounded-2xl p-6 border border-teal-200">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-teal-100 rounded-xl flex items-center justify-center">
-              <CheckCircle className="w-6 h-6 text-teal-600" />
-            </div>
-            <div>
-              <p className="text-sm text-teal-600 font-bold">{lang === 'fr' ? 'Accepté' : 'مقبول'}</p>
-              <p className="text-2xl font-black text-teal-900">{orders.filter(o => o.status === 'accepted').length}</p>
+              <p className="text-sm text-yellow-600 font-bold">{lang === 'fr' ? 'Nouvelles (à traiter)' : 'جديدة (للمعالجة)'}</p>
+              <p className="text-2xl font-black text-yellow-900">{orders.filter(o => o.status === 'website_reservation').length}</p>
             </div>
           </div>
         </div>
@@ -216,8 +201,20 @@ export const WebsiteOrders: React.FC<WebsiteOrdersProps> = ({ lang, onOrdersChan
               <XCircle className="w-6 h-6 text-red-600" />
             </div>
             <div>
-              <p className="text-sm text-red-600 font-bold">{lang === 'fr' ? 'Annulé' : 'ملغي'}</p>
+              <p className="text-sm text-red-600 font-bold">{lang === 'fr' ? 'Annulées' : 'ملغاة'}</p>
               <p className="text-2xl font-black text-red-900">{orders.filter(o => o.status === 'cancelled').length}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-2xl p-6 border border-indigo-200">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center">
+              <CheckCircle className="w-6 h-6 text-indigo-600" />
+            </div>
+            <div>
+              <p className="text-sm text-indigo-600 font-bold">{lang === 'fr' ? 'Total' : 'المجموع'}</p>
+              <p className="text-2xl font-black text-indigo-900">{orders.length}</p>
             </div>
           </div>
         </div>
@@ -285,19 +282,11 @@ export const WebsiteOrders: React.FC<WebsiteOrdersProps> = ({ lang, onOrdersChan
               {/* Status Badge and Website Badge Stack */}
               <div className="absolute top-4 left-4 flex flex-col gap-1">
                 <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                  order.status === 'confirmed' ? 'bg-green-100 text-green-800' :
-                  order.status === 'accepted' ? 'bg-teal-100 text-teal-800' :
-                  order.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                  order.status === 'processing' ? 'bg-blue-100 text-blue-800' :
-                  order.status === 'completed' ? 'bg-purple-100 text-purple-800' :
-                  'bg-red-100 text-red-800'
+                  order.status === 'cancelled' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'
                 }`}>
-                  {order.status === 'confirmed' ? '✅ Confirmé' :
-                   order.status === 'accepted' ? '✅ Accepté' :
-                   order.status === 'pending' ? '⏳ En attente' :
-                   order.status === 'processing' ? '🔄 Traitement' :
-                   order.status === 'completed' ? '🏁 Terminé' :
-                   '❌ Annulé'}
+                  {order.status === 'cancelled'
+                    ? (lang === 'fr' ? '❌ Annulée' : '❌ ملغاة')
+                    : (lang === 'fr' ? '🆕 Nouvelle commande' : '🆕 طلب جديد')}
                 </span>
                 <span className="px-2 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800 w-fit">
                   🌐 Website
@@ -346,15 +335,11 @@ export const WebsiteOrders: React.FC<WebsiteOrdersProps> = ({ lang, onOrdersChan
                     <div className="text-right">
                       <div className="text-xs text-slate-500">{lang === 'fr' ? 'Statut' : 'الحالة'}</div>
                       <span className={`px-2 py-1 rounded-full text-xs font-bold ${
-                        order.status === 'confirmed' ? 'bg-green-100 text-green-800' :
-                        order.status === 'accepted' ? 'bg-teal-100 text-teal-800' :
-                        order.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-red-100 text-red-800'
+                        order.status === 'cancelled' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'
                       }`}>
-                        {order.status === 'confirmed' ? '✅ Confirmé' :
-                         order.status === 'accepted' ? '✅ Accepté' :
-                         order.status === 'pending' ? '⏳ En attente' :
-                         '❌ Annulé'}
+                        {order.status === 'cancelled'
+                          ? (lang === 'fr' ? '❌ Annulée' : '❌ ملغاة')
+                          : (lang === 'fr' ? '🆕 Nouvelle' : '🆕 جديد')}
                       </span>
                     </div>
                   </div>
@@ -375,9 +360,9 @@ export const WebsiteOrders: React.FC<WebsiteOrdersProps> = ({ lang, onOrdersChan
 
                 <button
                   onClick={() => handleConfirmOrder(order.id)}
-                  disabled={order.status !== 'pending' || isProcessing === order.id}
+                  disabled={order.status !== 'website_reservation' || isProcessing === order.id}
                   className={`p-2.5 rounded-xl transition-all flex flex-col items-center gap-1 border ${
-                    order.status === 'pending' && isProcessing !== order.id
+                    order.status === 'website_reservation' && isProcessing !== order.id
                       ? 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white border-transparent'
                       : 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
                   }`}
@@ -395,9 +380,9 @@ export const WebsiteOrders: React.FC<WebsiteOrdersProps> = ({ lang, onOrdersChan
 
                 <button
                   onClick={() => handleCancelOrder(order.id)}
-                  disabled={order.status === 'cancelled' || isProcessing === order.id}
+                  disabled={order.status !== 'website_reservation' || isProcessing === order.id}
                   className={`p-2.5 rounded-xl transition-all flex flex-col items-center gap-1 border ${
-                    order.status !== 'cancelled' && isProcessing !== order.id
+                    order.status === 'website_reservation' && isProcessing !== order.id
                       ? 'bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white border-transparent'
                       : 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
                   }`}
@@ -477,15 +462,11 @@ export const WebsiteOrders: React.FC<WebsiteOrdersProps> = ({ lang, onOrdersChan
                         <div className="flex justify-between">
                           <span className="font-bold">{lang === 'fr' ? 'Statut:' : 'الحالة:'}</span>
                           <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                            selectedOrder.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                            selectedOrder.status === 'confirmed' ? 'bg-green-100 text-green-800' :
-                            selectedOrder.status === 'cancelled' ? 'bg-red-100 text-red-800' :
-                            'bg-blue-100 text-blue-800'
+                            selectedOrder.status === 'cancelled' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'
                           }`}>
-                            {selectedOrder.status === 'pending' ? (lang === 'fr' ? 'En attente' : 'في الانتظار') :
-                             selectedOrder.status === 'confirmed' ? (lang === 'fr' ? 'Confirmé' : 'مؤكد') :
-                             selectedOrder.status === 'cancelled' ? (lang === 'fr' ? 'Annulé' : 'ملغي') :
-                             selectedOrder.status}
+                            {selectedOrder.status === 'cancelled'
+                              ? (lang === 'fr' ? 'Annulée' : 'ملغاة')
+                              : (lang === 'fr' ? 'Nouvelle commande (à traiter)' : 'طلب جديد (للمعالجة)')}
                           </span>
                         </div>
                         <div className="flex justify-between">
@@ -733,16 +714,25 @@ export const WebsiteOrders: React.FC<WebsiteOrdersProps> = ({ lang, onOrdersChan
                   >
                     {lang === 'fr' ? 'Fermer' : 'إغلاق'}
                   </button>
-                  {selectedOrder.status === 'pending' && (
-                    <button
-                      onClick={() => {
-                        handleConfirmOrder(selectedOrder.id);
-                        setShowOrderDetails(false);
-                      }}
-                      className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold py-2 px-4 rounded-lg transition-all text-sm"
-                    >
-                      ✅ {lang === 'fr' ? 'Accepter' : 'قبول'}
-                    </button>
+                  {selectedOrder.status === 'website_reservation' && (
+                    <>
+                      <button
+                        onClick={() => {
+                          handleCancelOrder(selectedOrder.id);
+                        }}
+                        className="flex-1 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white font-bold py-2 px-4 rounded-lg transition-all text-sm"
+                      >
+                        ❌ {lang === 'fr' ? 'Annuler' : 'إلغاء'}
+                      </button>
+                      <button
+                        onClick={() => {
+                          handleConfirmOrder(selectedOrder.id);
+                        }}
+                        className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold py-2 px-4 rounded-lg transition-all text-sm"
+                      >
+                        ✅ {lang === 'fr' ? 'Accepter' : 'قبول'}
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
