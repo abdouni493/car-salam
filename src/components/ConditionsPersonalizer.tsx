@@ -230,14 +230,14 @@ export const ConditionsPersonalizer: React.FC<ConditionsPersonalizerProps> = ({
                     >
                       <span
                         style={{
-                          fontWeight: 700,
+                          fontWeight: 800,
                           color: '#003399',
                           marginInlineEnd: '6px',
                         }}
                       >
                         {index + 1}- {condition.title}
                       </span>
-                      <span style={{ color: '#333' }}>{condition.content}</span>
+                      <span style={{ color: '#111', fontWeight: 600 }}>{condition.content}</span>
                     </p>
                   </div>
                 ))}
@@ -261,15 +261,13 @@ export const ConditionsPersonalizer: React.FC<ConditionsPersonalizerProps> = ({
                 </p>
               </div>
 
-              {/* Signatures */}
+              {/* Signatures — simple empty rectangles */}
               <div
                 style={{
                   display: 'grid',
                   gridTemplateColumns: '1fr 1fr',
                   gap: '32px',
                   marginTop: '28px',
-                  paddingTop: '18px',
-                  borderTop: '2px solid #003399',
                 }}
               >
                 {[
@@ -279,11 +277,11 @@ export const ConditionsPersonalizer: React.FC<ConditionsPersonalizerProps> = ({
                   <div key={i} style={{ textAlign: 'center' }}>
                     <div
                       style={{
-                        borderBottom: '2px solid #003399',
-                        height: '50px',
+                        border: '2px solid #003399',
+                        height: '64px',
                         marginBottom: '10px',
-                        background: '#f8faff',
-                        borderRadius: '4px 4px 0 0',
+                        background: '#fff',
+                        borderRadius: '4px',
                       }}
                     />
                     <p

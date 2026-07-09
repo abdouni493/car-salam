@@ -1,272 +1,481 @@
-import { Language, ReservationDetails } from '../types';
-import {
-  PrintAgencySettings,
-  T,
-  esc,
-  fmtAmount,
-  fmtDate,
-  ltr,
-  renderPrintDocument,
-  renderPrintHeader,
-  renderSignatures,
-} from './print/printTheme';
-
-/** Champs société saisis dans le modal de personnalisation. */
-export interface SocieteData {
-  conducteur?: string;
-  rc?: string;
-  art?: string;
-  nis?: string;
-  nif?: string;
-  email?: string;
-}
+import { ReservationDetails } from '../types';
 
 /**
- * CONTRAT DE LOCATION — implémentation unique, partagée par le planificateur et
- * la page Contrats. Utilise le design system d'impression (`print/printTheme`) :
- * en-tête dégradé, carte véhicule, sections, tables, signatures.
- *
- * ⚠️ Document remis au client : aucune donnée du propriétaire d'un véhicule en
- * conciergerie (nom, téléphone, commission, réf. interne) n'y figure.
+ * Force a phone number to render strictly left-to-right, even inside an RTL (Arabic)
+ * document, so it prints in the same order as the French layout.
  */
+const ltrPhone = (value: any): string =>
+  `<span dir="ltr" style="unicode-bidi:bidi-override;direction:ltr;display:inline-block">${value ?? ''}</span>`;
+
+/**
+ * Force any latin/number value (car immatriculation, VIN, model, mileage, ...) to render
+ * strictly left-to-right so it keeps the same order as French even inside an RTL (Arabic)
+ * document. Without this, plate numbers like "01234-116-16" print inverted ("16-116-01234").
+ */
+const ltr = ltrPhone;
+
+/** Dates always printed dd/mm/yyyy (as on the reference layout), in both languages. */
+const fmtDate = (value: any): string => {
+  if (!value) return '';
+  // Date-only strings ("1993-07-31") are parsed as UTC midnight by `new Date`,
+  // which shifts to the previous day in negative-offset timezones — split manually.
+  const dateOnly = typeof value === 'string' && /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  if (dateOnly) return ltr(`${dateOnly[3]}/${dateOnly[2]}/${dateOnly[1]}`);
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return '';
+  return ltr(d.toLocaleDateString('fr-FR'));
+};
+
 export const generateContractHTML = (
   reservation: ReservationDetails | null,
-  agencySettings: PrintAgencySettings | null | undefined,
+  agencySettings: any,
   secondConductor: any,
-  templateLang: Language,
-  societe?: SocieteData | null
+  templateLang: 'fr' | 'ar'
 ): string => {
-  const L = templateLang;
-  const tr = (fr: string, ar: string) => T(fr, ar, L);
-  const d = (value: unknown) => (value ? ltr(fmtDate(value, L)) : '—');
-  const money = (n: unknown) => `${ltr(fmtAmount(n))} DA`;
+  const isFrench = templateLang === 'fr';
+  const textDir = isFrench ? 'ltr' : 'rtl';
 
-  const client = reservation?.client;
-  const car = reservation?.car;
-  const totalDays = reservation?.totalDays || 0;
-  const totalPrice = Number(reservation?.totalPrice) || 0;
-  const pricePerDay = Number(car?.priceDay) || 0;
+  const labels = {
+    contractTitle: isFrench ? 'Contrat de Location de Véhicule' : 'عقد كراء السيارة',
+    contractDate: isFrench ? 'Date du Contrat' : 'تاريخ العقد',
+    contractNumber: isFrench ? 'N° du Contrat' : 'رقم العقد',
+    createdBy: isFrench ? 'Créé par' : 'أنشئ بواسطة',
+    rentalPeriod: isFrench ? 'Période de Location' : 'فترة الإيجار',
+    departure: isFrench ? 'Départ' : 'المغادرة',
+    return: isFrench ? 'Retour' : 'العودة',
+    duration: isFrench ? 'Durée' : 'المدة',
+    days: isFrench ? 'jours' : 'أيام',
+    mainDriver: isFrench ? 'Conducteur Principal' : 'السائق الرئيسي',
+    secondDriver: isFrench ? 'Deuxième Conducteur' : 'السائق الثاني',
+    fullName: isFrench ? 'Nom Complet' : 'الاسم الكامل',
+    birthDate: isFrench ? 'Date de Naissance' : 'تاريخ الميلاد',
+    birthPlace: isFrench ? 'Lieu de Naissance' : 'مكان الميلاد',
+    licenseNumber: isFrench ? 'N° du Permis' : 'رقم الرخصة',
+    licenseExpiry: isFrench ? 'Expiration du Permis' : 'تاريخ انتهاء الرخصة',
+    licenseDelivery: isFrench ? 'Délivrance du Permis' : 'تاريخ إصدار الرخصة',
+    licensePlace: isFrench ? 'Lieu de Délivrance' : 'مكان إصدار الرخصة',
+    vehicleInfo: isFrench ? 'Informations du Véhicule' : 'معلومات المركبة',
+    registration: isFrench ? 'Immatriculation' : 'التسجيل',
+    model: isFrench ? 'Modèle' : 'الموديل',
+    fuelType: isFrench ? 'Type' : 'النوع',
+    color: isFrench ? 'Couleur' : 'اللون',
+    vin: isFrench ? 'N° de Série' : 'الرقم التسلسلي',
+    mileage: isFrench ? 'Kilométrage' : 'الكيلومترات',
+    kmPerDay: isFrench ? 'Kilométrage par Jour' : 'الكيلومترات في اليوم',
+    specialConditions: isFrench ? 'Conditions Particulières' : 'الشروط الخاصة',
+    clientSignature: isFrench ? 'Signature du Client' : 'توقيع العميل',
+    agencySignature: isFrench ? "Signature de l'Agence" : 'توقيع الوكالة',
+    dateAndSignature: isFrench ? 'Date et signature' : 'التاريخ والتوقيع',
+    inspectionNote: isFrench
+      ? "Avant la réception du véhicule, le locataire a inspecté la voiture de l'intérieur et de l'extérieur. Tout objet en sa possession pendant la période de location contraire à la loi l'expose aux sanctions prévues par la réglementation."
+      : 'قبل استلام السيارة قام المستأجر بفحص السيارة من الداخل والخارج، وأي شيء يكون بحوزته في مدة استئجارها يكون مخالفة للقانون والعقوبات',
+  };
 
-  // Le total enregistré inclut déjà la TVA (ajoutée à l'étape de tarification) :
-  // on l'affiche donc en « dont TVA » plutôt que de la rajouter une seconde fois.
-  const tvaIncluded = reservation?.tvaApplied ? Math.round(totalPrice - totalPrice / 1.19) : 0;
+  const termsList = isFrench
+    ? [
+        "1- Toute extension doit être confirmée au minimum 48 heures avant l'expiration du contrat de location, incluant le kilométrage et le carburant à la retour.",
+        '2- Ne pas conduire le véhicule avec un carburant de réserve (réserve).',
+        "3- Le renouvellement du contrat de location commence à partir de la date d'expiration du contrat et est la responsabilité du client.",
+        '4- Le non-respect du contrat de location expose le client à une pénalité du montant journalier complet.'
+      ]
+    : [
+        '1- كل تمديد يجب على الزبون الابلاغ قبل 48 ساعة من تاريخ انتهاء صلاحيات عقد الكراء كيلومترات وقود العودة',
+        '2- عدم قيادة السيارة بوقود احتياطي (réserve)',
+        '3- تجديد عقد الكراء يكون من تاريخ انتهاء العقد من مسؤولية الزبون',
+        '4- احترام موعد دخول السيارة في الوقت المحدد'
+      ];
 
-  const paid = (reservation?.payments && reservation.payments.length > 0)
-    ? reservation.payments.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0)
-    : (Number(reservation?.advancePayment) || 0);
-  const remaining = Math.max(0, totalPrice - paid);
+  const agencyName = (agencySettings?.name || 'AGENCE').toUpperCase();
+  const contractNumber = reservation?.id ? reservation.id.toString().substring(0, 8).toUpperCase() : 'N/A';
+  const carPhoto = reservation?.car?.images?.[0] || '';
 
-  const deliveryFee = Number(reservation?.deliveryFee) || 0;
-  const deliveryPaidByOwner = reservation?.deliveryFeePayer === 'owner';
+  /** Broken/expired remote assets must never leave a torn frame on the printed page. */
+  const hideOnError = `onerror="this.style.display='none'"`;
 
-  const assuranceName = reservation?.protectionAssurance?.name || reservation?.protectionAssuranceName;
-  const assuranceTotal = Math.round((Number(reservation?.protectionAssurancePrice) || 0) * totalDays);
-  const discount = Number(reservation?.discountAmount) || 0;
-  const caution = Number((reservation as any)?.cautionAmountDzd) || Number(reservation?.deposit) || 0;
-
-  const carImage = car?.images?.[0];
-  const contractRef = reservation?.id ? reservation.id.toString().substring(0, 8).toUpperCase() : '—';
-
-  /** Une paire label / valeur du tableau à deux colonnes. */
-  const row = (label: string, value: string) =>
-    `<tr><td style="width:38%;font-weight:600;color:#4b5563">${label}</td><td>${value || '—'}</td></tr>`;
-
-  const carDetail = (label: string, value: unknown) => `
-    <div class="car-detail-item">
-      <span class="car-detail-label">${label}</span>
-      <span class="car-detail-value">${value ? ltr(esc(value)) : '—'}</span>
+  /** One "label ..... value" line of the driver / vehicle columns. */
+  const infoRow = (label: string, value: string): string => `
+    <div class="info-row">
+      <span class="info-label">${label}</span>
+      <span class="info-value">${value || ''}</span>
     </div>`;
 
-  // ── Conditions : celles saisies sur la réservation, sinon la liste par défaut
-  const defaultConditions = L === 'fr'
-    ? ['Permis de conduire valide', 'Assurance tous risques', 'Caution dépôt', 'Carburant plein', 'État du véhicule accepté', 'Pas de dégâts supplémentaires']
-    : ['رخصة قيادة سارية', 'تأمين شامل', 'ضمان الإيداع', 'خزان ممتلئ', 'حالة المركبة مقبولة', 'لا توجد أضرار إضافية'];
+  const driverRows = (person: any, snake: boolean): string => {
+    const g = (a: string, b: string) => (snake ? (person?.[a] ?? person?.[b]) : person?.[b]) ?? '';
+    const fullName = `${g('first_name', 'firstName')} ${g('last_name', 'lastName')}`.trim();
+    return [
+      infoRow(labels.fullName, fullName),
+      infoRow(labels.birthDate, fmtDate(g('date_of_birth', 'dateOfBirth'))),
+      infoRow(labels.birthPlace, g('place_of_birth', 'placeOfBirth')),
+      infoRow(labels.licenseNumber, ltr(g('license_number', 'licenseNumber'))),
+      infoRow(labels.licenseExpiry, fmtDate(g('license_expiration_date', 'licenseExpirationDate'))),
+      infoRow(labels.licenseDelivery, fmtDate(g('license_delivery_date', 'licenseDeliveryDate'))),
+      infoRow(labels.licensePlace, g('license_delivery_place', 'licenseDeliveryPlace')),
+    ].join('');
+  };
 
-  const conditionsHtml = reservation?.conditions?.trim()
-    ? `<div class="conditions-text">${esc(reservation.conditions)}</div>`
-    : `<ul class="conditions-list">${defaultConditions.map(c => `<li>${esc(c)}</li>`).join('')}</ul>`;
+  const vehicleRows = [
+    infoRow(labels.registration, ltr(reservation?.car?.registration || '')),
+    infoRow(labels.model, ltr(`${reservation?.car?.brand || ''} ${reservation?.car?.model || ''}`.trim())),
+    infoRow(labels.fuelType, reservation?.car?.energy || ''),
+    infoRow(labels.color, reservation?.car?.color || ''),
+    infoRow(labels.vin, ltr(reservation?.car?.vin || '')),
+    infoRow(labels.mileage, ltr(`${reservation?.departureInspection?.mileage || reservation?.car?.mileage || 0} km`)),
+    infoRow(labels.kmPerDay, ltr('300 km')),
+  ].join('');
 
-  const secondName = secondConductor
-    ? `${secondConductor.first_name || secondConductor.firstName || ''} ${secondConductor.last_name || secondConductor.lastName || ''}`.trim()
-    : '';
+  const html = `
+    <!DOCTYPE html>
+    <html dir="${textDir}" lang="${isFrench ? 'fr' : 'ar'}">
+    <head>
+      <meta charset="UTF-8">
+      <title>${labels.contractTitle}</title>
+      <style>
+        /* The sheet owns its own margins (.page-container padding) so the layout can
+           never be clipped or pushed onto a second sheet by the printer defaults. */
+        @page { size: A4 portrait; margin: 0; }
 
-  const body = `
-    ${renderPrintHeader(agencySettings, { fr: 'CONTRAT DE LOCATION', ar: 'عقد كراء السيارة' }, L, contractRef)}
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body {
+          width: 210mm;
+          margin: 0;
+          padding: 0;
+          overflow: hidden; /* nothing may spill onto a 2nd sheet */
+        }
+        body {
+          font-family: 'Arial', sans-serif;
+          line-height: 1.35;
+          color: #1f2937;
+          background: white;
+          direction: ${textDir};
+          font-size: 12px;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+        :root {
+          --blue: #1e3a8a;
+          --red: #d32f2f;
+          --ink: #111827;
+          --border: #c3cfe2;
+          --row-line: #e5eaf3;
+          --head-bg: #f5f7fb;
+          --muted: #6b7280;
+        }
+        .page-container {
+          /* 296mm (not 297) keeps Chrome from rounding into a trailing blank page. */
+          width: 210mm;
+          height: 296mm;
+          padding: 9mm 10mm 8mm;
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+        }
 
-    <div class="content">
-      <!-- Véhicule -->
-      <div class="car-info-card">
-        ${carImage ? `<div class="car-image"><img src="${esc(carImage)}" alt="" /></div>` : '<div></div>'}
-        <div class="car-details">
-          ${carDetail(tr('Marque', 'العلامة'), car?.brand)}
-          ${carDetail(tr('Modèle', 'الموديل'), car?.model)}
-          ${carDetail(tr('Immatriculation', 'التسجيل'), car?.registration)}
-          ${carDetail(tr('Année', 'السنة'), car?.year)}
-          ${carDetail(tr('Couleur', 'اللون'), car?.color)}
-          ${carDetail(tr('Carburant', 'الوقود'), car?.energy)}
-          ${carDetail('VIN', car?.vin)}
-          ${carDetail(tr('Kilométrage départ', 'كيلومتراج البداية'), `${reservation?.departureInspection?.mileage ?? car?.mileage ?? 0} km`)}
+        /* ===== HEADER : agency name ===== */
+        .agency-title {
+          text-align: center;
+          font-family: Georgia, 'Times New Roman', serif;
+          font-size: 27px;
+          font-weight: bold;
+          letter-spacing: 1px;
+          color: var(--blue);
+        }
+
+        /* ===== HEADER : logo (left) / contract title (center) / contacts (right) ===== */
+        .brand-row {
+          direction: ltr; /* fixed visual placement in both languages */
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 10px 2px 12px;
+          border-bottom: 1px solid var(--border);
+        }
+        .brand-logo {
+          width: 175px;
+          display: flex;
+          justify-content: flex-start;
+          align-items: center;
+        }
+        .brand-logo img {
+          max-width: 155px;
+          max-height: 80px;
+          object-fit: contain;
+        }
+        .doc-title {
+          flex: 1;
+          text-align: center;
+          font-size: 24px;
+          font-weight: bold;
+          color: var(--blue);
+        }
+        .agency-contact {
+          width: 175px;
+          text-align: right;
+          font-size: 11.5px;
+          line-height: 1.75;
+        }
+        .agency-contact .contact-address { color: var(--ink); font-weight: bold; }
+        .agency-contact .contact-phone { color: #374151; font-weight: 600; }
+
+        /* ===== META / PERIOD TABLES ===== */
+        .meta-table {
+          display: grid;
+          grid-template-columns: 1fr 1fr 1.2fr;
+          border: 1px solid var(--border);
+          margin-top: 9px;
+        }
+        .meta-cell {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 6px;
+          padding: 8px 10px;
+          border-inline-end: 1px solid var(--border);
+        }
+        .meta-cell:last-child { border-inline-end: none; }
+        .meta-label { color: var(--blue); font-weight: bold; font-size: 11px; }
+        .meta-value { font-weight: bold; font-size: 12px; color: var(--ink); }
+
+        .period-block {
+          border: 1px solid var(--border);
+          border-top: none;
+        }
+        .period-title {
+          text-align: center;
+          font-size: 11px;
+          font-weight: bold;
+          color: #374151;
+          background: var(--head-bg);
+          padding: 5px;
+          border-bottom: 1px solid var(--border);
+        }
+        .period-row {
+          display: grid;
+          grid-template-columns: 1fr 1fr 1fr;
+        }
+
+        /* ===== VEHICLE (visual left) / DRIVER (visual right) COLUMNS ===== */
+        .info-columns {
+          direction: ltr; /* vehicle always visual-left, driver always visual-right */
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 8px;
+          margin-top: 8px;
+        }
+        .info-box {
+          border: 1px solid var(--border);
+          page-break-inside: avoid;
+        }
+        .info-box-title {
+          text-align: center;
+          color: var(--blue);
+          font-weight: bold;
+          font-size: 13px;
+          background: var(--head-bg);
+          padding: 5px;
+          border-bottom: 1px solid var(--border);
+        }
+        .info-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 10px;
+          border-bottom: 1px solid var(--row-line);
+        }
+        .info-row:last-child { border-bottom: none; }
+        .info-label { color: var(--blue); font-weight: bold; font-size: 11px; }
+        .info-value { font-weight: bold; font-size: 12px; color: var(--ink); text-align: end; }
+
+        .second-driver-rows {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          column-gap: 16px;
+          padding: 0 4px;
+        }
+
+        /* ===== INSPECTION NOTE ===== */
+        .note-box {
+          border: 1px solid var(--border);
+          padding: 9px 10px;
+          margin-top: 9px;
+          font-size: 11px;
+          font-weight: 600;
+          text-align: center;
+          color: var(--ink);
+        }
+
+        /* ===== CAR PHOTO (left) + SPECIAL CONDITIONS (right) ===== */
+        .bottom-row {
+          direction: ltr; /* photo always visual-left, conditions always visual-right */
+          display: grid;
+          grid-template-columns: 1fr 1.35fr;
+          gap: 10px;
+          margin-top: 9px;
+          align-items: center;
+        }
+        .car-photo {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          height: 48mm;
+        }
+        .car-photo img {
+          max-width: 100%;
+          max-height: 48mm;
+          object-fit: contain;
+        }
+        .car-photo-placeholder {
+          width: 100%;
+          height: 100%;
+          border: 1px solid var(--row-line);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 44px;
+          color: #cbd5e1;
+        }
+        .conditions-box {
+          border: 1px solid var(--border);
+          padding: 10px 12px;
+        }
+        .conditions-title {
+          color: var(--red);
+          font-weight: bold;
+          font-size: 13px;
+          margin-bottom: 6px;
+        }
+        .condition-item {
+          color: var(--red);
+          font-size: 11px;
+          font-weight: 600;
+          line-height: 2.05;
+        }
+
+        /* ===== SIGNATURES : agency (left) / client (right) ===== */
+        /* Directly under the car photo / conditions row — the blank margin above
+           each rule is the signing space, the caption hangs underneath it. */
+        .signatures {
+          direction: ltr; /* fixed visual placement in both languages */
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 48px;
+          margin-top: 15mm;
+        }
+        .signature-box {
+          border-top: 1px solid var(--border);
+          padding-top: 6px;
+          text-align: center;
+        }
+        .signature-title { font-weight: bold; font-size: 13px; color: var(--ink); }
+        .signature-subtitle { font-size: 10px; color: var(--muted); margin-top: 2px; }
+      </style>
+    </head>
+    <body>
+      <div class="page-container">
+
+        <!-- AGENCY NAME -->
+        <div class="agency-title">${agencyName}</div>
+
+        <!-- LOGO / CONTRACT TITLE / AGENCY CONTACTS -->
+        <div class="brand-row">
+          <div class="brand-logo">
+            ${agencySettings?.logo ? `<img src="${agencySettings.logo}" alt="Logo" ${hideOnError}>` : ''}
+          </div>
+          <div class="doc-title" dir="${textDir}">${labels.contractTitle}</div>
+          <div class="agency-contact" dir="${textDir}">
+            ${agencySettings?.address ? `<div class="contact-address">${agencySettings.address}</div>` : ''}
+            ${agencySettings?.phone ? `<div class="contact-phone">${ltrPhone(agencySettings.phone)}</div>` : ''}
+            ${agencySettings?.phone_number_2 ? `<div class="contact-phone">${ltrPhone(agencySettings.phone_number_2)}</div>` : ''}
+          </div>
         </div>
+
+        <!-- CONTRACT META -->
+        <div class="meta-table">
+          <div class="meta-cell">
+            <span class="meta-label">${labels.contractDate}</span>
+            <span class="meta-value">${fmtDate(new Date())}</span>
+          </div>
+          <div class="meta-cell">
+            <span class="meta-label">${labels.contractNumber}</span>
+            <span class="meta-value">${ltr(contractNumber)}</span>
+          </div>
+          <div class="meta-cell">
+            <span class="meta-label">${labels.createdBy}</span>
+            <span class="meta-value">${agencyName}</span>
+          </div>
+        </div>
+
+        <!-- RENTAL PERIOD -->
+        <div class="period-block">
+          <div class="period-title">${labels.rentalPeriod}</div>
+          <div class="period-row">
+            <div class="meta-cell">
+              <span class="meta-label">${labels.departure}</span>
+              <span class="meta-value">${fmtDate(reservation?.step1?.departureDate)}</span>
+            </div>
+            <div class="meta-cell">
+              <span class="meta-label">${labels.return}</span>
+              <span class="meta-value">${fmtDate(reservation?.step1?.returnDate)}</span>
+            </div>
+            <div class="meta-cell">
+              <span class="meta-label">${labels.duration}</span>
+              <span class="meta-value">${reservation?.totalDays || 0} ${labels.days}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- VEHICLE (visual left) / MAIN DRIVER (visual right) -->
+        <div class="info-columns">
+          <div class="info-box" dir="${textDir}">
+            <div class="info-box-title">${labels.vehicleInfo}</div>
+            ${vehicleRows}
+          </div>
+          <div class="info-box" dir="${textDir}">
+            <div class="info-box-title">${labels.mainDriver}</div>
+            ${driverRows(reservation?.client, false)}
+          </div>
+        </div>
+
+        ${secondConductor ? `
+        <!-- SECOND DRIVER -->
+        <div class="info-box" style="margin-top: 8px;">
+          <div class="info-box-title">${labels.secondDriver}</div>
+          <div class="second-driver-rows">
+            ${driverRows(secondConductor, true)}
+          </div>
+        </div>
+        ` : ''}
+
+        <!-- INSPECTION NOTE -->
+        <div class="note-box">${labels.inspectionNote}</div>
+
+        <!-- CAR PHOTO (visual left) + SPECIAL CONDITIONS (visual right) -->
+        <div class="bottom-row">
+          <div class="car-photo">
+            ${carPhoto ? `<img src="${carPhoto}" alt="Véhicule" ${hideOnError}>` : '<div class="car-photo-placeholder">🚗</div>'}
+          </div>
+          <div class="conditions-box" dir="${textDir}">
+            <div class="conditions-title">${labels.specialConditions}</div>
+            ${termsList.map(term => `<div class="condition-item">${term}</div>`).join('')}
+          </div>
+        </div>
+
+        <!-- SIGNATURES : agency (visual left) / client (visual right) -->
+        <div class="signatures">
+          <div class="signature-box" dir="${textDir}">
+            <div class="signature-title">${labels.agencySignature}</div>
+            <div class="signature-subtitle">${labels.dateAndSignature}</div>
+          </div>
+          <div class="signature-box" dir="${textDir}">
+            <div class="signature-title">${labels.clientSignature}</div>
+            <div class="signature-subtitle">${labels.dateAndSignature}</div>
+          </div>
+        </div>
+
       </div>
-
-      <!-- Conducteur principal -->
-      <div class="section-title">👤 ${tr('Conducteur principal', 'السائق الرئيسي')}</div>
-      <table>
-        <tbody>
-          ${row(tr('Nom', 'اللقب'), esc(client?.lastName))}
-          ${row(tr('Prénom', 'الاسم'), esc(client?.firstName))}
-          ${row(tr('Téléphone', 'الهاتف'), client?.phone ? ltr(esc(client.phone)) : '—')}
-          ${row(tr('Date de naissance', 'تاريخ الميلاد'), d(client?.dateOfBirth))}
-          ${row(tr('Lieu de naissance', 'مكان الميلاد'), esc(client?.placeOfBirth))}
-          ${row(tr('Permis n°', 'رقم الرخصة'), client?.licenseNumber ? ltr(esc(client.licenseNumber)) : '—')}
-          ${row(tr('Délivrance du permis', 'تاريخ إصدار الرخصة'), d(client?.licenseDelivery || (client as any)?.licenseDeliveryDate))}
-          ${row(tr('Expiration du permis', 'تاريخ انتهاء الرخصة'), d(client?.licenseExpiration || (client as any)?.licenseExpirationDate))}
-          ${row(tr('Lieu de délivrance', 'مكان الإصدار'), esc(client?.licenseDeliveryPlace))}
-          ${row(tr('Adresse', 'العنوان'), esc(client?.completeAddress))}
-          ${row(tr('Wilaya', 'الولاية'), esc(client?.wilaya))}
-          ${row(tr("Pièce d'identité", 'وثيقة الهوية'), client?.idCardNumber
-            ? ltr(esc(client.idCardNumber))
-            : (client?.additionalDocNumber ? ltr(esc(client.additionalDocNumber)) : '—'))}
-        </tbody>
-      </table>
-
-      ${secondConductor ? `
-      <!-- Conducteur secondaire -->
-      <div class="section-title">👥 ${tr('Conducteur secondaire', 'السائق الثانوي')}</div>
-      <table>
-        <tbody>
-          ${row(tr('Nom complet', 'الاسم الكامل'), esc(secondName))}
-          ${row(tr('Permis n°', 'رقم الرخصة'), ltr(esc(secondConductor.license_number || secondConductor.licenseNumber || '')))}
-          ${row(tr('Téléphone', 'الهاتف'), secondConductor.phone ? ltr(esc(secondConductor.phone)) : '—')}
-          ${row(tr('Date de naissance', 'تاريخ الميلاد'), d(secondConductor.date_of_birth || secondConductor.dateOfBirth))}
-          ${row(tr('Lieu de naissance', 'مكان الميلاد'), esc(secondConductor.place_of_birth || secondConductor.placeOfBirth || ''))}
-        </tbody>
-      </table>` : ''}
-
-      ${societe ? `
-      <!-- Société -->
-      <div class="section-title">🏢 ${tr('Société', 'الشركة')}</div>
-      <table>
-        <tbody>
-          ${row(tr('Conducteur désigné', 'السائق المعيّن'), esc(societe.conducteur))}
-          ${row('RC',  ltr(esc(societe.rc)))}
-          ${row('ART', ltr(esc(societe.art)))}
-          ${row('NIS', ltr(esc(societe.nis)))}
-          ${row('NIF', ltr(esc(societe.nif)))}
-          ${row(tr('Email', 'البريد الإلكتروني'), societe.email ? ltr(esc(societe.email)) : '—')}
-        </tbody>
-      </table>` : ''}
-
-      <!-- Période -->
-      <div class="section-title">📅 ${tr('Période de location', 'فترة الإيجار')}</div>
-      <table>
-        <thead>
-          <tr>
-            <th></th>
-            <th>${tr('Date', 'التاريخ')}</th>
-            <th>${tr('Heure', 'الساعة')}</th>
-            <th>${tr('Agence', 'الوكالة')}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td style="font-weight:600">${tr('Départ', 'المغادرة')}</td>
-            <td>${d(reservation?.step1?.departureDate)}</td>
-            <td>${ltr(esc(reservation?.step1?.departureTime || '—'))}</td>
-            <td>${esc((reservation as any)?.departure_agency?.name || reservation?.step1?.departureAgency || '—')}</td>
-          </tr>
-          <tr>
-            <td style="font-weight:600">${tr('Retour', 'العودة')}</td>
-            <td>${d(reservation?.step1?.returnDate)}</td>
-            <td>${ltr(esc(reservation?.step1?.returnTime || '—'))}</td>
-            <td>${esc((reservation as any)?.return_agency?.name || reservation?.step1?.returnAgency || '—')}</td>
-          </tr>
-        </tbody>
-        <tfoot>
-          <tr>
-            <td colspan="3">${tr('Durée totale', 'المدة الإجمالية')}</td>
-            <td class="amount-cell">${ltr(totalDays)} ${tr('jours', 'أيام')}</td>
-          </tr>
-        </tfoot>
-      </table>
-
-      <!-- Tarification -->
-      <div class="section-title">💰 ${tr('Tarification', 'التسعير')}</div>
-      <table>
-        <thead>
-          <tr>
-            <th>${tr('Désignation', 'البيان')}</th>
-            <th class="amount-cell">${tr('Montant', 'المبلغ')}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>${tr('Location', 'الإيجار')} — ${money(pricePerDay)} × ${ltr(totalDays)} ${tr('jours', 'أيام')}</td>
-            <td class="amount-cell">${money(pricePerDay * totalDays)}</td>
-          </tr>
-          ${(reservation?.additionalServices || []).map((s: any) => `
-          <tr>
-            <td>🛎️ ${esc(s.name || s.service_name)}</td>
-            <td class="amount-cell">${money(s.price)}</td>
-          </tr>`).join('')}
-          ${assuranceName ? `
-          <tr>
-            <td>🛡️ ${esc(assuranceName)}</td>
-            <td class="amount-cell">${money(assuranceTotal)}</td>
-          </tr>` : ''}
-          ${discount > 0 ? `
-          <tr>
-            <td>${tr('Remise', 'تخفيض')}</td>
-            <td class="amount-cell">− ${money(discount)}</td>
-          </tr>` : ''}
-          ${deliveryFee > 0 ? `
-          <tr${deliveryPaidByOwner ? ' class="muted-row"' : ''}>
-            <td>🚚 ${tr('Frais de livraison', 'رسوم التوصيل')} — ${deliveryPaidByOwner
-              ? tr('à la charge du propriétaire du véhicule (non facturés)', 'على عاتق مالك المركبة (غير مفوترة)')
-              : tr('à la charge du client', 'على عاتق العميل')}</td>
-            <td class="amount-cell">${deliveryPaidByOwner ? '—' : money(deliveryFee)}</td>
-          </tr>` : ''}
-          ${tvaIncluded > 0 ? `
-          <tr>
-            <td>${tr('Dont TVA (19%)', 'منها الضريبة (19%)')}</td>
-            <td class="amount-cell">${money(tvaIncluded)}</td>
-          </tr>` : ''}
-          ${caution > 0 ? `
-          <tr>
-            <td>${tr('Caution (restituée en fin de location)', 'الضمان (يُعاد عند نهاية الإيجار)')}</td>
-            <td class="amount-cell">${money(caution)}</td>
-          </tr>` : ''}
-        </tbody>
-        <tfoot>
-          <tr>
-            <td>${tr('TOTAL', 'الإجمالي')}</td>
-            <td class="amount-cell">${money(totalPrice)}</td>
-          </tr>
-        </tfoot>
-      </table>
-
-      <div class="summary-section" style="grid-template-columns: 1fr 1fr 1fr;">
-        <div class="summary-item">
-          <div class="summary-label">${tr('Total', 'الإجمالي')}</div>
-          <div class="summary-value">${money(totalPrice)}</div>
-        </div>
-        <div class="summary-item">
-          <div class="summary-label">${tr('Avance', 'الدفعة الأولى')}</div>
-          <div class="summary-value">${money(paid)}</div>
-        </div>
-        <div class="summary-item">
-          <div class="summary-label">${tr('Reste à payer', 'المتبقي')}</div>
-          <div class="summary-value">${money(remaining)}</div>
-        </div>
-      </div>
-
-      <!-- Conditions -->
-      <div class="section-title">📋 ${tr('Conditions de location', 'شروط الإيجار')}</div>
-      ${conditionsHtml}
-    </div>
-
-    ${renderSignatures(L)}
+    </body>
+    </html>
   `;
 
-  return renderPrintDocument(L, tr('Contrat de location', 'عقد كراء السيارة'), body);
+  return html;
 };
