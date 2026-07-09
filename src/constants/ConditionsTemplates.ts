@@ -4,6 +4,17 @@
  * Language: Both Arabic (RTL) and French (LTR)
  */
 
+import {
+  PrintAgencySettings,
+  T,
+  esc,
+  fmtDate,
+  ltr,
+  renderPrintDocument,
+  renderPrintHeader,
+  renderSignatures,
+} from '../components/print/printTheme';
+
 export interface ConditionItem {
   title: string;
   content: string;
@@ -173,219 +184,83 @@ export const getConditionsTemplate = (language: 'ar' | 'fr'): ConditionsTemplate
   return language === 'ar' ? ARABIC_CONDITIONS_TEMPLATE : FRENCH_CONDITIONS_TEMPLATE;
 };
 
-/**
- * Generate HTML content for printing conditions.
- * Pixel-matches the ConditionsPersonalizer modal UI exactly:
- *   - Blue gradient header  : linear-gradient(135deg, #003399 → #0047b2)
- *   - Title                 : 24px / 800
- *   - Subtitle              : 14px italic
- *   - Condition font        : 14px / 1.7  (bold #003399 prefix)
- *   - Row divider           : 1px solid #eef0f7, padding 10px 0
- *   - Acceptance box        : bg #f0f4ff, border #b8ccee, 13.5px / 600
- *   - Signature label       : 13px / 700 / #003399
- *   - Signature line height : 50px, bg #f8faff
- *   - Side padding          : 56px (matches card padding 44px 56px)
- *   - Page border           : 2px solid #003399
- */
-export const generateConditionsPrintHTML = (language: 'ar' | 'fr'): string => {
-  const template = getConditionsTemplate(language);
-  const isArabic = language === 'ar';
-  const dir = isArabic ? 'rtl' : 'ltr';
-  const textAlign = isArabic ? 'right' : 'left';
+/** Contexte optionnel : rappel du client, du véhicule et de la période sur le document. */
+export interface ConditionsPrintContext {
+  agencySettings?: PrintAgencySettings | null;
+  reservation?: {
+    id?: string;
+    client?: { firstName?: string; lastName?: string; phone?: string };
+    car?: { brand?: string; model?: string; registration?: string; year?: number; images?: string[] };
+    step1?: { departureDate?: string; returnDate?: string };
+    totalDays?: number;
+  } | null;
+}
 
-  const conditionsHTML = template.conditions
-    .map(
-      (condition, index) => `
-      <div class="condition-item">
-        <p class="condition-text">
-          <span class="condition-title">${index + 1}- ${condition.title} </span>${condition.content}
-        </p>
+/**
+ * HTML imprimable des conditions de location, aligné sur le design system
+ * d'impression partagé (`components/print/printTheme.ts`) :
+ * en-tête dégradé, carte véhicule compacte, sections numérotées, signatures.
+ */
+export const generateConditionsPrintHTML = (
+  language: 'ar' | 'fr',
+  context?: ConditionsPrintContext
+): string => {
+  const template = getConditionsTemplate(language);
+  const tr = (fr: string, ar: string) => T(fr, ar, language);
+
+  const reservation = context?.reservation;
+  const client = reservation?.client;
+  const car = reservation?.car;
+  const carImage = car?.images?.[0];
+
+  const carDetail = (label: string, value: unknown) => `
+    <div class="car-detail-item">
+      <span class="car-detail-label">${label}</span>
+      <span class="car-detail-value">${value ? ltr(esc(value)) : '—'}</span>
+    </div>`;
+
+  // Rappel client / véhicule / période — omis quand le document est imprimé
+  // hors d'une réservation (bouton « Conditions » générique).
+  const recapHtml = reservation
+    ? `
+      <div class="car-info-card">
+        ${carImage ? `<div class="car-image"><img src="${esc(carImage)}" alt="" /></div>` : '<div></div>'}
+        <div class="car-details">
+          ${carDetail(tr('Client', 'العميل'), `${client?.firstName || ''} ${client?.lastName || ''}`.trim())}
+          ${carDetail(tr('Téléphone', 'الهاتف'), client?.phone)}
+          ${carDetail(tr('Véhicule', 'المركبة'), [car?.brand, car?.model].filter(Boolean).join(' '))}
+          ${carDetail(tr('Immatriculation', 'التسجيل'), car?.registration)}
+          ${carDetail(tr('Départ', 'المغادرة'), fmtDate(reservation.step1?.departureDate, language))}
+          ${carDetail(tr('Retour', 'العودة'), fmtDate(reservation.step1?.returnDate, language))}
+        </div>
       </div>`
-    )
+    : '';
+
+  const conditionsHtml = template.conditions
+    .map((condition, index) => `
+      <div class="section-title">${index + 1}. ${esc(condition.title)}</div>
+      <p class="conditions-text">${esc(condition.content)}</p>`)
     .join('');
 
-  const acceptanceText = isArabic
-    ? 'يُقرّ المستأجر بأنه اطّلع على شروط الإيجار هذه وقبلها دون أي تحفظ، ويتعهد بتوقيع هذا العقد.'
-    : "Le client déclare avoir pris connaissance et accepter sans réserve les présentes conditions de location et s'engage à signer ce contrat.";
-
-  const printDate = new Date().toLocaleDateString(isArabic ? 'en-US' : 'fr-FR');
-
-  return `<!DOCTYPE html>
-<html dir="${dir}" lang="${language}">
-<head>
-  <meta charset="utf-8">
-  <title>${template.title}</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-
-    html, body {
-      width: 794px;
-      margin: 0;
-      padding: 0;
-      background: white;
-    }
-
-    body {
-      font-family: 'Arial', 'Helvetica Neue', sans-serif;
-      color: #222;
-      direction: ${dir};
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
-    }
-
-    /* ── PAGE ── */
-    .page {
-      width: 794px;
-      min-height: 1123px;
-      padding-bottom: 30px;
-      display: flex;
-      flex-direction: column;
-      background: white;
-      border: 2px solid #003399;
-    }
-
-    /* ── HEADER (÷1.2) ── */
-    .header {
-      background: linear-gradient(135deg, #003399 0%, #0047b2 100%);
-      color: white;
-      padding: 18px 47px 15px;
-      text-align: center;
-      flex-shrink: 0;
-    }
-
-    .header h1 {
-      font-size: 20px;
-      font-weight: 800;
-      margin: 0 0 7px;
-      letter-spacing: 0.3px;
-    }
-
-    .header p {
-      font-size: 11.5px;
-      margin: 0;
-      opacity: 0.88;
-      font-style: italic;
-      color: rgba(255,255,255,0.88);
-    }
-
-    /* ── CONTENT (÷1.2) ── */
-    .content {
-      flex: 1;
-      padding: 15px 47px 0;
-    }
-
-    /* ── CONDITION ROWS (÷1.2) ── */
-    .condition-item {
-      padding: 8px 0;
-      border-bottom: 1px solid #eef0f7;
-    }
-    .condition-item:last-child { border-bottom: none; }
-
-    .condition-text {
-      font-size: 11.5px;
-      color: #222;
-      line-height: 1.55;
-      margin: 0;
-      text-align: ${textAlign};
-    }
-
-    .condition-title {
-      font-weight: 700;
-      color: #003399;
-    }
-
-    /* ── ACCEPTANCE (÷1.2) ── */
-    .acceptance {
-      margin: 17px 47px 0;
-      padding: 8px 12px;
-      background: #f0f4ff;
-      border-radius: 5px;
-      border: 1px solid #b8ccee;
-      font-size: 11px;
-      color: #003399;
-      font-weight: 600;
-      text-align: ${textAlign};
-    }
-
-    /* ── SIGNATURES (÷1.2) ── */
-    .signatures-section {
-      margin: 23px 47px 0;
-      padding-top: 15px;
-      border-top: 2px solid #003399;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 27px;
-    }
-
-    .signature-block { text-align: center; }
-
-    .signature-line {
-      border-top: 2px solid #003399;
-      height: 42px;
-      margin-bottom: 8px;
-      background: #f8faff;
-      border-radius: 4px 4px 0 0;
-    }
-
-    .signature-label {
-      font-size: 11px;
-      font-weight: 700;
-      color: #003399;
-      letter-spacing: 0.2px;
-    }
-
-    .print-date {
-      text-align: center;
-      font-size: 9px;
-      color: #888;
-      margin: 13px 47px 0;
-      padding-top: 10px;
-      border-top: 1px solid #dde3f5;
-    }
-
-    @media print {
-      @page { size: A4; margin: 0; }
-      html, body { width: 794px; }
-      * {
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
-        color-adjust: exact !important;
-      }
-    }
-  </style>
-</head>
-<body>
-  <div class="page">
-
-    <div class="header">
-      <h1>${template.title}</h1>
-      <p>${template.subtitle}</p>
-    </div>
+  const body = `
+    ${renderPrintHeader(
+      context?.agencySettings,
+      { fr: '📋 Conditions de Location', ar: '📋 شروط الإيجار' },
+      language,
+      reservation?.id ? reservation.id.toString().substring(0, 8).toUpperCase() : undefined
+    )}
 
     <div class="content">
-      ${conditionsHTML}
+      ${recapHtml}
+      ${conditionsHtml}
     </div>
 
-    <div class="acceptance">
-      ${acceptanceText}
-    </div>
+    ${renderSignatures(language, {
+      left: { fr: template.clientSignatureLabel, ar: template.clientSignatureLabel },
+      right: { fr: template.agencySignatureLabel, ar: template.agencySignatureLabel },
+      note: { fr: 'Lu et approuvé', ar: 'قرئ وصودق عليه' },
+    })}
+  `;
 
-    <div class="signatures-section">
-      <div class="signature-block">
-        <div class="signature-line"></div>
-        <div class="signature-label">🏢 ${template.agencySignatureLabel}</div>
-      </div>
-      <div class="signature-block">
-        <div class="signature-line"></div>
-        <div class="signature-label">✍️ ${template.clientSignatureLabel}</div>
-      </div>
-    </div>
-
-    <div class="print-date">
-      ${isArabic ? 'التاريخ: ' : 'Date: '}${printDate}
-    </div>
-
-  </div>
-</body>
-</html>`;
+  return renderPrintDocument(language, template.title, body);
 };
