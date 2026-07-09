@@ -17,6 +17,7 @@ import { getCars } from '../services/carService';
 import { supabase } from '../supabase';
 import { generateConditionsPrintHTML } from '../constants/ConditionsTemplates';
 import { generateContractHTML as buildContractHTML } from './ContractHTMLGenerator';
+import { printHTMLDocument } from '../utils/printDocument';
 
 /**
  * Force a phone number (or any latin/number string) to render strictly left-to-right,
@@ -34,16 +35,33 @@ const ltrPhone = (value: any): string =>
 const ltr = ltrPhone;
 
 /**
- * Seuls ces statuts vivent dans le planificateur.
+ * Statuts « en cours de traitement » : ceux qui occupent encore le calendrier.
  * - 'website_reservation' : commande du site non encore acceptée → « Website commandes »
  * - 'accepted' / 'cancelled' : hors du flux de travail du planificateur
- * - 'completed' : uniquement révélé par la recherche
  */
 const PLANNER_STATUSES = ['pending', 'confirmed', 'active'] as const;
 type PlannerStatus = typeof PLANNER_STATUSES[number];
 
 /** 'terminated' est un ancien libellé encore présent dans certaines lignes. */
 const isTerminatedStatus = (status: string) => status === 'completed' || status === 'terminated';
+
+/**
+ * La liste du planificateur affiche le flux de travail *et* les réservations
+ * terminées (elles restent consultables / réactivables). Seules
+ * 'website_reservation', 'accepted' et 'cancelled' en sont exclues.
+ */
+const isVisibleInPlanner = (status: string) =>
+  PLANNER_STATUSES.includes(status as PlannerStatus) || isTerminatedStatus(status);
+
+/**
+ * Le filtre « Terminées » couvre les deux libellés historiques,
+ * sinon les anciennes lignes 'terminated' seraient introuvables.
+ */
+const matchesStatusFilter = (status: string, filter: string) => {
+  if (filter === 'all') return true;
+  if (filter === 'completed') return isTerminatedStatus(status);
+  return status === filter;
+};
 
 interface PlannerPageProps {
   lang: Language;
@@ -76,8 +94,6 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
   const [showInspectionMode, setShowInspectionMode] = useState(false);
   const [showConditionsModal, setShowConditionsModal] = useState(false);
   const [conditionsLanguage, setConditionsLanguage] = useState<'ar' | 'fr'>('ar');
-  // Réservation ciblée par le document « Conditions » (aperçu + impression).
-  const [conditionsReservation, setConditionsReservation] = useState<ReservationDetails | null>(null);
   const [showDebtModal, setShowDebtModal] = useState<{ reservation: ReservationDetails } | null>(null);
   const [filterDebtOnly, setFilterDebtOnly] = useState(false);
   const [agencies, setAgencies] = useState<any[]>([]);
@@ -325,10 +341,9 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
     setShowPersonalization({ reservation, type });
   };
 
-  // Ouvre l'aperçu imprimable des conditions de location (même design que le contrat).
-  const handleOpenConditions = (reservation: ReservationDetails) => {
+  // Ouvre l'aperçu imprimable des conditions de location.
+  const handleOpenConditions = () => {
     setOpenPrintMenu(null);
-    setConditionsReservation(reservation);
     setConditionsLanguage('ar');
     setShowConditionsModal(true);
   };
@@ -449,16 +464,10 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
   const filteredReservations = reservations.filter(reservation => {
     if (!reservation.client || !reservation.car) return false;
 
-    // Le planificateur ne montre que les réservations en cours de traitement.
-    // Sont donc exclues : 'website_reservation' (commande du site pas encore
-    // acceptée — gérée dans « Website commandes »), 'accepted' et 'cancelled'.
-    // Une commande du site acceptée passe à 'pending' et apparaît ici avec le
-    // badge « 🌐 Site web ». Les réservations terminées ne sont révélées que par
-    // la recherche (bannière violette).
-    if (!PLANNER_STATUSES.includes(reservation.status as PlannerStatus)
-        && !(isTerminatedStatus(reservation.status) && isSearching)) {
-      return false;
-    }
+    // Sont exclues : 'website_reservation' (commande du site pas encore acceptée
+    // — gérée dans « Website commandes »), 'accepted' et 'cancelled'. Une commande
+    // du site acceptée passe à 'pending' et apparaît ici avec le badge « 🌐 Site web ».
+    if (!isVisibleInPlanner(reservation.status)) return false;
 
     const q = searchQuery.toLowerCase();
     const matchesSearch =
@@ -470,7 +479,7 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
       (reservation.car.registration || '').toLowerCase().includes(q) ||
       (reservation.client.phone || '').toLowerCase().includes(q);
 
-    const matchesFilter = filterStatus === 'all' || reservation.status === filterStatus;
+    const matchesFilter = matchesStatusFilter(reservation.status, filterStatus);
 
     const matchesSource = filterSource === 'all' || (reservation.source || 'agency') === filterSource;
 
@@ -499,15 +508,12 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
     }
   };
 
-  const terminatedCount = isSearching
-    ? filteredReservations.filter(r => isTerminatedStatus(r.status)).length
-    : 0;
-
   // Compteurs des chips KPI — calculés sur les réservations effectivement visibles.
   const kpiCounts = {
     pending:   filteredReservations.filter(r => r.status === 'pending').length,
     confirmed: filteredReservations.filter(r => r.status === 'confirmed').length,
     active:    filteredReservations.filter(r => r.status === 'active').length,
+    completed: filteredReservations.filter(r => isTerminatedStatus(r.status)).length,
     debt:      filteredReservations.filter(r => {
       const paid = (r.payments && r.payments.length > 0)
         ? r.payments.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0)
@@ -673,6 +679,7 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
           { key: 'pending',   dot: '🟡', label: lang === 'fr' ? 'En attente'  : 'في الانتظار', count: kpiCounts.pending,   cls: 'border-amber-200 bg-amber-50 text-amber-800',    active: 'border-amber-500 bg-amber-100' },
           { key: 'confirmed', dot: '🟦', label: lang === 'fr' ? 'Confirmées'  : 'مؤكدة',       count: kpiCounts.confirmed, cls: 'border-blue-200 bg-blue-50 text-blue-800',       active: 'border-blue-500 bg-blue-100' },
           { key: 'active',    dot: '🟢', label: lang === 'fr' ? 'Actives'     : 'نشطة',        count: kpiCounts.active,    cls: 'border-green-200 bg-green-50 text-green-800',    active: 'border-green-500 bg-green-100' },
+          { key: 'completed', dot: '🏁', label: lang === 'fr' ? 'Terminées'   : 'منتهية',      count: kpiCounts.completed, cls: 'border-purple-200 bg-purple-50 text-purple-800', active: 'border-purple-500 bg-purple-100' },
         ] as const).map(chip => (
           <button
             key={chip.key}
@@ -712,13 +719,6 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
               className="w-full ps-10 pe-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
-          {!isSearching && (
-            <p className="text-[11px] text-slate-400 font-medium mt-1.5 ms-1">
-              {lang === 'fr'
-                ? '💡 La recherche affiche aussi les réservations terminées'
-                : '💡 يعرض البحث أيضًا الحجوزات المنتهية'}
-            </p>
-          )}
         </div>
 
         {/* Filtre Statut — pills segmentées */}
@@ -728,6 +728,7 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
             { key: 'pending',   label: lang === 'fr' ? 'En attente': 'في الانتظار' },
             { key: 'confirmed', label: lang === 'fr' ? 'Confirmée' : 'مؤكد' },
             { key: 'active',    label: lang === 'fr' ? 'Active'    : 'نشط' },
+            { key: 'completed', label: lang === 'fr' ? 'Terminée'  : 'منتهي' },
           ] as const).map(pill => (
             <button
               key={pill.key}
@@ -801,25 +802,6 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
               {lang === 'fr' ? 'Voir →' : 'عرض →'}
             </span>
           </motion.button>
-        )}
-      </AnimatePresence>
-
-            {/* Banner showing terminated results when searching */}
-      <AnimatePresence>
-        {isSearching && terminatedCount > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            className="flex items-center gap-3 bg-purple-50 border border-purple-200 rounded-xl px-5 py-3"
-          >
-            <span className="text-purple-600 text-lg">🔍</span>
-            <p className="text-purple-800 text-sm font-semibold">
-              {lang === 'fr'
-                ? `${terminatedCount} réservation${terminatedCount > 1 ? 's' : ''} terminée${terminatedCount > 1 ? 's' : ''} incluse${terminatedCount > 1 ? 's' : ''} dans les résultats`
-                : `${terminatedCount} حجز منتهية مضمنة في النتائج`}
-            </p>
-          </motion.div>
         )}
       </AnimatePresence>
 
@@ -1361,7 +1343,7 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                           📄 {lang === 'fr' ? 'Contrat' : 'عقد'}
                         </button>
                         <button
-                          onClick={() => handleOpenConditions(reservation)}
+                          onClick={() => handleOpenConditions()}
                           className="w-full text-left px-4 py-3 hover:bg-indigo-50 text-saas-text-main font-bold flex items-center gap-2 border-b border-saas-border transition-colors"
                         >
                           📋 {lang === 'fr' ? 'Conditions' : 'الشروط'}
@@ -1502,14 +1484,7 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
             reservation={showPersonalization.reservation}
             type={showPersonalization.type}
             onClose={() => setShowPersonalization(null)}
-            onPrint={(content) => {
-              const printWindow = window.open('', '', 'height=600,width=800');
-              if (printWindow) {
-                printWindow.document.write(content);
-                printWindow.document.close();
-                printWindow.print();
-              }
-            }}
+            onPrint={(content) => printHTMLDocument(content)}
           />
         )}
       </AnimatePresence>
@@ -1576,7 +1551,7 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                 <div className="flex-1 overflow-auto bg-gradient-to-b from-gray-50 to-white p-8">
                   <div className="bg-white rounded-lg shadow-lg p-0 mx-auto" style={{ width: '210mm' }}>
                     <iframe
-                      srcDoc={generateConditionsPrintHTML(conditionsLanguage, { reservation: conditionsReservation })}
+                      srcDoc={generateConditionsPrintHTML(conditionsLanguage)}
                       style={{ width: '100%', height: '600px', border: 'none', borderRadius: '0.5rem' }}
                       title="Conditions Preview"
                     />
@@ -1592,16 +1567,7 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                     {conditionsLanguage === 'fr' ? 'Fermer' : 'إغلاق'}
                   </button>
                   <button
-                    onClick={() => {
-                      const content = generateConditionsPrintHTML(conditionsLanguage, { reservation: conditionsReservation });
-                      const printWindow = window.open('', '', 'height=600,width=800');
-                      if (printWindow) {
-                        printWindow.document.write(content);
-                        printWindow.document.close();
-                        printWindow.focus();
-                        printWindow.print();
-                      }
-                    }}
+                    onClick={() => printHTMLDocument(generateConditionsPrintHTML(conditionsLanguage))}
                     className="px-6 py-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold rounded-lg transition-all flex items-center gap-2"
                   >
                     <Printer size={18} />
@@ -2542,18 +2508,11 @@ export const PersonalizationModal: React.FC<{
   };
 
   /**
-   * CONTRAT DE LOCATION — délègue au générateur partagé, qui applique le design
-   * system d’impression (`print/printTheme.ts`). Aucune donnée propriétaire
-   * (conciergerie) ne figure sur ce document remis au client.
+   * CONTRAT DE LOCATION — délègue au générateur partagé. Aucune donnée
+   * propriétaire (conciergerie) ne figure sur ce document remis au client.
    */
   const generateContractHTML = (templateLang: 'fr' | 'ar'): string =>
-    buildContractHTML(
-      reservation,
-      agencySettings,
-      secondConductor,
-      templateLang,
-      isSociete ? societeData : null
-    );
+    buildContractHTML(reservation, agencySettings, secondConductor, templateLang);
 
   const generateDevisHTML = (templateLang: 'fr' | 'ar'): string => {
     const isFrench = templateLang === 'fr';
@@ -4362,14 +4321,8 @@ export const PersonalizationModal: React.FC<{
     }
     
     setTimeout(() => {
-      const printWindow = window.open('', '', 'height=600,width=800');
-      if (printWindow) {
-        printWindow.document.write(content);
-        printWindow.document.close();
-        printWindow.focus();
-        printWindow.print();
-        setTimeout(() => setIsPrinting(false), 100);
-      }
+      printHTMLDocument(content);
+      setTimeout(() => setIsPrinting(false), 100);
     }, 300);
   };
 
