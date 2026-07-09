@@ -448,6 +448,12 @@ export interface ReservationDetails {
    * >= 10 jours → 'owner' (propriétaire), sinon 'client'. Null si `deliveryFee` = 0.
    */
   deliveryFeePayer?: 'client' | 'owner';
+  /**
+   * CONCIERGERIE — commission de l'agence (DA), figée par trigger DB à la
+   * clôture de la location (`commission_amount`). Absente sur les locations
+   * non terminées ou les véhicules personnels.
+   */
+  commissionAmount?: number;
   tvaApplied: boolean;
   notes?: string;
   conditions?: string;
