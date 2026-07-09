@@ -33,7 +33,7 @@ export const ARABIC_CONDITIONS_TEMPLATE: ConditionsTemplate = {
     },
     {
       title: 'جواز السفر',
-      content: 'إيداع جواز السفر البيومتري إلزامي، بالإضافة إلى دفع تأمين ابتدائي يبدأ من 30.000,00 دج حسب فئة المركبة، ويُعدّ هذا بمثابة ضمان تطلبه'
+      content: 'إيداع جواز السفر البيومتري إلزامي، بالإضافة إلى دفع تأمين ابتدائي حسب فئة المركبة، ويُعدّ هذا بمثابة ضمان تطلبه'
     },
     {
       title: 'الوقود',
@@ -53,15 +53,15 @@ export const ARABIC_CONDITIONS_TEMPLATE: ConditionsTemplate = {
     },
     {
       title: 'جدول المواعيد',
-      content: 'يجب على الزبون احترام المواعيد المحددة عند الحجز. يجب الإبلاغ مسبقًا عن أي تغيير. لا يمكن للزبون تمديد مدة الإيجار إلا بعد الحصول على إذن من وكالتنا للإيجار، وذلك بإشعار مسبق لا يقل عن 48 ساعة'
+      content: 'يجب على الزبون احترام المواعيد المحددة عند الحجز. يجب الإبلاغ مسبقًا عن أي تغيير. لا يمكن للزبون تمديد مدة الإيجار إلا بعد الحصول على إذن من وكالتنا للإيجار، وذلك بإشعار مسبق لا يقل عن 24 ساعة'
     },
     {
       title: 'الأضرار والخسائر',
       content: 'في حالة السرقة أو تضرر المركبة، يجب تقديم تصريح لدى مصالح الشرطة أو الدرك الوطني. قبل أي تصريح، يجب على الزبون إبلاغ وكالة الكراء بشكل إلزامي'
     },
     {
-      title: 'حد السرقة',
-      content: 'في حالة السرقة أو تضرر المركبة، يجب تقديم تصريح لدى مصالح الشرطة أو الدرك الوطني. قبل أي تصريح، يجب على الزبون إبلاغ وكالة الكراء بشكل إلزامي'
+      title: 'الحادث',
+      content: 'يتحمل الزبون كل نفقات السيارة في حال حادث أو ضرر بالسيارة من الداخل والخارج'
     },
     {
       title: 'تأمين',
@@ -81,11 +81,19 @@ export const ARABIC_CONDITIONS_TEMPLATE: ConditionsTemplate = {
     },
     {
       title: 'عدد الأميال',
-      content: 'عدد الكيلومترات محدود لجميع مركباتنا بـ 300 كم يوميًا، ويُفرض غرامة قدرها 30 دج عن كل كيلومتر زائد'
+      content: 'عدد الكيلومترات محدود لجميع مركباتنا بـ 300 كم يوميًا على حسب نوع السيارة، ويُفرض غرامة قدرها 30 دج عن كل كيلومتر زائد'
     },
     {
       title: 'شروط',
       content: 'يُقرّ الزبون بأنه اطّلع على شروط الإيجار هذه وقبلها دون أي تحفظ، ويتعهد بتوقيع هذا العقد'
+    },
+    {
+      title: 'المسؤولية القانونية',
+      content: 'في حالة ضبط السيارة بأي شكل من جميع الممنوعات أو أي شيء مخالف للقانون، يتحمل الزبون كل المسؤوليات القانونية لدى مصالح الدرك أو الشرطة أو المحكمة بصفة عامة'
+    },
+    {
+      title: 'المصاريف والمتابعة',
+      content: 'كل المصاريف على عاتق الزبون، وإذا لم يتم دفع مستحقات الوكالة فللوكالة الحق في متابعة الزبون قضائيًا'
     }
   ],
   clientSignatureLabel: 'امضاء وبصمة الزبون',
@@ -107,7 +115,7 @@ export const FRENCH_CONDITIONS_TEMPLATE: ConditionsTemplate = {
     },
     {
       title: 'Passeport',
-      content: 'Dépôt obligatoire du passeport biométrique et le consionnement a partir de 30.000,00Da selon la catégorie du vhécule qui constitue une garantie que nous de mandons.'
+      content: 'Dépôt obligatoire du passeport biométrique et une caution selon la catégorie du véhicule, qui constitue une garantie que nous demandons.'
     },
     {
       title: 'Carburant',
@@ -127,15 +135,15 @@ export const FRENCH_CONDITIONS_TEMPLATE: ConditionsTemplate = {
     },
     {
       title: 'Horaire',
-      content: 'Le client doit respecter les horaires établit à la réservation. Tout changement doit être signalé à l\'avance. Le client ne peut prolonger sa location que sur autorisation de notre agence location avec un préavis de 48 heures.'
+      content: 'Le client doit respecter les horaires établit à la réservation. Tout changement doit être signalé à l\'avance. Le client ne peut prolonger sa location que sur autorisation de notre agence location avec un préavis de 24 heures.'
     },
     {
       title: 'Cas de sinistre',
       content: 'Assurance de base : Le client s\'engage à payer tout dégât occasionné sur le véhicule qu\'il soit fautif ou non fautif. Toutes dégats sur le véhicule feras l\'objet d\'un ponctionnement sur la contion de garantie'
     },
     {
-      title: 'Cas de vol',
-      content: 'Avant toute déclaration au préalable le client doit obligatoirement informé l\'agence de location Le vol ou la dégradation du véhicule doivent faire lobjet d\'une déclaration auprès des services de police ou de la gendarmerie.'
+      title: 'Accident',
+      content: 'Le client prend en charge tous les frais du véhicule en cas d\'accident ou de dommage au véhicule, à l\'intérieur comme à l\'extérieur.'
     },
     {
       title: 'Assurances',
@@ -155,11 +163,19 @@ export const FRENCH_CONDITIONS_TEMPLATE: ConditionsTemplate = {
     },
     {
       title: 'Kilométrage',
-      content: 'Le kilométrage est limité pour tous nos véhicules a 300Km/Jour.'
+      content: 'Le kilométrage est limité pour tous nos véhicules a 300Km/Jour, selon le type de véhicule.'
     },
     {
       title: 'Acceptation',
       content: 'Le client déclare avoir pris connaissance et accepter sans réserve les présentes conditions de location.et s engage a signé ce contrat.'
+    },
+    {
+      title: 'Responsabilité légale',
+      content: 'En cas de constatation d\'objets interdits ou de toute chose contraire à la loi dans le véhicule, le client assume l\'entière responsabilité légale devant les services de la gendarmerie, de la police ou du tribunal, de manière générale.'
+    },
+    {
+      title: 'Frais et poursuites',
+      content: 'Tous les frais sont à la charge du client. À défaut de paiement des sommes dues à l\'agence, celle-ci se réserve le droit de poursuivre le client en justice.'
     }
   ],
   clientSignatureLabel: 'Signature et empreinte du client',
@@ -175,16 +191,12 @@ export const getConditionsTemplate = (language: 'ar' | 'fr'): ConditionsTemplate
 
 /**
  * Generate HTML content for printing conditions.
- * Pixel-matches the ConditionsPersonalizer modal UI exactly:
+ * Layout summary:
  *   - Blue gradient header  : linear-gradient(135deg, #003399 → #0047b2)
- *   - Title                 : 24px / 800
- *   - Subtitle              : 14px italic
- *   - Condition font        : 14px / 1.7  (bold #003399 prefix)
- *   - Row divider           : 1px solid #eef0f7, padding 10px 0
- *   - Acceptance box        : bg #f0f4ff, border #b8ccee, 13.5px / 600
- *   - Signature label       : 13px / 700 / #003399
- *   - Signature line height : 50px, bg #f8faff
- *   - Side padding          : 56px (matches card padding 44px 56px)
+ *   - Condition font        : 12.5px / 600 (bold #003399 prefix)
+ *   - Row divider           : 1px solid #eef0f7
+ *   - Acceptance box        : bg #f0f4ff, border #b8ccee
+ *   - Signatures            : simple empty rectangles with the label below
  *   - Page border           : 2px solid #003399
  */
 export const generateConditionsPrintHTML = (language: 'ar' | 'fr'): string => {
@@ -192,6 +204,16 @@ export const generateConditionsPrintHTML = (language: 'ar' | 'fr'): string => {
   const isArabic = language === 'ar';
   const dir = isArabic ? 'rtl' : 'ltr';
   const textAlign = isArabic ? 'right' : 'left';
+
+  /**
+   * The French wording is considerably longer than the Arabic one and used to spill onto a
+   * second A4 sheet. Both languages share one design; French simply renders it at a reduced
+   * scale (fonts + vertical rhythm) so the 17 conditions, the acceptance box and both
+   * signature boxes still fit on a single page. Horizontal gutters stay fixed so the two
+   * languages keep the same page frame.
+   */
+  const scale = isArabic ? 1 : 0.86;
+  const u = (n: number): string => `${Math.round(n * scale * 100) / 100}px`;
 
   const conditionsHTML = template.conditions
     .map(
@@ -205,8 +227,8 @@ export const generateConditionsPrintHTML = (language: 'ar' | 'fr'): string => {
     .join('');
 
   const acceptanceText = isArabic
-    ? 'يُقرّ المستأجر بأنه اطّلع على شروط الإيجار هذه وقبلها دون أي تحفظ، ويتعهد بتوقيع هذا العقد.'
-    : "Le client déclare avoir pris connaissance et accepter sans réserve les présentes conditions de location et s'engage à signer ce contrat.";
+    ? 'قام المستأجر بالاطلاع على شروط الإيجار هذه وقبلها دون أي تحفظ، ويتعهد بتوقيع هذا العقد وتحمّل جميع المسؤوليات الثانوية.'
+    : "Le locataire déclare avoir pris connaissance des présentes conditions de location et les accepter sans réserve, s'engage à signer ce contrat et à assumer toutes les responsabilités secondaires.";
 
   const printDate = new Date().toLocaleDateString(isArabic ? 'en-US' : 'fr-FR');
 
@@ -237,81 +259,82 @@ export const generateConditionsPrintHTML = (language: 'ar' | 'fr'): string => {
     .page {
       width: 794px;
       min-height: 1123px;
-      padding-bottom: 30px;
+      padding-bottom: ${u(30)};
       display: flex;
       flex-direction: column;
       background: white;
       border: 2px solid #003399;
     }
 
-    /* ── HEADER (÷1.2) ── */
+    /* ── HEADER ── */
     .header {
       background: linear-gradient(135deg, #003399 0%, #0047b2 100%);
       color: white;
-      padding: 18px 47px 15px;
+      padding: ${u(18)} 47px ${u(15)};
       text-align: center;
       flex-shrink: 0;
     }
 
     .header h1 {
-      font-size: 20px;
+      font-size: ${u(22)};
       font-weight: 800;
-      margin: 0 0 7px;
+      margin: 0 0 ${u(7)};
       letter-spacing: 0.3px;
     }
 
     .header p {
-      font-size: 11.5px;
+      font-size: ${u(12.5)};
       margin: 0;
       opacity: 0.88;
       font-style: italic;
       color: rgba(255,255,255,0.88);
     }
 
-    /* ── CONTENT (÷1.2) ── */
+    /* ── CONTENT ──
+       No flex-grow: the content takes only the height it needs so the
+       acceptance box + signatures sit directly beneath the conditions
+       instead of being pushed to the bottom of the A4 page. */
     .content {
-      flex: 1;
-      padding: 15px 47px 0;
+      padding: ${u(15)} 47px 0;
     }
 
-    /* ── CONDITION ROWS (÷1.2) ── */
+    /* ── CONDITION ROWS ── */
     .condition-item {
-      padding: 8px 0;
+      padding: ${u(7)} 0;
       border-bottom: 1px solid #eef0f7;
     }
     .condition-item:last-child { border-bottom: none; }
 
     .condition-text {
-      font-size: 11.5px;
-      color: #222;
+      font-size: ${u(12.5)};
+      color: #111;
+      font-weight: 600;
       line-height: 1.55;
       margin: 0;
       text-align: ${textAlign};
     }
 
     .condition-title {
-      font-weight: 700;
+      font-weight: 800;
       color: #003399;
     }
 
-    /* ── ACCEPTANCE (÷1.2) ── */
+    /* ── ACCEPTANCE ── */
     .acceptance {
-      margin: 17px 47px 0;
-      padding: 8px 12px;
+      margin: ${u(12)} 47px 0;
+      padding: ${u(9)} ${u(12)};
       background: #f0f4ff;
       border-radius: 5px;
       border: 1px solid #b8ccee;
-      font-size: 11px;
+      font-size: ${u(12.5)};
       color: #003399;
-      font-weight: 600;
+      font-weight: 700;
       text-align: ${textAlign};
     }
 
-    /* ── SIGNATURES (÷1.2) ── */
+    /* ── SIGNATURES: simple empty rectangles ── */
     .signatures-section {
-      margin: 23px 47px 0;
-      padding-top: 15px;
-      border-top: 2px solid #003399;
+      margin: ${u(16)} 47px 0;
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 27px;
@@ -319,16 +342,19 @@ export const generateConditionsPrintHTML = (language: 'ar' | 'fr'): string => {
 
     .signature-block { text-align: center; }
 
-    .signature-line {
-      border-top: 2px solid #003399;
-      height: 42px;
-      margin-bottom: 8px;
-      background: #f8faff;
-      border-radius: 4px 4px 0 0;
+    .signature-box {
+      border: 2px solid #003399;
+      border-radius: 4px;
+      height: ${u(100)};
+      background: #fff;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding-top: ${u(8)};
     }
 
     .signature-label {
-      font-size: 11px;
+      font-size: ${u(12.5)};
       font-weight: 700;
       color: #003399;
       letter-spacing: 0.2px;
@@ -336,10 +362,10 @@ export const generateConditionsPrintHTML = (language: 'ar' | 'fr'): string => {
 
     .print-date {
       text-align: center;
-      font-size: 9px;
+      font-size: ${u(9)};
       color: #888;
-      margin: 13px 47px 0;
-      padding-top: 10px;
+      margin: ${u(13)} 47px 0;
+      padding-top: ${u(10)};
       border-top: 1px solid #dde3f5;
     }
 
@@ -372,12 +398,14 @@ export const generateConditionsPrintHTML = (language: 'ar' | 'fr'): string => {
 
     <div class="signatures-section">
       <div class="signature-block">
-        <div class="signature-line"></div>
-        <div class="signature-label">🏢 ${template.agencySignatureLabel}</div>
+        <div class="signature-box">
+          <div class="signature-label">${template.agencySignatureLabel}</div>
+        </div>
       </div>
       <div class="signature-block">
-        <div class="signature-line"></div>
-        <div class="signature-label">✍️ ${template.clientSignatureLabel}</div>
+        <div class="signature-box">
+          <div class="signature-label">${template.clientSignatureLabel}</div>
+        </div>
       </div>
     </div>
 

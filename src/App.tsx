@@ -36,6 +36,192 @@ if (typeof window !== 'undefined') {
   (window as any).__supabase__ = supabase;
 }
 
+const LoadingScreen = () => (
+  <div className="min-h-screen flex items-center justify-center bg-saas-bg">
+    <div className="text-center">
+      <motion.div
+        animate={{ rotate: 360 }}
+        transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+        className="w-12 h-12 border-4 border-saas-primary-via border-t-saas-primary-start rounded-full mx-auto mb-4"
+      />
+      <p className="text-saas-text-muted">Chargement...</p>
+    </div>
+  </div>
+);
+
+interface DashboardLayoutProps {
+  lang: Language;
+  setLang: (lang: Language) => void;
+  user: User | null;
+  isAuthLoading: boolean;
+  activeTab: string;
+  onTabChange: (tabId: string) => void;
+  isSidebarVisible: boolean;
+  setIsSidebarVisible: (visible: boolean) => void;
+  onLogout: () => void;
+  maintenanceAlertsCount: number;
+  webOrdersCount: number;
+  cars: Car[];
+}
+
+/**
+ * Layout du back-office (sidebar + navbar + page active).
+ *
+ * IMPORTANT : ce composant est défini au niveau MODULE (et non à l'intérieur
+ * de <App/>). Défini dans App, son identité changeait à chaque re-render du
+ * parent, forçant React à démonter/remonter tout l'écran actif — chaque page
+ * rechargeait alors ses données ("auto-refresh" subi par l'utilisateur).
+ */
+const DashboardLayout: React.FC<DashboardLayoutProps> = ({
+  lang, setLang, user, isAuthLoading, activeTab, onTabChange,
+  isSidebarVisible, setIsSidebarVisible, onLogout,
+  maintenanceAlertsCount, webOrdersCount, cars,
+}) => {
+  const activeItem = SIDEBAR_ITEMS.find(item => item.id === activeTab) || SIDEBAR_ITEMS[0];
+
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'dashboard':
+        return <DashboardPage lang={lang} isAuthLoading={isAuthLoading} user={user} />;
+      case 'planner':
+        return <PlannerPage lang={lang} isAuthLoading={isAuthLoading} user={user} />;
+      case 'car-gains':
+        return <CarGainsPage lang={lang} />;
+      case 'vehicles':
+        return <CarsPage lang={lang} isAuthLoading={isAuthLoading} user={user} />;
+      case 'maintenance':
+        return <MaintenancePage lang={lang} isAuthLoading={isAuthLoading} user={user} />;
+      case 'agencies':
+        return <AgenciesPage lang={lang} />;
+      case 'clients':
+        return <ClientsPage lang={lang} isAuthLoading={isAuthLoading} user={user} />;
+      case 'team':
+        return <EquipePage lang={lang} />;
+      case 'expenses':
+        return <ExpensesPage lang={lang} cars={cars} />;
+      case 'web-mgmt':
+        return <WebsiteManagementPage lang={lang} />;
+      case 'web-orders':
+        return <WebsiteOrders lang={lang} />;
+      case 'protection-services':
+        return <ProtectionServicesPage lang={lang} />;
+      case 'reservations':
+        return <ReservationsPage lang={lang} isAuthLoading={isAuthLoading} user={user} />;
+      case 'reports':
+        return <ReportsPage lang={lang} />;
+      case 'config':
+        return user ? <ConfigPage lang={lang} user={user} /> : null;
+      default:
+        return (
+          <div className="space-y-8">
+            <div className="flex flex-col gap-2">
+              <h2 className="text-3xl font-black text-saas-text-main uppercase tracking-tighter">
+                {activeItem.icon} {activeItem.label[lang]}
+              </h2>
+              <p className="text-saas-text-muted font-bold uppercase text-[10px] tracking-widest">
+                {lang === 'fr'
+                  ? `Interface pour ${activeItem.label.fr}`
+                  : `واجهة لـ ${activeItem.label.ar}`}
+              </p>
+            </div>
+
+            <div className="glass-card p-12 min-h-[500px] flex items-center justify-center border-dashed border-saas-border bg-white group">
+              <div className="text-center space-y-6">
+                <div className="text-8xl opacity-10 grayscale group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-700 transform group-hover:scale-110">
+                  {activeItem.icon}
+                </div>
+                <div className="space-y-3">
+                  <p className="text-saas-text-main font-black text-2xl uppercase tracking-tighter">
+                    {lang === 'fr' ? 'Contenu en développement' : 'المحتوى قيد التطوير'}
+                  </p>
+                  <p className="text-saas-text-muted text-sm font-medium max-w-md mx-auto">
+                    {lang === 'fr'
+                      ? 'Cette section est en cours de modernisation pour correspondre à votre nouveau standard SaaS.'
+                      : 'هذا القسم قيد التحديث ليتناسب مع معايير SaaS الجديدة الخاصة بك.'}
+                  </p>
+                </div>
+                <button className="btn-saas-primary px-8 py-3">
+                  {lang === 'fr' ? 'En savoir plus' : 'معرفة المزيد'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+    }
+  };
+
+  return (
+    <div className={`flex min-h-screen bg-saas-bg text-saas-text-main ${lang === 'ar' ? 'font-arabic' : ''}`}>
+      {!supabaseConfigured && (
+        <div className="fixed inset-0 bg-yellow-100 text-yellow-900 flex items-center justify-center z-50 p-4 text-center">
+          <strong>Warning:</strong> Supabase variables are missing. Set
+          <code className="mx-1">VITE_SUPABASE_URL</code> and
+          <code className="mx-1">VITE_SUPABASE_ANON_KEY</code> in your environment.
+        </div>
+      )}
+      <Sidebar
+        lang={lang}
+        isVisible={isSidebarVisible}
+        setIsVisible={setIsSidebarVisible}
+        onLogout={onLogout}
+        activeTab={activeTab}
+        setActiveTab={onTabChange}
+        alertsCount={maintenanceAlertsCount}
+        webOrdersCount={webOrdersCount}
+      />
+
+      <div className="flex-1 flex flex-col min-w-0">
+        <Navbar
+          user={user}
+          lang={lang}
+          setLang={setLang}
+          toggleSidebar={() => setIsSidebarVisible(!isSidebarVisible)}
+        />
+
+        <main className="flex-1 p-8 overflow-y-auto">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.5 }}
+            >
+              {renderContent()}
+            </motion.div>
+          </AnimatePresence>
+        </main>
+      </div>
+
+      {/* Mobile Overlay */}
+      <AnimatePresence>
+        {isSidebarVisible && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsSidebarVisible(false)}
+            className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 lg:hidden"
+          />
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+/** Route protégée : spinner pendant l'auth, redirection sinon, layout complet une fois connecté. */
+const ProtectedRoute: React.FC<DashboardLayoutProps> = (props) => {
+  if (props.isAuthLoading) {
+    return <LoadingScreen />;
+  }
+
+  if (!props.user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <DashboardLayout {...props} />;
+};
+
 export default function App() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -52,17 +238,15 @@ export default function App() {
   const [isLoadingAgenciesForWebsite, setIsLoadingAgenciesForWebsite] = useState(true);
   const [maintenanceAlertsCount, setMaintenanceAlertsCount] = useState(0);
   const [webOrdersCount, setWebOrdersCount] = useState(0);
-  
+
   // Refs to prevent multiple listener initialization (especially important in StrictMode dev environment)
   const authListenerInitialized = useRef(false);
-  const unsubscribeRef = useRef<(() => void) | null>(null);
-  const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isWebsiteMode = location.pathname === '/website';
 
   // Sync URL with active tab - extract tab from URL on mount and when URL changes
   useEffect(() => {
     const pathname = location.pathname;
-    
+
     // Map URL paths to tab IDs
     const pathMap: Record<string, string> = {
       '/dashboard': 'dashboard',
@@ -105,7 +289,7 @@ export default function App() {
   // Update URL when active tab changes
   const handleTabChange = (tabId: string) => {
     setActiveTab(tabId);
-    
+
     const urlMap: Record<string, string> = {
       'dashboard': '/dashboard',
       'planner': '/planificateur',
@@ -124,7 +308,7 @@ export default function App() {
       'reports': '/rapports',
       'config': '/configuration',
     };
-    
+
     // Navigate with empty state to clear any previous location.state
     // This prevents pages like MaintenancePage from re-opening modals
     // triggered by previous dashboard alert clicks
@@ -136,7 +320,9 @@ export default function App() {
     document.documentElement.lang = lang;
   }, [lang]);
 
-  // Load maintenance alerts count when user is authenticated
+  // Badges de la sidebar (alertes maintenance / commandes web).
+  // Chargés UNE fois à la connexion — plus d'intervalle de rafraîchissement :
+  // l'utilisateur recharge lui-même quand il veut des données fraîches.
   useEffect(() => {
     if (!user || isAuthLoading) return;
 
@@ -151,7 +337,7 @@ export default function App() {
       // Commandes du site en attente d'acceptation (badge planificateur)
       try {
         const orders = await DatabaseService.getWebsiteOrders();
-        setWebOrdersCount(orders.filter(o => o.status === 'pending').length);
+        setWebOrdersCount(orders.filter(o => o.status === 'website_reservation').length);
       } catch (err) {
         console.error('Error loading website orders count:', err);
         setWebOrdersCount(0);
@@ -159,10 +345,6 @@ export default function App() {
     };
 
     loadAlerts();
-
-    // Refresh alerts every 5 minutes
-    const interval = setInterval(loadAlerts, 5 * 60 * 1000);
-    return () => clearInterval(interval);
   }, [user, isAuthLoading]);
 
   // Load cars from database. La table cars est lisible en anonyme (RLS),
@@ -359,24 +541,24 @@ export default function App() {
       console.log('[Auth] Session restoration already initialized, skipping');
       return;
     }
-    
+
     authListenerInitialized.current = true;
-    
+
     const restoreSession = async () => {
       console.log('\n[Auth] ======= SESSION RESTORATION STARTED =======');
       const timestamp = new Date().toLocaleTimeString();
       console.log(`[Auth] Timestamp: ${timestamp}`);
-      
+
       try {
         // Initialize session using new session service
         const session = await sessionService.initializeSession();
-        
+
         if (!session) {
           console.log('[Auth] === No valid session found ===');
           setIsAuthLoading(false);
           return;
         }
-        
+
         // CRITICAL: Sync the restored session with Supabase Auth SDK
         // This ensures Supabase queries work after page refresh
         console.log('[Auth] === Syncing session with Supabase ===');
@@ -390,34 +572,34 @@ export default function App() {
           console.warn('[Auth] Failed to sync with Supabase:', syncError);
           // Continue anyway - local session is still valid
         }
-        
+
         // Session restored from database/localStorage
         console.log('[Auth] === Session restored successfully ===');
         console.log('[Auth] User:', session.name, 'Role:', session.role);
-        
+
         const userObj: User = {
           name: session.name,
           email: session.email,
           role: session.role as UserRole,
           avatar: '' // Add avatar property
         };
-        
+
         setUser(userObj);
         console.log('[Auth] User state updated, ready to render dashboard');
-        
+
         // Give React time to process state update before marking loading complete
         setTimeout(() => {
           console.log('[Auth] Setting isAuthLoading to false');
           setIsAuthLoading(false);
         }, 100);
-        
+
       } catch (error) {
         console.error('[Auth] Session restoration error:', error);
         setUser(null);
         setIsAuthLoading(false);
       }
     };
-    
+
     restoreSession();
 
     return () => {
@@ -433,198 +615,30 @@ export default function App() {
     navigate('/login');
   };
 
-  // Component for Dashboard Layout (with Sidebar and Navbar)
-  const DashboardLayout = () => {
-    // Ensure we're using the current activeTab from parent scope
-    const currentLocation = useLocation();
-    
-    // Sync URL path to activeTab when route changes
-    useEffect(() => {
-      const pathname = currentLocation.pathname;
-      const pathMap: Record<string, string> = {
-        '/dashboard': 'dashboard',
-        '/planificateur': 'planner',
-        '/gains-vehicule': 'car-gains',
-        '/vehicules': 'vehicles',
-        '/maintenance': 'maintenance',
-        '/clients': 'clients',
-        '/agences': 'agencies',
-        '/equipe': 'team',
-        '/personalisation': 'personalization',
-        '/depenses': 'expenses',
-        '/website-management': 'web-mgmt',
-        '/website-commandes': 'web-orders',
-        '/protection-services': 'protection-services',
-        '/reservations': 'reservations',
-        '/rapports': 'reports',
-        '/configuration': 'config',
-      };
-      const tabId = pathMap[pathname] || 'dashboard';
-      setActiveTab(tabId);
-    }, [currentLocation.pathname]);
+  /**
+   * Voitures transmises au site public.
+   *
+   * La protection principale est structurelle : `car_owners` n'a aucune policy
+   * pour le rôle `anon`. Ceci est la ceinture côté front — on retire tout champ
+   * propriétaire avant qu'il ne puisse atteindre un composant du site.
+   */
+  const publicCars = (cars.length > 0 ? cars : mockCars)
+    .filter(car => car.isHiddenFromSite !== true)
+    .map(({ ownerInfo, ...rest }) => ({ ...rest, ownerInfo: undefined }));
 
-    const activeItem = SIDEBAR_ITEMS.find(item => item.id === activeTab) || SIDEBAR_ITEMS[0];
-
-    const renderContent = () => {
-      switch (activeTab) {
-        case 'dashboard':
-          return <DashboardPage lang={lang} isAuthLoading={isAuthLoading} user={user} />;
-        case 'planner':
-          return <PlannerPage lang={lang} isAuthLoading={isAuthLoading} user={user} />;
-        case 'car-gains':
-          return <CarGainsPage lang={lang} />;
-        case 'vehicles':
-          return <CarsPage lang={lang} isAuthLoading={isAuthLoading} user={user} />;
-        case 'maintenance':
-          return <MaintenancePage lang={lang} isAuthLoading={isAuthLoading} user={user} />;
-        case 'agencies':
-          return <AgenciesPage lang={lang} />;
-        case 'clients':
-          return <ClientsPage lang={lang} isAuthLoading={isAuthLoading} user={user} />;
-        case 'team':
-          return <EquipePage lang={lang} />;
-        case 'expenses':
-          return <ExpensesPage lang={lang} cars={cars} />;
-        case 'web-mgmt':
-          return <WebsiteManagementPage lang={lang} />;
-        case 'web-orders':
-          return <WebsiteOrders lang={lang} />;
-        case 'protection-services':
-          return <ProtectionServicesPage lang={lang} />;
-        case 'reservations':
-          return <ReservationsPage lang={lang} isAuthLoading={isAuthLoading} user={user} />;
-        case 'reports':
-          return <ReportsPage lang={lang} />;
-        case 'config':
-          return user ? <ConfigPage lang={lang} user={user} /> : null;
-        default:
-          return (
-            <div className="space-y-8">
-              <div className="flex flex-col gap-2">
-                <h2 className="text-3xl font-black text-saas-text-main uppercase tracking-tighter">
-                  {activeItem.icon} {activeItem.label[lang]}
-                </h2>
-                <p className="text-saas-text-muted font-bold uppercase text-[10px] tracking-widest">
-                  {lang === 'fr' 
-                    ? `Interface pour ${activeItem.label.fr}` 
-                    : `واجهة لـ ${activeItem.label.ar}`}
-                </p>
-              </div>
-
-              <div className="glass-card p-12 min-h-[500px] flex items-center justify-center border-dashed border-saas-border bg-white group">
-                <div className="text-center space-y-6">
-                  <div className="text-8xl opacity-10 grayscale group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-700 transform group-hover:scale-110">
-                    {activeItem.icon}
-                  </div>
-                  <div className="space-y-3">
-                    <p className="text-saas-text-main font-black text-2xl uppercase tracking-tighter">
-                      {lang === 'fr' ? 'Contenu en développement' : 'المحتوى قيد التطوير'}
-                    </p>
-                    <p className="text-saas-text-muted text-sm font-medium max-w-md mx-auto">
-                      {lang === 'fr' 
-                        ? 'Cette section est en cours de modernisation pour correspondre à votre nouveau standard SaaS.' 
-                        : 'هذا القسم قيد التحديث ليتناسب مع معايير SaaS الجديدة الخاصة بك.'}
-                    </p>
-                  </div>
-                  <button className="btn-saas-primary px-8 py-3">
-                    {lang === 'fr' ? 'En savoir plus' : 'معرفة المزيد'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          );
-      }
-    };
-
-    return (
-      <div className={`flex min-h-screen bg-saas-bg text-saas-text-main ${lang === 'ar' ? 'font-arabic' : ''}`}>
-        {!supabaseConfigured && (
-          <div className="fixed inset-0 bg-yellow-100 text-yellow-900 flex items-center justify-center z-50 p-4 text-center">
-            <strong>Warning:</strong> Supabase variables are missing. Set
-            <code className="mx-1">VITE_SUPABASE_URL</code> and
-            <code className="mx-1">VITE_SUPABASE_ANON_KEY</code> in your environment.
-          </div>
-        )}
-        <Sidebar 
-          lang={lang} 
-          isVisible={isSidebarVisible} 
-          setIsVisible={setIsSidebarVisible}
-          onLogout={handleLogout}
-          activeTab={activeTab}
-          setActiveTab={handleTabChange}
-          alertsCount={maintenanceAlertsCount}
-          webOrdersCount={webOrdersCount}
-        />
-        
-        <div className="flex-1 flex flex-col min-w-0">
-          <Navbar 
-            user={user} 
-            lang={lang} 
-            setLang={setLang} 
-            toggleSidebar={() => setIsSidebarVisible(!isSidebarVisible)} 
-          />
-          
-          <main className="flex-1 p-8 overflow-y-auto">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={activeTab}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.5 }}
-              >
-                {renderContent()}
-              </motion.div>
-            </AnimatePresence>
-          </main>
-        </div>
-
-        {/* Mobile Overlay */}
-        <AnimatePresence>
-          {isSidebarVisible && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsSidebarVisible(false)}
-              className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 lg:hidden"
-            />
-          )}
-        </AnimatePresence>
-      </div>
-    );
-  };
-
-  // Helper component for protected routes that handles loading state
-  const ProtectedRoute = () => {
-    console.log('[ProtectedRoute] Rendering - isAuthLoading:', isAuthLoading, 'user:', user?.name || 'null');
-    
-    // Show loading state while auth is initializing
-    if (isAuthLoading) {
-      console.log('[ProtectedRoute] Auth still loading, showing spinner');
-      return (
-        <div className="min-h-screen flex items-center justify-center bg-saas-bg">
-          <div className="text-center">
-            <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-              className="w-12 h-12 border-4 border-saas-primary-via border-t-saas-primary-start rounded-full mx-auto mb-4"
-            />
-            <p className="text-saas-text-muted">Chargement...</p>
-          </div>
-        </div>
-      );
-    }
-
-    // Redirect to login if not authenticated
-    if (!user) {
-      console.log('[ProtectedRoute] No user found, redirecting to login');
-      return <Navigate to="/login" replace />;
-    }
-
-    // User is authenticated, render dashboard
-    console.log('[ProtectedRoute] User authenticated, rendering dashboard');
-    return <DashboardLayout />;
+  const protectedProps: DashboardLayoutProps = {
+    lang,
+    setLang,
+    user,
+    isAuthLoading,
+    activeTab,
+    onTabChange: handleTabChange,
+    isSidebarVisible,
+    setIsSidebarVisible,
+    onLogout: handleLogout,
+    maintenanceAlertsCount,
+    webOrdersCount,
+    cars,
   };
 
   return (
@@ -635,7 +649,7 @@ export default function App() {
           lang={lang}
           onLangChange={setLang}
           // Le site public exclut les voitures masquées (isHiddenFromSite)
-          cars={(cars.length > 0 ? cars : mockCars).filter(car => car.isHiddenFromSite !== true)}
+          cars={publicCars}
           agencies={agencies.length > 0 ? agencies : mockAgencies}
           isLoadingAgencies={isLoadingAgenciesForWebsite}
           specialOffers={specialOffers}
@@ -647,16 +661,7 @@ export default function App() {
       {/* Login route */}
       <Route path="/login" element={
         isAuthLoading ? (
-          <div className="min-h-screen flex items-center justify-center bg-saas-bg">
-            <div className="text-center">
-              <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-                className="w-12 h-12 border-4 border-saas-primary-via border-t-saas-primary-start rounded-full mx-auto mb-4"
-              />
-              <p className="text-saas-text-muted">Loading...</p>
-            </div>
-          </div>
+          <LoadingScreen />
         ) : user ? (
           <Navigate to="/dashboard" replace />
         ) : (
@@ -665,53 +670,31 @@ export default function App() {
       } />
 
       {/* Dashboard and all interface routes - all protected */}
-      <Route path="/dashboard" element={<ProtectedRoute />} />
-      <Route path="/planificateur" element={<ProtectedRoute />} />
-      <Route path="/gains-vehicule" element={<ProtectedRoute />} />
-      <Route path="/vehicules" element={<ProtectedRoute />} />
-      <Route path="/maintenance" element={<ProtectedRoute />} />
-      <Route path="/clients" element={<ProtectedRoute />} />
-      <Route path="/agences" element={<ProtectedRoute />} />
-      <Route path="/equipe" element={<ProtectedRoute />} />
-      <Route path="/personalisation" element={<ProtectedRoute />} />
-      <Route path="/depenses" element={<ProtectedRoute />} />
-      <Route path="/website-management" element={<ProtectedRoute />} />
-      <Route path="/website-commandes" element={<ProtectedRoute />} />
-      <Route path="/protection-services" element={<ProtectedRoute />} />
-      <Route path="/reservations" element={<ProtectedRoute />} />
-      <Route path="/rapports" element={<ProtectedRoute />} />
-      <Route path="/configuration" element={<ProtectedRoute />} />
+      <Route path="/dashboard" element={<ProtectedRoute {...protectedProps} />} />
+      <Route path="/planificateur" element={<ProtectedRoute {...protectedProps} />} />
+      <Route path="/gains-vehicule" element={<ProtectedRoute {...protectedProps} />} />
+      <Route path="/vehicules" element={<ProtectedRoute {...protectedProps} />} />
+      <Route path="/maintenance" element={<ProtectedRoute {...protectedProps} />} />
+      <Route path="/clients" element={<ProtectedRoute {...protectedProps} />} />
+      <Route path="/agences" element={<ProtectedRoute {...protectedProps} />} />
+      <Route path="/equipe" element={<ProtectedRoute {...protectedProps} />} />
+      <Route path="/personalisation" element={<ProtectedRoute {...protectedProps} />} />
+      <Route path="/depenses" element={<ProtectedRoute {...protectedProps} />} />
+      <Route path="/website-management" element={<ProtectedRoute {...protectedProps} />} />
+      <Route path="/website-commandes" element={<ProtectedRoute {...protectedProps} />} />
+      <Route path="/protection-services" element={<ProtectedRoute {...protectedProps} />} />
+      <Route path="/reservations" element={<ProtectedRoute {...protectedProps} />} />
+      <Route path="/rapports" element={<ProtectedRoute {...protectedProps} />} />
+      <Route path="/configuration" element={<ProtectedRoute {...protectedProps} />} />
 
       {/* Default redirect */}
       <Route path="/" element={
-        isAuthLoading ? (
-          <div className="min-h-screen flex items-center justify-center bg-saas-bg">
-            <div className="text-center">
-              <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-                className="w-12 h-12 border-4 border-saas-primary-via border-t-saas-primary-start rounded-full mx-auto mb-4"
-              />
-              <p className="text-saas-text-muted">Loading...</p>
-            </div>
-          </div>
-        ) : <Navigate to={user ? "/dashboard" : "/login"} replace />
+        isAuthLoading ? <LoadingScreen /> : <Navigate to={user ? "/dashboard" : "/login"} replace />
       } />
 
       {/* Fallback for unknown routes */}
       <Route path="*" element={
-        isAuthLoading ? (
-          <div className="min-h-screen flex items-center justify-center bg-saas-bg">
-            <div className="text-center">
-              <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-                className="w-12 h-12 border-4 border-saas-primary-via border-t-saas-primary-start rounded-full mx-auto mb-4"
-              />
-              <p className="text-saas-text-muted">Loading...</p>
-            </div>
-          </div>
-        ) : <Navigate to={user ? "/dashboard" : "/login"} replace />
+        isAuthLoading ? <LoadingScreen /> : <Navigate to={user ? "/dashboard" : "/login"} replace />
       } />
     </Routes>
   );

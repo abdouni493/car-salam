@@ -158,8 +158,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   </motion.div>
                 )}
 
-                {/* Compteur des nouvelles commandes du site (onglet Planificateur) */}
-                {item.id === 'planner' && webOrdersCount > 0 && (
+                {/* Compteur des nouvelles commandes du site (onglet Website commandes) */}
+                {item.id === 'web-orders' && webOrdersCount > 0 && (
                   <motion.span
                     initial={{ scale: 0 }}
                     animate={{ scale: [1, 1.15, 1] }}

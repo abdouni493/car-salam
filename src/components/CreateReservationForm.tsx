@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Language, ReservationDetails, Client, Car, VehicleInspection, Payment, AdditionalService, ProtectionAssurance } from '../types';
+import { Language, ReservationDetails, ReservationWizardData, Client, Car, VehicleInspection, Payment, AdditionalService, ProtectionAssurance } from '../types';
+import { getDeliveryFeePayer } from '../utils/deliveryFee';
+import { DeliveryFeeField } from './DeliveryFeeField';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, ArrowRight, Calendar, Clock, MapPin, Car as CarIcon, User, CreditCard, CheckCircle, Plus, Search, X, Camera, Fuel, AlertTriangle, Check, Upload, PenTool } from 'lucide-react';
 import { AGENCIES, CAR_IMAGES } from '../constants';
@@ -147,16 +149,13 @@ interface CreateReservationFormProps {
   initialData?: Partial<ReservationDetails>;
   defaultStatus?: 'pending' | 'confirmed' | 'active' | 'completed' | 'cancelled';
   user?: any;
-  // Alternative step order:
-  // 1) Dates & Lieux  2) Véhicule  3) Tarification Finale (sans infos client)
-  // 4) Client  5) Services  6) Inspection Départ (+ création)
-  altFlow?: boolean;
 }
 
-export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ lang, onBack, inspectionMode = false, initialData, defaultStatus = 'pending', user, altFlow = false }) => {
+export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ lang, onBack, inspectionMode = false, initialData, defaultStatus = 'pending', user }) => {
   const [currentStep, setCurrentStep] = useState(inspectionMode ? 3 : 1);
   const [agencies, setAgencies] = useState<any[]>([]);
   const [isLoadingAgencies, setIsLoadingAgencies] = useState(true);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // Load agencies from database on component mount
   useEffect(() => {
@@ -189,7 +188,7 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
         };
       }
       // Auto-select locations from step1
-      if (!formData.step1?.departureLocation) {
+      if (!formData.step1?.departureAgencyId && !formData.step1?.departureLocation) {
         // First try to get from step1, then try direct properties
         const departureLocation = (initialData as any).step1?.departureLocation || (initialData as any).departureLocation || '';
         const returnLocation = (initialData as any).step1?.returnLocation || (initialData as any).returnLocation || departureLocation;
@@ -197,7 +196,11 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
         const returnDate = (initialData as any).step1?.returnDate || (initialData as any).returnDate || formData.step1?.returnDate;
         const departureTime = (initialData as any).step1?.departureTime || (initialData as any).departureTime || '';
         const returnTime = (initialData as any).step1?.returnTime || (initialData as any).returnTime || '';
-        
+        const departureAgencyId = (initialData as any).departure_agency_id || (initialData as any).departureAgencyId
+          || (initialData as any).step1?.departureAgencyId || (initialData as any).step1?.departureAgency || '';
+        const returnAgencyId = (initialData as any).return_agency_id || (initialData as any).returnAgencyId
+          || (initialData as any).step1?.returnAgencyId || (initialData as any).step1?.returnAgency || departureAgencyId;
+
         updates.step1 = {
           ...(formData.step1 || {}),
           departureLocation,
@@ -206,6 +209,8 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
           returnDate,
           departureTime,
           returnTime,
+          departureAgencyId,
+          returnAgencyId,
           departureAgency: (initialData as any).step1?.departureAgency,
           returnAgency: (initialData as any).step1?.returnAgency
         };
@@ -231,74 +236,59 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
     }
   }, [inspectionMode, initialData]);
 
-  const [formData, setFormData] = useState<Partial<ReservationDetails>>(initialData || {
+  const [formData, setFormData] = useState<ReservationWizardData>(() => ({
     step1: {
       departureDate: '',
       departureTime: '',
       returnDate: '',
       returnTime: '',
+      departureAgencyId: '',
+      returnAgencyId: '',
       departureLocation: '',
       returnLocation: ''
     },
-    step2: {
-      selectedCar: null
-    },
-    step3: {
-      departureInspection: null
-    },
-    step4: {
-      selectedClient: null
-    },
-    step5: {
-      additionalServices: []
-    },
+    step2: { selectedCar: null },
+    step3: { departureInspection: null },
+    step4: { selectedClient: null },
+    step5: { additionalServices: [] },
     step6: {
-      pricing: {
-        basePrice: 0,
-        additionalFees: 0,
-        totalPrice: 0,
-        advancePayment: 0,
-        remainingPayment: 0,
-        deposit: 0
-      }
-    }
-  });
+      basePrice: 0,
+      additionalFees: 0,
+      deliveryFee: 0,
+      totalPrice: 0,
+      advancePayment: 0,
+      remainingPayment: 0,
+      deposit: 0
+    },
+    ...(initialData as unknown as Partial<ReservationWizardData> | undefined),
+  }));
 
-  const totalSteps = 7;
-  const steps = altFlow ? [
-    { id: 1, title: lang === 'fr' ? 'Dates & Lieux' : 'التواريخ والأماكن', icon: '📅' },
-    { id: 2, title: lang === 'fr' ? 'Sélection Véhicule' : 'اختيار المركبة', icon: '🚗' },
-    { id: 3, title: lang === 'fr' ? 'Tarification Finale' : 'التسعير النهائي', icon: '💰' },
-    { id: 4, title: lang === 'fr' ? 'Client' : 'العميل', icon: '👤' },
-    { id: 5, title: lang === 'fr' ? 'Assurance de Protection' : 'تأمين الحماية', icon: '🛡️' },
-    { id: 6, title: lang === 'fr' ? 'Services Supplémentaires' : 'الخدمات الإضافية', icon: '🛠️' },
-    { id: 7, title: lang === 'fr' ? 'Inspection Départ' : 'فحص المغادرة', icon: '🔍' }
-  ] : [
+  const totalSteps = 6;
+  const steps = [
     { id: 1, title: lang === 'fr' ? 'Dates & Lieux' : 'التواريخ والأماكن', icon: '📅' },
     { id: 2, title: lang === 'fr' ? 'Sélection Véhicule' : 'اختيار المركبة', icon: '🚗' },
     { id: 3, title: lang === 'fr' ? 'Inspection Départ' : 'فحص المغادرة', icon: '🔍' },
     { id: 4, title: lang === 'fr' ? 'Client' : 'العميل', icon: '👤' },
-    { id: 5, title: lang === 'fr' ? 'Assurance de Protection' : 'تأمين الحماية', icon: '🛡️' },
-    { id: 6, title: lang === 'fr' ? 'Services Supplémentaires' : 'الخدمات الإضافية', icon: '🛠️' },
-    { id: 7, title: lang === 'fr' ? 'Tarification Finale' : 'التسعير النهائي', icon: '💰' }
+    { id: 5, title: lang === 'fr' ? 'Services Supplémentaires' : 'الخدمات الإضافية', icon: '🛠️' },
+    { id: 6, title: lang === 'fr' ? 'Tarification Finale' : 'التسعير النهائي', icon: '💰' }
   ];
 
   const handleNext = () => {
     if (inspectionMode && currentStep === 3) {
-      // In inspection mode: step 3 (inspection) -> step 6 (services), skip client & assurance
-      setCurrentStep(6);
+      // In inspection mode: step 3 (inspection) -> step 5 (services), skip client
+      setCurrentStep(5);
     } else if (currentStep < totalSteps) {
       setCurrentStep(currentStep + 1);
     }
   };
 
   const handlePrevious = () => {
-    if (inspectionMode && currentStep === 6) {
+    if (inspectionMode && currentStep === 5) {
       // Go back to step 3 (inspection) when in inspection mode from services
       setCurrentStep(3);
-    } else if (inspectionMode && currentStep === 7) {
-      // Go back to step 6 (services) from pricing in inspection mode
-      setCurrentStep(6);
+    } else if (inspectionMode && currentStep === 6) {
+      // Go back to step 5 (services) from pricing in inspection mode
+      setCurrentStep(5);
     } else if (currentStep > 1) {
       setCurrentStep(currentStep - 1);
     }
@@ -306,25 +296,44 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
 
   const handleSubmit = async () => {
     try {
-      // Find agency IDs
-      const departureAgency = agencies.find(a => a.name === formData.step1?.departureLocation || a.address === formData.step1?.departureLocation);
-      const returnAgency = agencies.find(a => a.name === formData.step1?.returnLocation || a.address === formData.step1?.returnLocation) || departureAgency;
+      // Les agences sont résolues par ID — le libellé affiché n'est qu'un texte.
+      const departureAgency = agencies.find(a => a.id === formData.step1?.departureAgencyId);
+      const returnAgency = agencies.find(a => a.id === formData.step1?.returnAgencyId) || departureAgency;
 
       // Skip agency validation if inspectionMode (for both pending and accepted reservations)
       if (!(inspectionMode && initialData)) {
         if (!departureAgency || !returnAgency) {
-          alert(lang === 'fr' ? 'Agence introuvable' : 'الوكالة غير موجودة');
+          alert(lang === 'fr' ? 'Veuillez sélectionner une agence de départ.' : 'يرجى اختيار وكالة المغادرة.');
+          return;
+        }
+
+        // Sans les deux dates, totalDays vaudrait NaN et l'insert échouerait sans message clair.
+        if (!formData.step1?.departureDate || !formData.step1?.returnDate) {
+          alert(lang === 'fr'
+            ? 'Veuillez renseigner la date de départ et la date de retour.'
+            : 'يرجى إدخال تاريخ المغادرة وتاريخ العودة.');
+          return;
+        }
+        if (new Date(formData.step1.returnDate) < new Date(formData.step1.departureDate)) {
+          alert(lang === 'fr'
+            ? 'La date de retour doit être postérieure ou égale à la date de départ.'
+            : 'يجب أن يكون تاريخ العودة بعد تاريخ المغادرة أو مساويًا له.');
           return;
         }
       }
 
-      // Calculate total days
-      const totalDays = Math.ceil((new Date(formData.step1.returnDate).getTime() - new Date(formData.step1.departureDate).getTime()) / (1000 * 60 * 60 * 24));
+      // Une location commencée et rendue le même jour compte pour 1 jour, jamais 0.
+      const rawDays = Math.ceil(
+        (new Date(formData.step1?.returnDate || '').getTime() - new Date(formData.step1?.departureDate || '').getTime())
+        / (1000 * 60 * 60 * 24)
+      );
+      const totalDays = Number.isFinite(rawDays) ? Math.max(1, rawDays) : 1;
 
       // Calculate total price
       const step6 = formData.step6 || {};
       const totalPrice = step6.totalPrice || 0;
       const advancePayment = step6.advancePayment || 0;
+      const deliveryFee = step6.deliveryFee || 0;
       const remainingPayment = Math.max(0, totalPrice - advancePayment);
 
       // Create reservation using ReservationsService
@@ -364,11 +373,14 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
           remainingPayment: remainingPayment,
         });
       } else {
+        // Déclaré hors du `try` : le `catch` ci-dessous le référence pour le log.
+        // Le laisser à l'intérieur provoquait un ReferenceError qui masquait la
+        // vraie erreur d'insert.
+        let workerFullName: string | null = null;
+
         // Create new reservation
         try {
           // Fetch worker's full name from database using email
-          let workerFullName: string | null = null;
-          
           if (user?.email) {
             try {
               console.log('🔍 Fetching worker by email:', user.email);
@@ -434,12 +446,13 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
             protectionAssuranceId: formData.protectionAssurance?.id || null,
             protectionAssuranceName: formData.protectionAssurance?.name || null,
             protectionAssurancePrice: formData.protectionAssurance?.pricePerDay ?? null,
+            // Frais de livraison — le payeur est déduit de totalDays par un trigger DB.
+            deliveryFee,
             // Creator info - Only save name since User object doesn't have ID
-            createdBy: null,  // No user ID available in current auth system
-            createdByName: workerFullName || null,
+            createdBy: undefined,  // No user ID available in current auth system
+            createdByName: workerFullName || undefined,
           });
-          
-          console.log('✅ Reservation created successfully with ID:', result.id);
+
           reservationId = result.id;
         } catch (creationError: any) {
           console.error('❌ Error creating reservation with creator info:', {
@@ -451,6 +464,22 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
             }
           });
           throw creationError;
+        }
+
+        // L'avance doit exister comme paiement : sinon l'encaissé calculé par les
+        // vues (calcPaid) diverge du champ `advance_payment` de la réservation.
+        if (advancePayment > 0) {
+          try {
+            await ReservationsService.addPayment({
+              reservationId,
+              amount: advancePayment,
+              paymentMethod: 'cash',
+              date: new Date().toISOString().split('T')[0],
+              note: lang === 'fr' ? 'Avance à la création' : 'دفعة أولى عند الإنشاء',
+            });
+          } catch (paymentError) {
+            console.error('Error recording advance payment:', paymentError);
+          }
         }
       }
 
@@ -465,7 +494,7 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
       if (inspection) {
         try {
           // Determine agency_id: prefer explicit agency id from step1, else fallback to first agency
-          const agencyId = formData.step1?.departureAgency || (agencies && agencies[0]?.id) || '';
+          const agencyId = formData.step1?.departureAgencyId || formData.step1?.departureAgency || (agencies && agencies[0]?.id) || '';
 
           // Check if a departure inspection already exists for this reservation
           const existingDeparture = formData.departureInspection;
@@ -545,8 +574,13 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
         }
       }
 
-
-      onBack();
+      // Confirmation visible avant de rendre la main au planificateur (qui recharge la liste).
+      setSuccessMessage(
+        inspectionMode && initialData
+          ? (lang === 'fr' ? '✅ Réservation confirmée avec succès' : '✅ تم تأكيد الحجز بنجاح')
+          : (lang === 'fr' ? '✅ Réservation créée avec succès' : '✅ تم إنشاء الحجز بنجاح')
+      );
+      setTimeout(onBack, 1200);
     } catch (err: any) {
       console.error('❌ Error ' + (inspectionMode && initialData ? 'updating' : 'creating') + ' reservation:', {
         message: err?.message,
@@ -577,6 +611,21 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
 
   return (
     <div className="space-y-8">
+      {/* Toast de succès — affiché juste avant le retour au planificateur */}
+      <AnimatePresence>
+        {successMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            role="status"
+            className="fixed top-6 left-1/2 -translate-x-1/2 z-[100] bg-green-600 text-white px-6 py-3.5 rounded-2xl shadow-2xl font-bold text-sm"
+          >
+            {successMessage}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl p-6 text-white">
         <div className="flex items-center justify-between">
@@ -621,7 +670,7 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
         <div className="w-full bg-slate-200 rounded-full h-2">
           <div
             className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-300"
-            style={{ width: `${inspectionMode ? (currentStep === 3 ? 33 : currentStep === 6 ? 66 : 100) : (currentStep / totalSteps) * 100}%` }}
+            style={{ width: `${inspectionMode ? (currentStep === 3 ? 33 : currentStep === 5 ? 66 : 100) : (currentStep / totalSteps) * 100}%` }}
           />
         </div>
       </div>
@@ -637,28 +686,12 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
           className="bg-white rounded-2xl shadow-lg border border-slate-200"
         >
           <div className="p-8">
-            {altFlow ? (
-              <>
-                {/* Alternative order: Dates → Véhicule → Tarification (sans client) → Client → Assurance → Services → Inspection */}
-                {currentStep === 1 && <Step1DatesLocations lang={lang} formData={formData} setFormData={setFormData} agencies={agencies} isLoadingAgencies={isLoadingAgencies} inspectionMode={inspectionMode} initialData={initialData} />}
-                {currentStep === 2 && <Step2VehicleSelection lang={lang} formData={formData} setFormData={setFormData} />}
-                {currentStep === 3 && <Step6FinalPricing lang={lang} formData={formData} setFormData={setFormData} inspectionMode={inspectionMode} initialData={initialData} agencies={agencies} hideClientInfo={true} />}
-                {currentStep === 4 && <Step4ClientSelection lang={lang} formData={formData} setFormData={setFormData} />}
-                {currentStep === 5 && <Step5ProtectionAssurance lang={lang} formData={formData} setFormData={setFormData} />}
-                {currentStep === 6 && <Step5AdditionalServices lang={lang} formData={formData} setFormData={setFormData} />}
-                {currentStep === 7 && <Step3DepartureInspection lang={lang} formData={formData} setFormData={setFormData} />}
-              </>
-            ) : (
-              <>
-                {currentStep === 1 && <Step1DatesLocations lang={lang} formData={formData} setFormData={setFormData} agencies={agencies} isLoadingAgencies={isLoadingAgencies} inspectionMode={inspectionMode} initialData={initialData} />}
-                {currentStep === 2 && <Step2VehicleSelection lang={lang} formData={formData} setFormData={setFormData} />}
-                {currentStep === 3 && <Step3DepartureInspection lang={lang} formData={formData} setFormData={setFormData} />}
-                {currentStep === 4 && <Step4ClientSelection lang={lang} formData={formData} setFormData={setFormData} />}
-                {currentStep === 5 && <Step5ProtectionAssurance lang={lang} formData={formData} setFormData={setFormData} />}
-                {currentStep === 6 && <Step5AdditionalServices lang={lang} formData={formData} setFormData={setFormData} />}
-                {currentStep === 7 && <Step6FinalPricing lang={lang} formData={formData} setFormData={setFormData} inspectionMode={inspectionMode} initialData={initialData} agencies={agencies} />}
-              </>
-            )}
+            {currentStep === 1 && <Step1DatesLocations lang={lang} formData={formData} setFormData={setFormData} agencies={agencies} isLoadingAgencies={isLoadingAgencies} inspectionMode={inspectionMode} initialData={initialData} />}
+            {currentStep === 2 && <Step2VehicleSelection lang={lang} formData={formData} setFormData={setFormData} />}
+            {currentStep === 3 && <Step3DepartureInspection lang={lang} formData={formData} setFormData={setFormData} />}
+            {currentStep === 4 && <Step4ClientSelection lang={lang} formData={formData} setFormData={setFormData} />}
+            {currentStep === 5 && <Step5AdditionalServices lang={lang} formData={formData} setFormData={setFormData} />}
+            {currentStep === 6 && <Step6FinalPricing lang={lang} formData={formData} setFormData={setFormData} inspectionMode={inspectionMode} initialData={initialData} agencies={agencies} />}
           </div>
         </motion.div>
       </AnimatePresence>
@@ -702,8 +735,8 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
 // Step 1: Dates & Locations
 export const Step1DatesLocations: React.FC<{
   lang: Language;
-  formData: Partial<ReservationDetails>;
-  setFormData: React.Dispatch<React.SetStateAction<Partial<ReservationDetails>>>;
+  formData: ReservationWizardData;
+  setFormData: React.Dispatch<React.SetStateAction<ReservationWizardData>>;
   agencies: any[];
   isLoadingAgencies: boolean;
   inspectionMode?: boolean;
@@ -764,13 +797,16 @@ export const Step1DatesLocations: React.FC<{
                   if (!agencies || agencies.length === 0) {
                     return 'Erreur: agences non chargées.';
                   }
-                  let agencyId = initialData.departure_agency_id || initialData.departureAgencyId;
+                  // La réservation vient de la DB : ses champs sont en snake_case.
+                  const seed = initialData as any;
+                  const selectedClient = formData.step4?.selectedClient as any;
+                  let agencyId = seed.departure_agency_id || seed.departureAgencyId;
                   // Only fallback if agencyId is truly missing
                   if (!agencyId) {
-                    if (initialData.client && (initialData.client.agencyId || initialData.client.agency_id)) {
-                      agencyId = initialData.client.agencyId || initialData.client.agency_id;
-                    } else if (formData.step4?.selectedClient && (formData.step4.selectedClient.agencyId || formData.step4.selectedClient.agency_id)) {
-                      agencyId = formData.step4.selectedClient.agencyId || formData.step4.selectedClient.agency_id;
+                    if (seed.client && (seed.client.agencyId || seed.client.agency_id)) {
+                      agencyId = seed.client.agencyId || seed.client.agency_id;
+                    } else if (selectedClient && (selectedClient.agencyId || selectedClient.agency_id)) {
+                      agencyId = selectedClient.agencyId || selectedClient.agency_id;
                     }
                   }
                   if (agencyId) {
@@ -782,17 +818,25 @@ export const Step1DatesLocations: React.FC<{
               </div>
             ) : (
               <select
-                value={formData.step1?.departureLocation || ''}
-                onChange={(e) => setFormData(prev => ({
-                  ...prev,
-                  step1: { ...prev.step1!, departureLocation: e.target.value }
-                }))}
+                value={formData.step1?.departureAgencyId || ''}
+                onChange={(e) => {
+                  // On stocke l'ID (source de vérité) ; le libellé ne sert qu'à l'affichage.
+                  const agency = agencies.find(a => a.id === e.target.value);
+                  setFormData(prev => ({
+                    ...prev,
+                    step1: {
+                      ...prev.step1,
+                      departureAgencyId: e.target.value,
+                      departureLocation: agency ? (agency.name || agency.address || '') : '',
+                    }
+                  }));
+                }}
                 disabled={isLoadingAgencies}
                 className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-slate-100"
               >
                 <option value="">{isLoadingAgencies ? (lang === 'fr' ? 'Chargement...' : 'جاري التحميل...') : (lang === 'fr' ? 'Sélectionner une agence...' : 'اختر وكالة...')}</option>
                 {agencies.map((agency) => (
-                  <option key={agency.id} value={agency.name || agency.address}>
+                  <option key={agency.id} value={agency.id}>
                     {agency.name} {agency.address ? `- ${agency.address}` : ''}
                   </option>
                 ))}
@@ -866,17 +910,24 @@ export const Step1DatesLocations: React.FC<{
                     📍 {lang === 'fr' ? 'Lieu de Restitution' : 'مكان الإرجاع'}
                   </label>
                   <select
-                    value={formData.step1?.returnLocation || ''}
-                    onChange={(e) => setFormData(prev => ({
-                      ...prev,
-                      step1: { ...prev.step1!, returnLocation: e.target.value }
-                    }))}
+                    value={formData.step1?.returnAgencyId || ''}
+                    onChange={(e) => {
+                      const agency = agencies.find(a => a.id === e.target.value);
+                      setFormData(prev => ({
+                        ...prev,
+                        step1: {
+                          ...prev.step1,
+                          returnAgencyId: e.target.value,
+                          returnLocation: agency ? (agency.name || agency.address || '') : '',
+                        }
+                      }));
+                    }}
                     disabled={isLoadingAgencies}
                     className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-slate-100"
                   >
                     <option value="">{isLoadingAgencies ? (lang === 'fr' ? 'Chargement...' : 'جاري التحميل...') : (lang === 'fr' ? 'Sélectionner une agence...' : 'اختر وكالة...')}</option>
                     {agencies.map((agency) => (
-                      <option key={agency.id} value={agency.name || agency.address}>
+                      <option key={agency.id} value={agency.id}>
                         {agency.name} {agency.address ? `- ${agency.address}` : ''}
                       </option>
                     ))}
@@ -920,8 +971,8 @@ export const Step1DatesLocations: React.FC<{
 // Step 2: Vehicle Selection
 export const Step2VehicleSelection: React.FC<{
   lang: Language;
-  formData: Partial<ReservationDetails>;
-  setFormData: React.Dispatch<React.SetStateAction<Partial<ReservationDetails>>>;
+  formData: ReservationWizardData;
+  setFormData: React.Dispatch<React.SetStateAction<ReservationWizardData>>;
 }> = ({ lang, formData, setFormData }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [availableCars, setAvailableCars] = useState<Car[]>([]);
@@ -1226,8 +1277,8 @@ export const Step2VehicleSelection: React.FC<{
 // Step 3: Departure Inspection
 export const Step3DepartureInspection: React.FC<{
   lang: Language;
-  formData: Partial<ReservationDetails>;
-  setFormData: React.Dispatch<React.SetStateAction<Partial<ReservationDetails>>>;
+  formData: ReservationWizardData;
+  setFormData: React.Dispatch<React.SetStateAction<ReservationWizardData>>;
 }> = ({ lang, formData, setFormData }) => {
   const [fuelLevel, setFuelLevel] = useState<'full' | 'half' | 'quarter' | 'eighth' | 'empty'>('full');
 
@@ -1328,7 +1379,7 @@ export const Step3DepartureInspection: React.FC<{
   }, []);
 
   // Get departure agency name from formData
-  const departureAgency = AGENCIES.find(agency => agency.id === formData.step1?.departureAgency);
+  const departureAgency = AGENCIES.find(agency => agency.id === (formData.step1?.departureAgencyId || formData.step1?.departureAgency));
 
   // Initialize selected inspection location with departure agency
   useEffect(() => {
@@ -1984,8 +2035,8 @@ export const Step3DepartureInspection: React.FC<{
 
 export const Step4ClientSelection: React.FC<{
   lang: Language;
-  formData: Partial<ReservationDetails>;
-  setFormData: React.Dispatch<React.SetStateAction<Partial<ReservationDetails>>>;
+  formData: ReservationWizardData;
+  setFormData: React.Dispatch<React.SetStateAction<ReservationWizardData>>;
 }> = ({ lang, formData, setFormData }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
@@ -2205,8 +2256,8 @@ export const Step4ClientSelection: React.FC<{
 // Step: Protection Assurance selection (before Services)
 export const Step5ProtectionAssurance: React.FC<{
   lang: Language;
-  formData: Partial<ReservationDetails>;
-  setFormData: React.Dispatch<React.SetStateAction<Partial<ReservationDetails>>>;
+  formData: ReservationWizardData;
+  setFormData: React.Dispatch<React.SetStateAction<ReservationWizardData>>;
 }> = ({ lang, formData, setFormData }) => {
   const [assurances, setAssurances] = useState<ProtectionAssurance[]>([]);
   const [loading, setLoading] = useState(true);
@@ -2340,8 +2391,8 @@ export const Step5ProtectionAssurance: React.FC<{
 // Step 5: Additional Services
 export const Step5AdditionalServices: React.FC<{
   lang: Language;
-  formData: Partial<ReservationDetails>;
-  setFormData: React.Dispatch<React.SetStateAction<Partial<ReservationDetails>>>;
+  formData: ReservationWizardData;
+  setFormData: React.Dispatch<React.SetStateAction<ReservationWizardData>>;
 }> = ({ lang, formData, setFormData }) => {
   const [services, setServices] = useState<any[]>([]);
   const [drivers, setDrivers] = useState<any[]>([]);
@@ -2879,8 +2930,8 @@ export const Step5AdditionalServices: React.FC<{
 // Step 6: Final Pricing
 export const Step6FinalPricing: React.FC<{
   lang: Language;
-  formData: Partial<ReservationDetails>;
-  setFormData: React.Dispatch<React.SetStateAction<Partial<ReservationDetails>>>;
+  formData: ReservationWizardData;
+  setFormData: React.Dispatch<React.SetStateAction<ReservationWizardData>>;
   inspectionMode?: boolean;
   initialData?: Partial<ReservationDetails>;
   agencies: any[];
@@ -2900,7 +2951,9 @@ export const Step6FinalPricing: React.FC<{
   // Multi-currency caution states
   const [cautionCurrency, setCautionCurrency] = useState<'DZD' | 'EUR'>('DZD');
   const [euroAmount, setEuroAmount] = useState<number | ''>('');
-  const [euroRate, setEuroRate] = useState(145); // Default exchange rate
+  // Peut être vidé pendant la saisie, d'où le '' — la valeur est renormalisée à l'enregistrement.
+  const [euroRate, setEuroRate] = useState<number | ''>(145); // Default exchange rate
+  const [deliveryFee, setDeliveryFee] = useState<number | ''>(formData.step6?.deliveryFee ?? 0);
   
   // Assurance Serenity states
   const [assuranceEnabled, setAssuranceEnabled] = useState(false);
@@ -3024,7 +3077,11 @@ export const Step6FinalPricing: React.FC<{
     : 0;
   const subtotal = calculatedBasePrice + servicesTotal + protectionAssuranceCost;
   const tvaAmount = tvaEnabled ? (subtotal * tvaRate) / 100 : 0;
-  const computedPrice = Math.max(0, Math.round(subtotal + tvaAmount));
+  // Les frais de livraison ne sont facturés au client qu'en dessous du seuil de
+  // 10 jours ; au-delà ils sont à la charge du propriétaire du véhicule.
+  const deliveryFeeAmount = deliveryFee === '' ? 0 : deliveryFee;
+  const clientDeliveryFee = getDeliveryFeePayer(days) === 'client' ? deliveryFeeAmount : 0;
+  const computedPrice = Math.max(0, Math.round(subtotal + tvaAmount + clientDeliveryFee));
   const deposit = editedDeposit !== '' ? Number(editedDeposit) : (selectedCar?.deposit || 0);
   const totalPrice = isManualTotal && manualTotal !== '' ? Math.max(0, Math.round(Number(manualTotal))) : computedPrice;
   
@@ -3054,6 +3111,7 @@ export const Step6FinalPricing: React.FC<{
         manualTotal: manualTotal,
         tvaApplied: tvaEnabled,
         tvaAmount: tvaAmount,
+        deliveryFee: deliveryFeeAmount,
         additionalFees: prev.step6?.additionalFees ?? prev.additionalFees,
         advancePayment: prev.step6?.advancePayment ?? prev.advancePayment,
         remainingPayment: prev.step6?.remainingPayment ?? prev.remainingPayment,
@@ -3062,7 +3120,8 @@ export const Step6FinalPricing: React.FC<{
         // Multi-currency caution fields
         cautionCurrency: cautionCurrency,
         euroAmount: euroAmount,
-        euroRate: euroRate,
+        // Un champ vidé pendant la saisie ne doit pas écraser le taux enregistré.
+        euroRate: euroRate === '' ? undefined : euroRate,
         // Assurance fields
         assuranceEnabled: assuranceEnabled,
         assurancePercentage: assurancePercentage,
@@ -3076,7 +3135,7 @@ export const Step6FinalPricing: React.FC<{
       deposit: deposit,
       totalPrice: totalPrice
     }));
-  }, [totalPrice, isManualTotal, manualTotal, tvaEnabled, tvaAmount, cautionEnabled, cautionCurrency, euroAmount, euroRate, assuranceEnabled, assurancePercentage, assuranceAmount, finalTotal, deposit, editedDeposit]);
+  }, [totalPrice, isManualTotal, manualTotal, tvaEnabled, tvaAmount, deliveryFeeAmount, cautionEnabled, cautionCurrency, euroAmount, euroRate, assuranceEnabled, assurancePercentage, assuranceAmount, finalTotal, deposit, editedDeposit]);
 
   return (
     <div className="space-y-8">
@@ -3257,46 +3316,38 @@ export const Step6FinalPricing: React.FC<{
             <p className="text-sm font-bold text-slate-700 mb-1">📍 {lang === 'fr' ? 'Lieu de Départ' : 'مكان المغادرة'}</p>
             <p className="text-lg font-bold text-slate-900">{
               (() => {
-                let agencyId = null;
-                if (inspectionMode && initialData && initialData.status === 'accepted') {
-                  agencyId = initialData.departure_agency_id;
-                } else if (formData.step1?.departureLocation) {
-                  // Try to match by agency name
-                  const agencyByName = (agencies || []).find(a => a.name === formData.step1.departureLocation);
-                  if (agencyByName) return `${agencyByName.name}${agencyByName.address ? ' - ' + agencyByName.address : ''}`;
-                  // fallback: treat as ID
-                  agencyId = formData.step1.departureLocation;
-                }
+                const agencyId = (inspectionMode && initialData && (initialData as any).status === 'accepted')
+                  ? (initialData as any).departure_agency_id
+                  : formData.step1?.departureAgencyId;
+
                 if (agencyId) {
                   const agency = (agencies || []).find(a => a.id === agencyId);
                   return agency ? `${agency.name}${agency.address ? ' - ' + agency.address : ''}` : 'Agence non trouvée';
                 }
-                return 'Non spécifié';
+                return formData.step1?.departureLocation || 'Non spécifié';
               })()
             }</p>
           </div>
           <div className="bg-white rounded-lg p-4 border border-slate-200">
             <p className="text-sm font-bold text-slate-700 mb-1">📍 {lang === 'fr' ? 'Lieu de Retour' : 'مكان العودة'}</p>
             <p className="text-lg font-bold text-slate-900">{
-              inspectionMode && initialData && initialData.status === 'accepted'
-                ? (() => {
-                    if (initialData.return_agency_id) {
-                      const agency = (agencies || []).find(a => a.id === initialData.return_agency_id);
-                      return agency ? `${agency.name}${agency.address ? ' - ' + agency.address : ''}` : 'Agence non trouvée';
-                    }
-                    return 'Non spécifié';
-                  })()
-                : (formData.step1?.returnLocation && formData.step1?.returnLocation.trim() !== ''
-                    ? formData.step1?.returnLocation
-                    : ((formData.step1?.departureLocation && formData.step1?.departureLocation.trim() !== '')
-                        ? formData.step1?.departureLocation
-                        : 'Non spécifié'))
+              (() => {
+                if (inspectionMode && initialData && (initialData as any).status === 'accepted') {
+                  const agency = (agencies || []).find(a => a.id === (initialData as any).return_agency_id);
+                  return agency ? `${agency.name}${agency.address ? ' - ' + agency.address : ''}` : 'Non spécifié';
+                }
+                // À défaut d'agence de retour distincte, c'est celle du départ.
+                const agencyId = formData.step1?.returnAgencyId || formData.step1?.departureAgencyId;
+                const agency = (agencies || []).find(a => a.id === agencyId);
+                if (agency) return `${agency.name}${agency.address ? ' - ' + agency.address : ''}`;
+                return formData.step1?.returnLocation || formData.step1?.departureLocation || 'Non spécifié';
+              })()
             }</p>
           </div>
           {formData.step3?.selectedDriver && (
             <div className="bg-white rounded-lg p-4 border border-slate-200">
               <p className="text-sm font-bold text-slate-700 mb-1">🧑‍✈️ {lang === 'fr' ? 'Chauffeur' : 'السائق'}</p>
-              <p className="text-lg font-bold text-slate-900">{formData.step3.selectedDriver}</p>
+              <p className="text-lg font-bold text-slate-900">{formData.step3.selectedDriver.fullName}</p>
             </div>
           )}
         </div>
@@ -3395,6 +3446,9 @@ export const Step6FinalPricing: React.FC<{
               </div>
             </div>
           )}
+
+          {/* Frais de livraison — le payeur découle de la durée (règle des 10 jours) */}
+          <DeliveryFeeField lang={lang} value={deliveryFee} onChange={setDeliveryFee} totalDays={days} />
 
           {/* TVA Section */}
           <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
@@ -3629,13 +3683,30 @@ export const Step6FinalPricing: React.FC<{
               </div>
             )}
             
+            {deliveryFeeAmount > 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-indigo-700">
+                  {lang === 'fr' ? 'Livraison' : 'التوصيل'}
+                  {clientDeliveryFee === 0 && (
+                    <span className="ms-1 text-xs font-medium text-green-700">
+                      ({lang === 'fr' ? 'à la charge du propriétaire' : 'على عاتق المالك'})
+                    </span>
+                  )}
+                  :
+                </span>
+                <span className={`font-bold ${clientDeliveryFee === 0 ? 'text-green-700 line-through' : 'text-indigo-900'}`}>
+                  {deliveryFeeAmount.toLocaleString()} DA
+                </span>
+              </div>
+            )}
+
             {tvaEnabled && tvaAmount > 0 && (
               <div className="flex justify-between text-sm">
                 <span className="text-indigo-700">{lang === 'fr' ? 'TVA (' + tvaRate + '%):' : 'TVA (' + tvaRate + '%):'}</span>
                 <span className="font-bold text-indigo-900">{tvaAmount.toLocaleString()} DA</span>
               </div>
             )}
-            
+
             <div className="border-t border-indigo-200 pt-2 flex justify-between text-base font-bold">
               <span className="text-indigo-900">{lang === 'fr' ? 'TOTAL:' : 'المجموع:'}</span>
               <span className="text-lg text-indigo-600">{totalPrice.toLocaleString()} DA</span>

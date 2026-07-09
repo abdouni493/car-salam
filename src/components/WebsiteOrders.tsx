@@ -12,10 +12,46 @@ interface WebsiteOrdersProps {
   onOrdersChanged?: () => void;
 }
 
+/** Statuts qu'une commande du site prend une fois acceptée par l'agence. */
+const ACCEPTED_STATUSES = ['pending', 'accepted', 'confirmed', 'active'];
+
+type OrderTab = 'website_reservation' | 'accepted' | 'completed' | 'cancelled' | 'all';
+
+/** Une commande appartient-elle à l'onglet demandé ? */
+const matchesTab = (status: string, tab: OrderTab): boolean => {
+  switch (tab) {
+    case 'all':      return true;
+    case 'accepted': return ACCEPTED_STATUSES.includes(status);
+    default:         return status === tab;
+  }
+};
+
+/**
+ * Seules une commande jamais acceptée et une commande annulée peuvent être
+ * supprimées. Une fois acceptée, elle vit dans le planificateur : la supprimer
+ * ici effacerait la réservation, ses paiements et son contrat.
+ */
+const isDeletable = (status: string) => status === 'website_reservation' || status === 'cancelled';
+
+/** Pastille de statut (couleur + libellé bilingue) d'une commande du site. */
+const statusBadge = (status: string, lang: Language): { className: string; label: string } => {
+  if (status === 'cancelled') {
+    return { className: 'bg-red-100 text-red-800', label: lang === 'fr' ? '❌ Annulée' : '❌ ملغاة' };
+  }
+  if (status === 'completed') {
+    return { className: 'bg-slate-200 text-slate-700', label: lang === 'fr' ? '✅ Terminée' : '✅ منتهية' };
+  }
+  if (ACCEPTED_STATUSES.includes(status)) {
+    return { className: 'bg-green-100 text-green-800', label: lang === 'fr' ? '✔️ Acceptée' : '✔️ مقبولة' };
+  }
+  return { className: 'bg-yellow-100 text-yellow-800', label: lang === 'fr' ? '🆕 Nouvelle commande' : '🆕 طلب جديد' };
+};
+
 export const WebsiteOrders: React.FC<WebsiteOrdersProps> = ({ lang, onOrdersChanged }) => {
   const [orders, setOrders] = useState<WebsiteOrder[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState<string>('pending');
+  // Par défaut : les commandes qui attendent une décision de l'agence.
+  const [filterStatus, setFilterStatus] = useState<OrderTab>('website_reservation');
   const [selectedOrder, setSelectedOrder] = useState<WebsiteOrder | null>(null);
   const [showOrderDetails, setShowOrderDetails] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
@@ -45,12 +81,13 @@ export const WebsiteOrders: React.FC<WebsiteOrdersProps> = ({ lang, onOrdersChan
       order.step2.lastName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       order.car.brand.toLowerCase().includes(searchQuery.toLowerCase()) ||
       order.car.model.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.car.registration.toLowerCase().includes(searchQuery.toLowerCase());
+      (order.car.registration || '').toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesStatus = filterStatus === 'all' || order.status === filterStatus;
-
-    return matchesSearch && matchesStatus;
+    return matchesSearch && matchesTab(order.status, filterStatus);
   });
+
+  /** Compteur par onglet, calculé sur toutes les commandes du site. */
+  const tabCount = (tab: OrderTab) => orders.filter(o => matchesTab(o.status, tab)).length;
 
   const handleViewDetails = (order: WebsiteOrder) => {
     setSelectedOrder(order);
@@ -60,21 +97,23 @@ export const WebsiteOrders: React.FC<WebsiteOrdersProps> = ({ lang, onOrdersChan
   const handleConfirmOrder = async (orderId: string) => {
     try {
       setIsProcessing(orderId);
-      
-      // Update the website order status in database to 'accepted' instead of confirmed
-      await DatabaseService.updateWebsiteOrderStatus(orderId, 'accepted');
 
-      // Update local state
+      // Accepter une commande du site : elle passe au statut 'pending' et rejoint
+      // le planificateur (avec le badge « 🌐 Site web ») pour l'inspection. Elle
+      // reste consultable ici, dans l'onglet « Acceptées ».
+      await DatabaseService.updateWebsiteOrderStatus(orderId, 'pending');
+
       setOrders(prev => prev.map(order =>
-        order.id === orderId ? { ...order, status: 'accepted' as const } : order
+        order.id === orderId ? { ...order, status: 'pending' as const } : order
       ));
 
       if (selectedOrder?.id === orderId) {
-        setSelectedOrder(prev => prev ? { ...prev, status: 'accepted' } : null);
+        setShowOrderDetails(false);
+        setSelectedOrder(null);
       }
 
       onOrdersChanged?.();
-      console.log(`Order ${orderId} accepted and will appear in Planner as accepted`);
+      console.log(`Order ${orderId} accepted → moved to Planner as pending`);
     } catch (err) {
       console.error('Error accepting order:', err);
       alert(lang === 'fr' ? 'Erreur lors de l\'acceptation de la commande' : 'خطأ في قبول الطلب');
@@ -110,6 +149,8 @@ export const WebsiteOrders: React.FC<WebsiteOrdersProps> = ({ lang, onOrdersChan
   };
 
   const handleDeleteOrder = (orderId: string) => {
+    const order = orders.find(o => o.id === orderId);
+    if (order && !isDeletable(order.status)) return;
     setShowDeleteConfirm(orderId);
   };
 
@@ -153,59 +194,69 @@ export const WebsiteOrders: React.FC<WebsiteOrdersProps> = ({ lang, onOrdersChan
           </p>
         </div>
 
-        {/* Search and Filter */}
-        <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
-          {/* Search */}
-          <div className="relative flex-1 sm:w-64">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
-            <input
-              type="text"
-              placeholder={lang === 'fr' ? 'Rechercher...' : 'البحث...'}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
-
-          {/* Filter */}
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="all">{lang === 'fr' ? 'Tous les statuts' : 'جميع الحالات'}</option>
-            <option value="pending">{lang === 'fr' ? 'En attente' : 'في الانتظار'}</option>
-            <option value="accepted">{lang === 'fr' ? 'Accepté' : 'مقبول'}</option>
-            <option value="confirmed">{lang === 'fr' ? 'Confirmé' : 'مؤكد'}</option>
-            <option value="processing">{lang === 'fr' ? 'En traitement' : 'قيد المعالجة'}</option>
-            <option value="completed">{lang === 'fr' ? 'Terminé' : 'مكتمل'}</option>
-            <option value="cancelled">{lang === 'fr' ? 'Annulé' : 'ملغي'}</option>
-          </select>
+        {/* Search */}
+        <div className="relative w-full sm:w-72">
+          <Search className="absolute start-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none" />
+          <input
+            type="text"
+            placeholder={lang === 'fr' ? 'Rechercher...' : 'البحث...'}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full ps-10 pe-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
         </div>
       </div>
 
+      {/* Onglets — toutes les commandes du site restent consultables ici */}
+      <div className="flex flex-wrap gap-2 p-1.5 bg-white border border-slate-200 rounded-2xl shadow-sm">
+        {([
+          { key: 'website_reservation' as const, label: lang === 'fr' ? 'Nouvelles'  : 'جديدة' },
+          { key: 'accepted'            as const, label: lang === 'fr' ? 'Acceptées'  : 'مقبولة' },
+          { key: 'completed'           as const, label: lang === 'fr' ? 'Terminées'  : 'منتهية' },
+          { key: 'cancelled'           as const, label: lang === 'fr' ? 'Annulées'   : 'ملغاة' },
+          { key: 'all'                 as const, label: lang === 'fr' ? 'Toutes'     : 'الكل' },
+        ]).map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => setFilterStatus(tab.key)}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${
+              filterStatus === tab.key
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
+            }`}
+          >
+            {tab.label}
+            <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black ${
+              filterStatus === tab.key ? 'bg-white/20' : 'bg-slate-100 text-slate-600'
+            }`}>
+              {tabCount(tab.key)}
+            </span>
+          </button>
+        ))}
+      </div>
+
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-gradient-to-r from-yellow-50 to-amber-50 rounded-2xl p-6 border border-yellow-200">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center">
               <Clock className="w-6 h-6 text-yellow-600" />
             </div>
             <div>
-              <p className="text-sm text-yellow-600 font-bold">{lang === 'fr' ? 'En attente' : 'في الانتظار'}</p>
-              <p className="text-2xl font-black text-yellow-900">{orders.filter(o => o.status === 'pending').length}</p>
+              <p className="text-sm text-yellow-600 font-bold">{lang === 'fr' ? 'Nouvelles (à traiter)' : 'جديدة (للمعالجة)'}</p>
+              <p className="text-2xl font-black text-yellow-900">{tabCount('website_reservation')}</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-gradient-to-r from-teal-50 to-cyan-50 rounded-2xl p-6 border border-teal-200">
+        <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl p-6 border border-green-200">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-teal-100 rounded-xl flex items-center justify-center">
-              <CheckCircle className="w-6 h-6 text-teal-600" />
+            <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+              <CheckCircle className="w-6 h-6 text-green-600" />
             </div>
             <div>
-              <p className="text-sm text-teal-600 font-bold">{lang === 'fr' ? 'Accepté' : 'مقبول'}</p>
-              <p className="text-2xl font-black text-teal-900">{orders.filter(o => o.status === 'accepted').length}</p>
+              <p className="text-sm text-green-600 font-bold">{lang === 'fr' ? 'Acceptées' : 'مقبولة'}</p>
+              <p className="text-2xl font-black text-green-900">{tabCount('accepted')}</p>
             </div>
           </div>
         </div>
@@ -216,8 +267,20 @@ export const WebsiteOrders: React.FC<WebsiteOrdersProps> = ({ lang, onOrdersChan
               <XCircle className="w-6 h-6 text-red-600" />
             </div>
             <div>
-              <p className="text-sm text-red-600 font-bold">{lang === 'fr' ? 'Annulé' : 'ملغي'}</p>
-              <p className="text-2xl font-black text-red-900">{orders.filter(o => o.status === 'cancelled').length}</p>
+              <p className="text-sm text-red-600 font-bold">{lang === 'fr' ? 'Annulées' : 'ملغاة'}</p>
+              <p className="text-2xl font-black text-red-900">{tabCount('cancelled')}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-2xl p-6 border border-indigo-200">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center">
+              <CheckCircle className="w-6 h-6 text-indigo-600" />
+            </div>
+            <div>
+              <p className="text-sm text-indigo-600 font-bold">{lang === 'fr' ? 'Total' : 'المجموع'}</p>
+              <p className="text-2xl font-black text-indigo-900">{orders.length}</p>
             </div>
           </div>
         </div>
@@ -284,20 +347,8 @@ export const WebsiteOrders: React.FC<WebsiteOrdersProps> = ({ lang, onOrdersChan
               </div>
               {/* Status Badge and Website Badge Stack */}
               <div className="absolute top-4 left-4 flex flex-col gap-1">
-                <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                  order.status === 'confirmed' ? 'bg-green-100 text-green-800' :
-                  order.status === 'accepted' ? 'bg-teal-100 text-teal-800' :
-                  order.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                  order.status === 'processing' ? 'bg-blue-100 text-blue-800' :
-                  order.status === 'completed' ? 'bg-purple-100 text-purple-800' :
-                  'bg-red-100 text-red-800'
-                }`}>
-                  {order.status === 'confirmed' ? '✅ Confirmé' :
-                   order.status === 'accepted' ? '✅ Accepté' :
-                   order.status === 'pending' ? '⏳ En attente' :
-                   order.status === 'processing' ? '🔄 Traitement' :
-                   order.status === 'completed' ? '🏁 Terminé' :
-                   '❌ Annulé'}
+                <span className={`px-3 py-1 rounded-full text-xs font-bold ${statusBadge(order.status, lang).className}`}>
+                  {statusBadge(order.status, lang).label}
                 </span>
                 <span className="px-2 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800 w-fit">
                   🌐 Website
@@ -345,16 +396,8 @@ export const WebsiteOrders: React.FC<WebsiteOrdersProps> = ({ lang, onOrdersChan
                     </div>
                     <div className="text-right">
                       <div className="text-xs text-slate-500">{lang === 'fr' ? 'Statut' : 'الحالة'}</div>
-                      <span className={`px-2 py-1 rounded-full text-xs font-bold ${
-                        order.status === 'confirmed' ? 'bg-green-100 text-green-800' :
-                        order.status === 'accepted' ? 'bg-teal-100 text-teal-800' :
-                        order.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-red-100 text-red-800'
-                      }`}>
-                        {order.status === 'confirmed' ? '✅ Confirmé' :
-                         order.status === 'accepted' ? '✅ Accepté' :
-                         order.status === 'pending' ? '⏳ En attente' :
-                         '❌ Annulé'}
+                      <span className={`px-2 py-1 rounded-full text-xs font-bold ${statusBadge(order.status, lang).className}`}>
+                        {statusBadge(order.status, lang).label}
                       </span>
                     </div>
                   </div>
@@ -375,9 +418,9 @@ export const WebsiteOrders: React.FC<WebsiteOrdersProps> = ({ lang, onOrdersChan
 
                 <button
                   onClick={() => handleConfirmOrder(order.id)}
-                  disabled={order.status !== 'pending' || isProcessing === order.id}
+                  disabled={order.status !== 'website_reservation' || isProcessing === order.id}
                   className={`p-2.5 rounded-xl transition-all flex flex-col items-center gap-1 border ${
-                    order.status === 'pending' && isProcessing !== order.id
+                    order.status === 'website_reservation' && isProcessing !== order.id
                       ? 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white border-transparent'
                       : 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
                   }`}
@@ -395,9 +438,9 @@ export const WebsiteOrders: React.FC<WebsiteOrdersProps> = ({ lang, onOrdersChan
 
                 <button
                   onClick={() => handleCancelOrder(order.id)}
-                  disabled={order.status === 'cancelled' || isProcessing === order.id}
+                  disabled={order.status !== 'website_reservation' || isProcessing === order.id}
                   className={`p-2.5 rounded-xl transition-all flex flex-col items-center gap-1 border ${
-                    order.status !== 'cancelled' && isProcessing !== order.id
+                    order.status === 'website_reservation' && isProcessing !== order.id
                       ? 'bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white border-transparent'
                       : 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
                   }`}
@@ -413,11 +456,15 @@ export const WebsiteOrders: React.FC<WebsiteOrdersProps> = ({ lang, onOrdersChan
                   )}
                 </button>
 
+                {/* Une commande acceptée ou terminée est une réservation à part entière :
+                    la supprimer d'ici effacerait son historique et sa comptabilité. */}
                 <button
                   onClick={() => handleDeleteOrder(order.id)}
-                  disabled={isProcessing === order.id}
-                  className="p-2.5 rounded-xl bg-saas-danger-start/5 hover:bg-saas-danger-start hover:text-white text-saas-danger-start transition-all hover:scale-105 flex flex-col items-center gap-1 border border-saas-danger-start/10 disabled:opacity-50 disabled:cursor-not-allowed"
-                  title={lang === 'fr' ? 'Supprimer' : 'حذف'}
+                  disabled={!isDeletable(order.status) || isProcessing === order.id}
+                  className="p-2.5 rounded-xl bg-saas-danger-start/5 hover:bg-saas-danger-start hover:text-white text-saas-danger-start transition-all hover:scale-105 flex flex-col items-center gap-1 border border-saas-danger-start/10 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-saas-danger-start/5 disabled:hover:text-saas-danger-start disabled:hover:scale-100"
+                  title={isDeletable(order.status)
+                    ? (lang === 'fr' ? 'Supprimer' : 'حذف')
+                    : (lang === 'fr' ? 'Impossible : la commande a été acceptée' : 'غير ممكن: تم قبول الطلب')}
                 >
                   <span className="text-lg">🗑️</span>
                 </button>
@@ -476,16 +523,8 @@ export const WebsiteOrders: React.FC<WebsiteOrdersProps> = ({ lang, onOrdersChan
                         </div>
                         <div className="flex justify-between">
                           <span className="font-bold">{lang === 'fr' ? 'Statut:' : 'الحالة:'}</span>
-                          <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                            selectedOrder.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                            selectedOrder.status === 'confirmed' ? 'bg-green-100 text-green-800' :
-                            selectedOrder.status === 'cancelled' ? 'bg-red-100 text-red-800' :
-                            'bg-blue-100 text-blue-800'
-                          }`}>
-                            {selectedOrder.status === 'pending' ? (lang === 'fr' ? 'En attente' : 'في الانتظار') :
-                             selectedOrder.status === 'confirmed' ? (lang === 'fr' ? 'Confirmé' : 'مؤكد') :
-                             selectedOrder.status === 'cancelled' ? (lang === 'fr' ? 'Annulé' : 'ملغي') :
-                             selectedOrder.status}
+                          <span className={`px-3 py-1 rounded-full text-xs font-bold ${statusBadge(selectedOrder.status, lang).className}`}>
+                            {statusBadge(selectedOrder.status, lang).label}
                           </span>
                         </div>
                         <div className="flex justify-between">
@@ -641,21 +680,14 @@ export const WebsiteOrders: React.FC<WebsiteOrdersProps> = ({ lang, onOrdersChan
                         💰 {lang === 'fr' ? 'Tarification' : 'التسعير'}
                       </h3>
                       {(() => {
-                        const assuranceTotal = selectedOrder.assuranceTotal || 0;
                         const servicesTotal = selectedOrder.servicesTotal || 0;
-                        const carPortion = Math.max(0, selectedOrder.totalPrice - servicesTotal - assuranceTotal);
+                        const carPortion = Math.max(0, selectedOrder.totalPrice - servicesTotal);
                         return (
                           <div className="space-y-3">
                             <div className="flex justify-between">
                               <span className="font-bold">{lang === 'fr' ? 'Prix véhicule:' : 'سعر المركبة:'}</span>
                               <span>{carPortion.toLocaleString()} DA</span>
                             </div>
-                            {assuranceTotal > 0 && (
-                              <div className="flex justify-between">
-                                <span className="font-bold">🛡️ {lang === 'fr' ? 'Assurance:' : 'التأمين:'}</span>
-                                <span>{assuranceTotal.toLocaleString()} DA</span>
-                              </div>
-                            )}
                             {servicesTotal > 0 && (
                               <div className="flex justify-between">
                                 <span className="font-bold">{lang === 'fr' ? 'Services:' : 'الخدمات:'}</span>
@@ -670,41 +702,6 @@ export const WebsiteOrders: React.FC<WebsiteOrdersProps> = ({ lang, onOrdersChan
                         );
                       })()}
                     </div>
-
-                    {/* Assurance de protection */}
-                    {(selectedOrder.protectionAssurance || selectedOrder.protectionAssuranceName) && (
-                      <div className="bg-gradient-to-r from-red-50 to-rose-50 rounded-2xl p-6 border border-red-200">
-                        <h3 className="text-lg font-black text-red-900 mb-4">
-                          🛡️ {lang === 'fr' ? 'Assurance de Protection' : 'تأمين الحماية'}
-                        </h3>
-                        <div className="flex justify-between items-center mb-3">
-                          <span className="font-bold text-slate-900">
-                            {selectedOrder.protectionAssurance?.name || selectedOrder.protectionAssuranceName}
-                          </span>
-                          {selectedOrder.protectionAssurance && (
-                            <span className="text-red-700 font-bold">
-                              {selectedOrder.protectionAssurance.pricePerDay.toLocaleString()} DA/{lang === 'fr' ? 'j' : 'ي'}
-                            </span>
-                          )}
-                        </div>
-                        {selectedOrder.protectionAssurance && selectedOrder.protectionAssurance.items.length > 0 && (
-                          <div className="space-y-1.5">
-                            {selectedOrder.protectionAssurance.items.map((item) => (
-                              <div key={item.linkId || item.itemId} className="flex items-center gap-2 text-sm">
-                                <span className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${
-                                  item.status ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'
-                                }`}>
-                                  {item.status ? '✓' : '✕'}
-                                </span>
-                                <span className={item.status ? 'text-slate-700' : 'text-slate-400 line-through'}>
-                                  {item.name}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
 
                     {/* Services */}
                     {selectedOrder.step3.additionalServices.length > 0 && (
@@ -733,16 +730,25 @@ export const WebsiteOrders: React.FC<WebsiteOrdersProps> = ({ lang, onOrdersChan
                   >
                     {lang === 'fr' ? 'Fermer' : 'إغلاق'}
                   </button>
-                  {selectedOrder.status === 'pending' && (
-                    <button
-                      onClick={() => {
-                        handleConfirmOrder(selectedOrder.id);
-                        setShowOrderDetails(false);
-                      }}
-                      className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold py-2 px-4 rounded-lg transition-all text-sm"
-                    >
-                      ✅ {lang === 'fr' ? 'Accepter' : 'قبول'}
-                    </button>
+                  {selectedOrder.status === 'website_reservation' && (
+                    <>
+                      <button
+                        onClick={() => {
+                          handleCancelOrder(selectedOrder.id);
+                        }}
+                        className="flex-1 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white font-bold py-2 px-4 rounded-lg transition-all text-sm"
+                      >
+                        ❌ {lang === 'fr' ? 'Annuler' : 'إلغاء'}
+                      </button>
+                      <button
+                        onClick={() => {
+                          handleConfirmOrder(selectedOrder.id);
+                        }}
+                        className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold py-2 px-4 rounded-lg transition-all text-sm"
+                      >
+                        ✅ {lang === 'fr' ? 'Accepter' : 'قبول'}
+                      </button>
+                    </>
                   )}
                 </div>
               </div>

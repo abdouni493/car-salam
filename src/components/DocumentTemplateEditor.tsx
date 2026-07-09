@@ -87,7 +87,6 @@ export const DocumentTemplateEditor: React.FC<DocumentTemplateEditorProps> = ({
   const [newFieldName, setNewFieldName] = useState('');
   const [saveDialog, setSaveDialog] = useState<SaveDialogState>({
     isOpen: false,
-    templateName: '',
     isSaveAsNew: true,
   });
   const [agencyId, setAgencyId] = useState<string | null>(null);
@@ -250,6 +249,8 @@ export const DocumentTemplateEditor: React.FC<DocumentTemplateEditorProps> = ({
     setCurrentTemplateId(template.id);
     setEditingField(null);
   };
+
+  const handleFieldMouseDown = (fieldName: string, e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault();
     const field = template?.[fieldName];
     if (!field) return;

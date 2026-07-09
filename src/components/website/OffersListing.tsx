@@ -123,6 +123,11 @@ export const OffersListing: React.FC<OffersListingProps> = ({ lang, cars, specia
                     <p className="text-vel-muted text-[10px] truncate">{car.registration} · {car.color}</p>
                   </div>
 
+                  {/* Description publique (jamais de données propriétaire ici) */}
+                  {car.description && (
+                    <p className="text-vel-muted text-[10px] leading-snug line-clamp-2">{car.description}</p>
+                  )}
+
                   {/* Specs : tous les détails en micro-puces */}
                   <div className="flex flex-wrap gap-1">
                     {specs.map((s, i) => (

@@ -17,6 +17,8 @@ interface CarCardProps {
   onStatusChange?: (carId: string, newStatus: string) => void;
   /** Toggle masquer/afficher la voiture sur le site public (interface Offres). */
   onToggleVisibility?: (car: Car) => void;
+  /** Raccourci « Modifier commission » — véhicules en conciergerie uniquement. */
+  onEditCommission?: (car: Car) => void;
   /** Réservation en cours pour ce véhicule (si louer/reserve) */
   activeReservationInfo?: { clientName: string; departureDate: string; returnDate: string } | null;
 }
@@ -32,6 +34,7 @@ export const CarCard: React.FC<CarCardProps> = ({
   onReports,
   onStatusChange,
   onToggleVisibility,
+  onEditCommission,
   activeReservationInfo,
 }) => {
   // 4 statuts : disponible · reserve · louer · maintenance
@@ -57,6 +60,8 @@ export const CarCard: React.FC<CarCardProps> = ({
 
   const isMaintenance = car.status === 'maintenance';
   const isHidden = car.isHiddenFromSite === true;
+  const isConsignment = car.ownershipType === 'consignment';
+  const owner = car.ownerInfo;
   const hasAdminActions = !!(onViewDetails || onEdit || onHistory || onExpenses || onReports || onDelete);
 
   return (
@@ -149,6 +154,41 @@ export const CarCard: React.FC<CarCardProps> = ({
             </div>
           )}
         </div>
+
+        {/* Bloc conciergerie — données PRIVÉES, jamais rendues sur le site public */}
+        {isConsignment && (
+          <div className="rounded-xl border-2 border-amber-300 bg-amber-50/70 p-3 space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-black uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
+                🔒 {lang === 'fr' ? '🤝 Conciergerie' : '🤝 بالوكالة'}
+              </span>
+              {owner?.internalRef && (
+                <span className="text-[9px] font-black text-amber-800 bg-amber-200/70 px-2 py-0.5 rounded-md" dir="ltr">
+                  {lang === 'fr' ? 'Réf' : 'مرجع'} : {owner.internalRef}
+                </span>
+              )}
+            </div>
+
+            {owner && (
+              <div className="space-y-1 text-[10px] font-bold text-amber-900/90">
+                <p>👤 {owner.ownerName}</p>
+                {owner.ownerPhone && <p dir="ltr" className="text-start">📞 {owner.ownerPhone}</p>}
+                <p>
+                  💰 {owner.commissionValue.toLocaleString()} {owner.commissionType === 'percentage' ? '%' : 'DA'}
+                </p>
+              </div>
+            )}
+
+            {onEditCommission && (
+              <button
+                onClick={() => onEditCommission(car)}
+                className="w-full mt-1 py-2 rounded-lg bg-amber-200/70 hover:bg-amber-300/70 text-amber-900 text-[9px] font-black uppercase tracking-wider transition-colors"
+              >
+                {lang === 'fr' ? '💰 Modifier commission' : '💰 تعديل العمولة'}
+              </button>
+            )}
+          </div>
+        )}
 
         <div className="pt-3 border-t border-saas-border flex items-center justify-between">
           <div className="text-saas-primary-via font-black text-lg tracking-tighter">

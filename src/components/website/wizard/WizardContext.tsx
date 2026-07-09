@@ -20,7 +20,7 @@ export interface WizardSearchCriteria {
   returnAgencyId?: string;    // absent = même agence qu'au départ
 }
 
-export const WIZARD_STEP_COUNT = 6;
+export const WIZARD_STEP_COUNT = 5;
 
 const emptyPersonal: ReservationStep2 = {
   photo: '',
@@ -311,13 +311,11 @@ export const ReservationWizardProvider: React.FC<ProviderProps> = ({
       case 2:
         return !!departureAgency && (!differentReturnAgency || !!returnAgency);
       case 3:
-        return true; // l'assurance de protection est optionnelle
-      case 4:
         return true; // les services sont optionnels
-      case 5:
+      case 4:
         // Informations personnelles — mêmes champs obligatoires que le flux existant
         return !!(personal.firstName && personal.lastName && personal.phone && personal.email && personal.licenseNumber && personal.wilaya);
-      case 6:
+      case 5:
         return true;
       default:
         return false;

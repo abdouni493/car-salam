@@ -5,7 +5,7 @@ import {
   DollarSign, AlertTriangle, BarChart3, Activity, Loader2, Wrench,
   ShieldCheck, Droplets, Link as LinkIcon, ChevronDown, ChevronUp,
   Phone, MapPin, Briefcase, CreditCard, AlertCircle, Clock,
-  Building, Star, FileText, Printer
+  Building, Star, FileText, Printer, Handshake
 } from 'lucide-react';
 import {
   Language, Car, Client, ReservationDetails, Worker,
@@ -14,6 +14,8 @@ import {
 import { DatabaseService } from '../services/DatabaseService';
 import { ReservationsService } from '../services/ReservationsService';
 import { getVehicleExpenses } from '../services/expenseService';
+import { getCarsWithOwners } from '../services/carService';
+import { computeConsignmentSummary } from '../utils/consignmentMath';
 import { generateReportHTML } from './ReportPrintTemplate';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -91,7 +93,16 @@ const CarBlock: React.FC<CarBlockProps> = ({ car, reservations, expenses, lang, 
     .filter(r => !['completed','cancelled'].includes(r.status))
     .reduce((s, r) => s + (Number(r.remainingPayment) || 0), 0);
   const totalExpenses  = expenses.reduce((s, e) => s + (Number(e.cost) || 0), 0);
-  const netBenefit     = totalCollected - totalExpenses;
+
+  // CONCIERGERIE : seule la commission (+ livraison propriétaire) revient à
+  // l'agence — le reste du CA est à reverser au propriétaire.
+  const isConsignment = car.ownershipType === 'consignment' && !!car.ownerInfo;
+  const consignment   = isConsignment
+    ? computeConsignmentSummary(activeRes, car.ownerInfo!)
+    : null;
+  const netBenefit = consignment
+    ? consignment.agencyGain - totalExpenses
+    : totalCollected - totalExpenses;
 
   // Group expenses by type
   const byType = (Object.keys(EXPENSE_META) as ExpenseType[]).reduce((acc, k) => {
@@ -115,7 +126,14 @@ const CarBlock: React.FC<CarBlockProps> = ({ car, reservations, expenses, lang, 
               className="w-full h-full object-cover"/>
           </div>
           <div className="flex-1 min-w-0">
-            <p className="font-black text-gray-900 text-sm uppercase tracking-tight">{car.brand} {car.model}</p>
+            <p className="font-black text-gray-900 text-sm uppercase tracking-tight flex items-center gap-2">
+              {car.brand} {car.model}
+              {isConsignment && (
+                <span className="text-[9px] font-black bg-amber-100 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-full normal-case flex items-center gap-1">
+                  <Handshake size={9}/> {T('Conciergerie','أمانة',lang)}
+                </span>
+              )}
+            </p>
             <p className="text-xs text-blue-600 font-bold">{car.registration}</p>
           </div>
           {/* Mini stats — desktop */}
@@ -124,12 +142,18 @@ const CarBlock: React.FC<CarBlockProps> = ({ car, reservations, expenses, lang, 
               <p className="text-gray-400 font-semibold">{T('Encaissé','المحصّل',lang)}</p>
               <p className="font-black text-emerald-600">+{fmt(totalCollected)}</p>
             </div>
+            {consignment && (
+              <div className="text-right">
+                <p className="text-gray-400 font-semibold">{T('Commission','العمولة',lang)}</p>
+                <p className="font-black text-amber-600">+{fmt(consignment.agencyGain)}</p>
+              </div>
+            )}
             <div className="text-right">
               <p className="text-gray-400 font-semibold">{T('Dépenses','المصاريف',lang)}</p>
               <p className="font-black text-red-500">-{fmt(totalExpenses)}</p>
             </div>
             <div className="text-right">
-              <p className="text-gray-400 font-semibold">{T('Net','الصافي',lang)}</p>
+              <p className="text-gray-400 font-semibold">{T('Net agence','صافي الوكالة',lang)}</p>
               <p className={`font-black ${netBenefit>=0?'text-blue-600':'text-orange-600'}`}>
                 {netBenefit>=0?'+':''}{fmt(netBenefit)}
               </p>
@@ -159,12 +183,20 @@ const CarBlock: React.FC<CarBlockProps> = ({ car, reservations, expenses, lang, 
             <div className="p-4 bg-gray-50 space-y-4">
 
               {/* KPI row */}
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { l:T('Encaissé','المحصّل',lang),        v:`+${fmt(totalCollected)}`, c:'from-emerald-500 to-teal-600' },
-                  { l:T('Dépenses','المصاريف',lang),       v:`-${fmt(totalExpenses)}`,  c:'from-red-500 to-rose-600' },
-                  { l:T('Bénéfice Net','صافي الأرباح',lang),v:`${netBenefit>=0?'+':''}${fmt(netBenefit)}`, c:netBenefit>=0?'from-blue-600 to-indigo-700':'from-orange-500 to-red-600' },
-                ].map((k,i) => (
+              <div className={`grid ${consignment ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'} gap-2`}>
+                {(consignment
+                  ? [
+                      { l:T('Encaissé','المحصّل',lang),                 v:`+${fmt(totalCollected)}`,            c:'from-emerald-500 to-teal-600' },
+                      { l:T('Commission agence','عمولة الوكالة',lang),   v:`+${fmt(consignment.agencyGain)}`,    c:'from-amber-500 to-orange-600' },
+                      { l:T('Reversement prop.','مستحقات المالك',lang), v:fmt(consignment.ownerPayout),         c:'from-slate-500 to-slate-700' },
+                      { l:T('Net agence','صافي الوكالة',lang),           v:`${netBenefit>=0?'+':''}${fmt(netBenefit)}`, c:netBenefit>=0?'from-blue-600 to-indigo-700':'from-orange-500 to-red-600' },
+                    ]
+                  : [
+                      { l:T('Encaissé','المحصّل',lang),        v:`+${fmt(totalCollected)}`, c:'from-emerald-500 to-teal-600' },
+                      { l:T('Dépenses','المصاريف',lang),       v:`-${fmt(totalExpenses)}`,  c:'from-red-500 to-rose-600' },
+                      { l:T('Bénéfice Net','صافي الأرباح',lang),v:`${netBenefit>=0?'+':''}${fmt(netBenefit)}`, c:netBenefit>=0?'from-blue-600 to-indigo-700':'from-orange-500 to-red-600' },
+                    ]
+                ).map((k,i) => (
                   <div key={i} className={`bg-gradient-to-br ${k.c} rounded-xl p-3 text-white text-center`}>
                     <p className="text-[9px] font-bold text-white/70 uppercase">{k.l}</p>
                     <p className="text-base font-black mt-0.5">{k.v}</p>
@@ -172,6 +204,30 @@ const CarBlock: React.FC<CarBlockProps> = ({ car, reservations, expenses, lang, 
                   </div>
                 ))}
               </div>
+
+              {/* Bandeau propriétaire (conciergerie) */}
+              {isConsignment && car.ownerInfo && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 flex flex-wrap items-center gap-x-5 gap-y-1 text-[11px]">
+                  <span className="font-black text-amber-900 flex items-center gap-1.5">
+                    <Handshake size={11}/>
+                    {car.ownerInfo.ownerName}
+                    {car.ownerInfo.internalRef && (
+                      <span className="bg-amber-200/70 px-1.5 py-0.5 rounded" dir="ltr">{car.ownerInfo.internalRef}</span>
+                    )}
+                  </span>
+                  {car.ownerInfo.ownerPhone && (
+                    <span className="font-bold text-amber-800" dir="ltr">📞 {car.ownerInfo.ownerPhone}</span>
+                  )}
+                  <span className="font-bold text-amber-800">
+                    {T('Barème','السعر',lang)} : {car.ownerInfo.commissionValue.toLocaleString()}{car.ownerInfo.commissionType==='percentage'?' %':' DA'} / {T('location','إيجار',lang)}
+                  </span>
+                  {consignment && consignment.ownerDeliveryFees > 0 && (
+                    <span className="font-bold text-amber-800">
+                      🚚 {T('Livraison prop.','توصيل المالك',lang)} : {fmt(consignment.ownerDeliveryFees)} DZD
+                    </span>
+                  )}
+                </div>
+              )}
 
               {/* ── Reservations list ── */}
               <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -386,8 +442,44 @@ const ReportsPage: React.FC<{ lang: Language }> = ({ lang }) => {
           .then(d => clients = d)
           .catch(() => {}),
 
-        DatabaseService.getCars()
-          .then(d => cars = d)
+        // Avec le join car_owners (admin) : indispensable pour calculer les
+        // commissions réelles des véhicules en conciergerie.
+        getCarsWithOwners()
+          .then(result => {
+            if (result.success && result.cars) {
+              cars = result.cars.map((dbCar: any) => ({
+                id: dbCar.id || '',
+                brand: dbCar.brand,
+                model: dbCar.model,
+                registration: dbCar.plate_number,
+                year: dbCar.year,
+                color: dbCar.color || 'Premium',
+                vin: dbCar.vin || '',
+                energy: dbCar.energy || 'Essence',
+                transmission: dbCar.transmission || 'Automatique',
+                seats: dbCar.seats || 5,
+                doors: dbCar.doors || 4,
+                priceDay: Math.round(Number(dbCar.price_per_day)),
+                priceWeek: Math.round(Number(dbCar.price_week || dbCar.price_per_day * 2)),
+                priceMonth: Math.round(Number(dbCar.price_month || dbCar.price_per_day * 4)),
+                deposit: Math.round(Number(dbCar.deposit || dbCar.price_per_day * 2)),
+                images: dbCar.image_url ? [dbCar.image_url] : ['https://picsum.photos/seed/car/400/300'],
+                mileage: dbCar.mileage || 0,
+                status: dbCar.status === 'maintenance' ? 'maintenance' : 'disponible',
+                ownershipType: dbCar.ownership_type === 'consignment' ? 'consignment' : 'personal',
+                ownerInfo: dbCar.owner
+                  ? {
+                      carId: dbCar.id || '',
+                      ownerName: dbCar.owner.owner_name,
+                      ownerPhone: dbCar.owner.owner_phone || undefined,
+                      internalRef: dbCar.owner.internal_ref || undefined,
+                      commissionType: dbCar.owner.commission_type === 'amount' ? 'amount' : 'percentage',
+                      commissionValue: Number(dbCar.owner.commission_value || 0),
+                    }
+                  : null,
+              } as Car));
+            }
+          })
           .catch(() => {}),
 
         DatabaseService.getWorkers()
@@ -478,7 +570,24 @@ const ReportsPage: React.FC<{ lang: Language }> = ({ lang }) => {
   const totalVehExp      = data?.vehicleExpenses.reduce((s,e) => s + (Number(e.cost)||0), 0) ?? 0;
   const totalStoreExp    = data?.storeExpenses.reduce((s,e) => s + (Number(e.cost)||0), 0) ?? 0;
   const totalExpGlobal   = totalVehExp + totalStoreExp;
-  const netBenefitGlobal = totalCollected - totalExpGlobal;
+
+  // ── 🤝 Conciergerie : agrégats réels (mêmes formules que la vue DB) ─────────
+  const consignmentCars = (data?.cars ?? []).filter(c => c.ownershipType === 'consignment' && c.ownerInfo);
+  const consignmentRows = consignmentCars.map(car => {
+    const carRes = nonCancelledRes.filter(r => (r.carId || r.car?.id) === car.id);
+    const carExp = (data?.vehicleExpenses ?? []).filter(e => e.carId === car.id)
+      .reduce((s, e) => s + (Number(e.cost) || 0), 0);
+    const summary = computeConsignmentSummary(carRes, car.ownerInfo!);
+    return { car, summary, expenses: carExp, rentals: carRes.length };
+  });
+  const commissionGlobal   = consignmentRows.reduce((s, r) => s + r.summary.commissionEarned, 0);
+  const ownerDelivGlobal   = consignmentRows.reduce((s, r) => s + r.summary.ownerDeliveryFees, 0);
+  const ownerPayoutGlobal  = consignmentRows.reduce((s, r) => s + r.summary.ownerPayout, 0);
+  const consignmentGross   = consignmentRows.reduce((s, r) => s + r.summary.grossCompleted, 0);
+
+  // Bénéfice net RÉEL de l'agence : la part à reverser aux propriétaires des
+  // véhicules en conciergerie n'est pas un revenu — on la retire de l'encaissé.
+  const netBenefitGlobal = totalCollected - ownerPayoutGlobal - totalExpGlobal;
 
   // ── Section accordion wrapper ────────────────────────────────────────────────
   const Section = ({ id, icon, title, badge, accent, children }: {
@@ -600,7 +709,7 @@ const ReportsPage: React.FC<{ lang: Language }> = ({ lang }) => {
             </div>
 
             {/* Global KPIs */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className={`grid grid-cols-2 md:grid-cols-4 ${consignmentRows.length>0 ? 'xl:grid-cols-6' : ''} gap-3`}>
               {[
                 { l:T('Montant Encaissé','المبلغ المحصّل',lang),
                   v:`+${fmt(totalCollected)}`,
@@ -614,9 +723,21 @@ const ReportsPage: React.FC<{ lang: Language }> = ({ lang }) => {
                   v:`-${fmt(totalExpGlobal)}`,
                   sub:T('véhicules + showroom','سيارات + معرض',lang),
                   grad:'from-red-500 to-rose-600', icon:<TrendingDown size={18}/> },
-                { l:T('Bénéfice Net','صافي الأرباح',lang),
+                ...(consignmentRows.length>0 ? [
+                  { l:T('Commission Conciergerie','عمولة الأمانة',lang),
+                    v:`+${fmt(commissionGlobal + ownerDelivGlobal)}`,
+                    sub:`${consignmentRows.length} ${T('véhicule(s) confié(s)','مركبة مودعة',lang)}`,
+                    grad:'from-amber-500 to-orange-600', icon:<Handshake size={18}/> },
+                  { l:T('Reversement Propriétaires','مستحقات الملاك',lang),
+                    v:`-${fmt(ownerPayoutGlobal)}`,
+                    sub:T('part des propriétaires','حصة الملاك',lang),
+                    grad:'from-slate-500 to-slate-700', icon:<Users size={18}/> },
+                ] : []),
+                { l:T('Bénéfice Net Agence','صافي ربح الوكالة',lang),
                   v:`${netBenefitGlobal>=0?'+':''}${fmt(netBenefitGlobal)}`,
-                  sub:'DZD',
+                  sub:consignmentRows.length>0
+                    ? T('hors part propriétaires','بدون حصة الملاك',lang)
+                    : 'DZD',
                   grad:netBenefitGlobal>=0?'from-blue-600 to-indigo-700':'from-orange-500 to-red-600',
                   icon:<DollarSign size={18}/> },
               ].map((k,i) => (
@@ -665,6 +786,118 @@ const ReportsPage: React.FC<{ lang: Language }> = ({ lang }) => {
                 </div>
               </Section>
             </motion.div>
+
+            {/* ── SECTION: 🤝 Conciergerie ── */}
+            {consignmentRows.length > 0 && (
+              <motion.div initial={{ opacity:0, y:12 }} animate={{ opacity:1, y:0 }} transition={{ delay:0.1 }}>
+                <Section id="consignment" accent="bg-amber-100 text-amber-700"
+                  icon={<Handshake size={17} className="text-amber-700"/>}
+                  title={T('Véhicules en Conciergerie','المركبات المودعة (أمانة)',lang)}
+                  badge={consignmentRows.length}>
+                  <div className="p-5 space-y-4 bg-gray-50">
+
+                    {/* Résumé global conciergerie */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                      {[
+                        { l:T('CA locations terminées','رقم أعمال الإيجارات المنتهية',lang), v:fmt(consignmentGross),                        c:'text-gray-800',  bg:'bg-white border-gray-200' },
+                        { l:T('Commission agence','عمولة الوكالة',lang),                    v:`+${fmt(commissionGlobal)}`,                   c:'text-amber-700', bg:'bg-amber-50 border-amber-200' },
+                        { l:T('Livraison propriétaires','توصيل الملاك',lang),               v:`+${fmt(ownerDelivGlobal)}`,                   c:'text-amber-700', bg:'bg-amber-50 border-amber-200' },
+                        { l:T('À reverser aux propriétaires','المستحق للملاك',lang),        v:fmt(ownerPayoutGlobal),                        c:'text-slate-800', bg:'bg-slate-100 border-slate-200' },
+                      ].map((k,i)=>(
+                        <div key={i} className={`rounded-xl border p-3 text-center ${k.bg}`}>
+                          <p className="text-[10px] font-bold text-gray-500 uppercase leading-tight">{k.l}</p>
+                          <p className={`text-lg font-black mt-1 ${k.c}`}>{k.v}</p>
+                          <p className="text-[9px] text-gray-400 font-semibold">DZD</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    <p className="text-[11px] font-semibold text-gray-500 bg-white border border-gray-200 rounded-xl px-4 py-2.5">
+                      ℹ️ {T(
+                        'Commission figée à la clôture de chaque location (barème du propriétaire). Livraison à la charge du propriétaire à partir de 10 jours de location. Reversement = CA terminé − commission − livraison.',
+                        'تُثبَّت العمولة عند إنهاء كل إيجار (حسب اتفاق المالك). التوصيل على حساب المالك ابتداءً من 10 أيام. مستحقات المالك = رقم الأعمال − العمولة − التوصيل.',
+                        lang)}
+                    </p>
+
+                    {/* Détail par véhicule */}
+                    <div className="bg-white rounded-xl border border-amber-200 overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="bg-amber-50 border-b border-amber-100 text-amber-800">
+                              <th className="text-left px-4 py-2.5 font-black uppercase tracking-wide whitespace-nowrap">{T('Véhicule','المركبة',lang)}</th>
+                              <th className="text-left px-4 py-2.5 font-black uppercase tracking-wide whitespace-nowrap">{T('Propriétaire','المالك',lang)}</th>
+                              <th className="text-center px-3 py-2.5 font-black uppercase tracking-wide whitespace-nowrap">{T('Loc. term.','منتهية',lang)}</th>
+                              <th className="text-right px-3 py-2.5 font-black uppercase tracking-wide whitespace-nowrap">{T('CA terminé','رقم الأعمال',lang)}</th>
+                              <th className="text-right px-3 py-2.5 font-black uppercase tracking-wide whitespace-nowrap">{T('Commission','العمولة',lang)}</th>
+                              <th className="text-right px-3 py-2.5 font-black uppercase tracking-wide whitespace-nowrap">{T('Livraison','التوصيل',lang)}</th>
+                              <th className="text-right px-3 py-2.5 font-black uppercase tracking-wide whitespace-nowrap">{T('Reversement','المستحق',lang)}</th>
+                              <th className="text-right px-3 py-2.5 font-black uppercase tracking-wide whitespace-nowrap">{T('Dépenses','المصاريف',lang)}</th>
+                              <th className="text-right px-4 py-2.5 font-black uppercase tracking-wide whitespace-nowrap">{T('Net agence','صافي الوكالة',lang)}</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {consignmentRows.map(({ car, summary, expenses, rentals }) => {
+                              const net = summary.agencyGain - expenses;
+                              return (
+                                <tr key={car.id} className="hover:bg-amber-50/40 transition-colors">
+                                  <td className="px-4 py-2.5 whitespace-nowrap">
+                                    <p className="font-black text-gray-800">{car.brand} {car.model}</p>
+                                    <p className="text-[10px] text-blue-600 font-bold">{car.registration}</p>
+                                  </td>
+                                  <td className="px-4 py-2.5 whitespace-nowrap">
+                                    <p className="font-bold text-gray-700">{car.ownerInfo!.ownerName}</p>
+                                    <p className="text-[10px] text-gray-400 font-semibold">
+                                      {car.ownerInfo!.commissionValue.toLocaleString()}{car.ownerInfo!.commissionType==='percentage'?' %':' DA'} / {T('loc.','إيجار',lang)}
+                                      {car.ownerInfo!.internalRef ? ` · ${car.ownerInfo!.internalRef}` : ''}
+                                    </p>
+                                  </td>
+                                  <td className="px-3 py-2.5 text-center font-black text-gray-700">
+                                    {summary.completedCount}<span className="text-gray-400 font-bold">/{rentals}</span>
+                                  </td>
+                                  <td className="px-3 py-2.5 text-right font-black text-gray-800 whitespace-nowrap">{fmt(summary.grossCompleted)}</td>
+                                  <td className="px-3 py-2.5 text-right font-black text-amber-700 whitespace-nowrap">+{fmt(summary.commissionEarned)}</td>
+                                  <td className="px-3 py-2.5 text-right font-black text-amber-700 whitespace-nowrap">+{fmt(summary.ownerDeliveryFees)}</td>
+                                  <td className="px-3 py-2.5 text-right font-black text-slate-700 whitespace-nowrap">{fmt(summary.ownerPayout)}</td>
+                                  <td className="px-3 py-2.5 text-right font-black text-red-600 whitespace-nowrap">-{fmt(expenses)}</td>
+                                  <td className={`px-4 py-2.5 text-right font-black whitespace-nowrap ${net>=0?'text-blue-700':'text-orange-600'}`}>
+                                    {net>=0?'+':''}{fmt(net)}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                          <tfoot>
+                            <tr className="bg-amber-50 border-t border-amber-200 font-black text-amber-900">
+                              <td className="px-4 py-2.5" colSpan={3}>{T('TOTAL','المجموع',lang)}</td>
+                              <td className="px-3 py-2.5 text-right whitespace-nowrap">{fmt(consignmentGross)}</td>
+                              <td className="px-3 py-2.5 text-right whitespace-nowrap">+{fmt(commissionGlobal)}</td>
+                              <td className="px-3 py-2.5 text-right whitespace-nowrap">+{fmt(ownerDelivGlobal)}</td>
+                              <td className="px-3 py-2.5 text-right whitespace-nowrap">{fmt(ownerPayoutGlobal)}</td>
+                              <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                                -{fmt(consignmentRows.reduce((s,r)=>s+r.expenses,0))}
+                              </td>
+                              <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                                {fmt(commissionGlobal + ownerDelivGlobal - consignmentRows.reduce((s,r)=>s+r.expenses,0))}
+                              </td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Locations en cours (commissions estimées à venir) */}
+                    {consignmentRows.some(r => r.summary.pendingCount > 0) && (
+                      <div className="bg-white border border-amber-200 rounded-xl px-4 py-3 text-[11px] font-semibold text-amber-800">
+                        ⏳ {T('Commissions estimées sur les locations non terminées','عمولات مقدرة على الإيجارات غير المنتهية',lang)} :{' '}
+                        <strong>+{fmt(consignmentRows.reduce((s,r)=>s+r.summary.commissionPending,0))} DZD</strong>
+                        {' '}({consignmentRows.reduce((s,r)=>s+r.summary.pendingCount,0)} {T('location(s)','إيجار',lang)})
+                      </div>
+                    )}
+                  </div>
+                </Section>
+              </motion.div>
+            )}
 
             {/* ── SECTION: Clients & Debts ── */}
             <motion.div initial={{ opacity:0, y:12 }} animate={{ opacity:1, y:0 }} transition={{ delay:0.12 }}>

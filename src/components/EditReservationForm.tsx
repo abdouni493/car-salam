@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Language, ReservationDetails } from '../types';
+import { InspectionItem, Language, ReservationDetails, ReservationWizardData } from '../types';
+import { getDeliveryFeePayer } from '../utils/deliveryFee';
 import { ArrowLeft, ArrowRight, CheckCircle, AlertTriangle, Save, MapPin, CreditCard, Car as CarIcon, Camera, User, Plus, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Step1DatesLocations, Step2VehicleSelection, Step3DepartureInspection, Step4ClientSelection, Step5AdditionalServices, Step6FinalPricing } from './CreateReservationForm';
@@ -21,7 +22,7 @@ export const EditReservationForm: React.FC<EditReservationFormProps> = ({ lang, 
   const isInspectionMode = reservation.status === 'accepted';
   const [currentStep, setCurrentStep] = useState(isInspectionMode ? 3 : 1);
   // agencies and isLoadingAgencies are passed in as props now
-  const [formData, setFormData] = useState<Partial<ReservationDetails>>({
+  const [formData, setFormData] = useState<ReservationWizardData>({
     id: reservation.id,
     clientId: reservation.clientId,
     client: reservation.client,
@@ -74,10 +75,11 @@ export const EditReservationForm: React.FC<EditReservationFormProps> = ({ lang, 
       tvaApplied: reservation.tvaApplied,
       tvaAmount: 0, // Will be calculated
       additionalFees: reservation.additionalFees,
+      deliveryFee: reservation.deliveryFee || 0,
       paymentNotes: reservation.notes,
       advancePayment: reservation.advancePayment,
       remainingPayment: reservation.remainingPayment,
-      cautionEnabled: typeof reservation.cautionEnabled === 'boolean' ? reservation.cautionEnabled : true,
+      cautionEnabled: typeof (reservation as any).cautionEnabled === 'boolean' ? (reservation as any).cautionEnabled : true,
       cautionCurrency: (reservation as any).cautionCurrency || 'DZD',
       // Calculate euroAmount if caution was in EUR mode
       euroAmount: (reservation as any).cautionCurrency === 'EUR' && (reservation as any).euro_rate
@@ -260,15 +262,16 @@ export const EditReservationForm: React.FC<EditReservationFormProps> = ({ lang, 
       console.log('📅 Departure Date - Original:', reservation.step1.departureDate, '→ New:', newDepartureDate);
       console.log('📅 Return Date - Original:', reservation.step1.returnDate, '→ New:', newReturnDate);
 
-      // Calculate new total days from dates
-      const newTotalDays = Math.ceil(
+      // Calculate new total days from dates — jamais 0 (même jour) ni NaN (date vide).
+      const rawDays = Math.ceil(
         (new Date(newReturnDate).getTime() - new Date(newDepartureDate).getTime()) / (1000 * 60 * 60 * 24)
       );
-      
+      const newTotalDays = Number.isFinite(rawDays) ? Math.max(1, rawDays) : (reservation.totalDays || 1);
+
       console.log('📊 Total Days - Original:', reservation.totalDays, '→ New:', newTotalDays);
 
       // === PRICING CALCULATION ===
-      const pricePerDay = reservation.pricePerDay || reservation.car?.priceDay || 0;
+      const pricePerDay = (reservation as any).pricePerDay || reservation.car?.priceDay || 0;
       const basePrice = pricePerDay * newTotalDays;
       
       console.log('💰 Price/Day:', pricePerDay, 'DA');
@@ -281,7 +284,12 @@ export const EditReservationForm: React.FC<EditReservationFormProps> = ({ lang, 
       const discountAmount = formData.discountAmount || 0;
       const additionalFees = formData.step6?.additionalFees || formData.additionalFees || 0;
       const tvaAmount = formData.step6?.tvaAmount || 0;
-      
+      // Le payeur de la livraison est recalculé à partir de la (nouvelle) durée :
+      // au-delà de 10 jours, ces frais sont pris en charge par le propriétaire et
+      // ne sont donc pas facturés au client.
+      const deliveryFee = formData.step6?.deliveryFee || 0;
+      const clientDeliveryFee = getDeliveryFeePayer(newTotalDays) === 'client' ? deliveryFee : 0;
+
       console.log('🛒 Services Total:', servicesTotal.toLocaleString(), 'DA', '| Services count:', formData.step5?.additionalServices?.length || 0);
       console.log('💳 Discount Amount:', discountAmount.toLocaleString(), 'DA', '(Type:', formData.discountType, ')');
       console.log('📝 Additional Fees:', additionalFees.toLocaleString(), 'DA');
@@ -308,8 +316,8 @@ export const EditReservationForm: React.FC<EditReservationFormProps> = ({ lang, 
         console.log('🔧 MANUAL TOTAL PRICE (from top-level): Using manually edited value', newTotalPrice.toLocaleString(), 'DA');
       } else {
         // Calculate normally
-        newTotalPrice = basePrice + servicesTotal + additionalFees + tvaAmount;
-        console.log('💰 Calculation: basePrice (' + basePrice + ') + servicesTotal (' + servicesTotal + ') + additionalFees (' + additionalFees + ') + tvaAmount (' + tvaAmount + ') = ' + newTotalPrice);
+        newTotalPrice = basePrice + servicesTotal + additionalFees + tvaAmount + clientDeliveryFee;
+        console.log('💰 Calculation: basePrice (' + basePrice + ') + servicesTotal (' + servicesTotal + ') + additionalFees (' + additionalFees + ') + tvaAmount (' + tvaAmount + ') + livraison client (' + clientDeliveryFee + ') = ' + newTotalPrice);
       }
       
       console.log('💰 Subtotal before discount:', newTotalPrice.toLocaleString(), 'DA');
@@ -369,10 +377,11 @@ export const EditReservationForm: React.FC<EditReservationFormProps> = ({ lang, 
         remainingPayment: newRemainingPayment,
         notes: formData.step6?.paymentNotes || formData.notes,
         tvaApplied: formData.step6?.tvaApplied || formData.tvaApplied,
-        tvaAmount: formData.step6?.tvaAmount,
         additionalFees: formData.step6?.additionalFees || formData.additionalFees,
+        // Le payeur (`delivery_fee_payer`) est recalculé par le trigger DB.
+        deliveryFee,
         totalPrice: newTotalPrice,
-        
+
         // Client (selected in edit mode)
         clientId: formData.step4?.selectedClient?.id || formData.clientId || reservation.clientId,
         
@@ -666,7 +675,7 @@ export const EditReservationForm: React.FC<EditReservationFormProps> = ({ lang, 
             {(isInspectionMode ? currentStep === 3 : currentStep === 3) && <Step3DepartureInspection lang={lang} formData={formData} setFormData={setFormData} />}
             {(!isInspectionMode && currentStep === 4) && <Step4ClientSelection lang={lang} formData={formData} setFormData={setFormData} />}
             {(isInspectionMode ? currentStep === 5 : currentStep === 5) && <Step5AdditionalServices lang={lang} formData={formData} setFormData={setFormData} />}
-            {(isInspectionMode ? currentStep === 6 : currentStep === 6) && <Step6FinalPricing lang={lang} formData={formData} setFormData={setFormData} />}
+            {(isInspectionMode ? currentStep === 6 : currentStep === 6) && <Step6FinalPricing lang={lang} formData={formData} setFormData={setFormData} agencies={agencies} />}
           </div>
         </motion.div>
       </AnimatePresence>
@@ -722,8 +731,8 @@ export const EditReservationForm: React.FC<EditReservationFormProps> = ({ lang, 
 // Edit Step 1: Dates & Locations
 const EditStep1DatesLocations: React.FC<{
   lang: Language;
-  formData: Partial<ReservationDetails>;
-  setFormData: React.Dispatch<React.SetStateAction<Partial<ReservationDetails>>>;
+  formData: ReservationWizardData;
+  setFormData: React.Dispatch<React.SetStateAction<ReservationWizardData>>;
 }> = ({ lang, formData, setFormData }) => (
   <div className="space-y-8">
     <h3 className="text-2xl font-black text-slate-900">
@@ -883,8 +892,8 @@ const EditStep1DatesLocations: React.FC<{
 // Simplified edit versions of other steps - they would follow similar patterns
 const EditStep2VehicleSelection: React.FC<{
   lang: Language;
-  formData: Partial<ReservationDetails>;
-  setFormData: React.Dispatch<React.SetStateAction<Partial<ReservationDetails>>>;
+  formData: ReservationWizardData;
+  setFormData: React.Dispatch<React.SetStateAction<ReservationWizardData>>;
 }> = ({ lang, formData, setFormData }) => (
   <div className="space-y-8">
     <h3 className="text-2xl font-black text-slate-900">
@@ -932,8 +941,8 @@ const EditStep2VehicleSelection: React.FC<{
 
 const EditStep3DepartureInspection: React.FC<{
   lang: Language;
-  formData: Partial<ReservationDetails>;
-  setFormData: React.Dispatch<React.SetStateAction<Partial<ReservationDetails>>>;
+  formData: ReservationWizardData;
+  setFormData: React.Dispatch<React.SetStateAction<ReservationWizardData>>;
   agencies: any[];
   isLoadingAgencies: boolean;
 }> = ({ lang, formData, setFormData, agencies, isLoadingAgencies }) => {
@@ -1046,7 +1055,7 @@ const EditStep3DepartureInspection: React.FC<{
           (inspection.inspectionItems || []).forEach((r: any) => {
             respMap[r.id] = r;
           });
-          const merged = checklist.map((item: any) => ({
+          const merged: InspectionItem[] = checklist.map((item: any) => ({
             id: item.id,
             name: item.item_name,
             category: item.category === 'securite' ? 'security' : item.category === 'equipements' ? 'equipment' : item.category === 'confort' ? 'comfort' : 'cleanliness',
@@ -1284,8 +1293,8 @@ const EditStep3DepartureInspection: React.FC<{
 
 const EditStep4ClientSelection: React.FC<{
   lang: Language;
-  formData: Partial<ReservationDetails>;
-  setFormData: React.Dispatch<React.SetStateAction<Partial<ReservationDetails>>>;
+  formData: ReservationWizardData;
+  setFormData: React.Dispatch<React.SetStateAction<ReservationWizardData>>;
 }> = ({ lang, formData, setFormData }) => (
   <div className="space-y-8">
     <h3 className="text-2xl font-black text-slate-900">
@@ -1303,8 +1312,8 @@ const EditStep4ClientSelection: React.FC<{
 
 const EditStep5AdditionalServices: React.FC<{
   lang: Language;
-  formData: Partial<ReservationDetails>;
-  setFormData: React.Dispatch<React.SetStateAction<Partial<ReservationDetails>>>;
+  formData: ReservationWizardData;
+  setFormData: React.Dispatch<React.SetStateAction<ReservationWizardData>>;
 }> = ({ lang, formData, setFormData }) => (
   <div className="space-y-8">
     <h3 className="text-2xl font-black text-slate-900">
@@ -1322,8 +1331,8 @@ const EditStep5AdditionalServices: React.FC<{
 
 const EditStep6FinalPricing: React.FC<{
   lang: Language;
-  formData: Partial<ReservationDetails>;
-  setFormData: React.Dispatch<React.SetStateAction<Partial<ReservationDetails>>>;
+  formData: ReservationWizardData;
+  setFormData: React.Dispatch<React.SetStateAction<ReservationWizardData>>;
 }> = ({ lang, formData, setFormData }) => (
   <div className="space-y-8">
     <h3 className="text-2xl font-black text-slate-900">

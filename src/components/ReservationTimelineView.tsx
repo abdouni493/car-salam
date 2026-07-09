@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Language, ReservationDetails } from '../types';
+import { formatAmount } from '../utils/format';
 import { motion, AnimatePresence } from 'motion/react';
 import { Calendar, Clock, MapPin, ChevronLeft, ChevronRight, User, Car as CarIcon, Phone, Mail, Fuel, Wrench, ChevronDown, ChevronUp, Image as ImageIcon, X, LayoutGrid, AlertTriangle, CheckCircle, CalendarDays } from 'lucide-react';
 
@@ -1353,7 +1354,7 @@ export const ReservationTimelineView: React.FC<ReservationTimelineViewProps> = (
                                               </div>
 
                                               <div className="text-xs font-black text-blue-600">
-                                                💰 {res.totalPrice.toLocaleString()} DA
+                                                💰 {formatAmount(res.totalPrice)} DA
                                               </div>
 
                                               <div className={`text-xs font-bold px-2 py-1 rounded-lg inline-block ${
@@ -1438,7 +1439,7 @@ export const ReservationTimelineView: React.FC<ReservationTimelineViewProps> = (
                                     </div>
 
                                     <div className="text-right flex-shrink-0">
-                                      <div className="font-black text-blue-600 text-sm">{res.totalPrice.toLocaleString()} DA</div>
+                                      <div className="font-black text-blue-600 text-sm">{formatAmount(res.totalPrice)} DA</div>
                                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                                         res.status === 'active' ? 'bg-blue-100 text-blue-700' :
                                         res.status === 'confirmed' ? 'bg-green-100 text-green-700' :

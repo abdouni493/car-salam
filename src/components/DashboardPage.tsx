@@ -1,18 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DashboardStats, MaintenanceAlert, Language, Car, ReservationDetails, VehicleExpense, User } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { AlertTriangle, TrendingUp, Users, Car as CarIcon, Calendar, DollarSign, Wrench, Shield, FileCheck, Loader2, AlertCircle } from 'lucide-react';
+import { AlertTriangle, Bell, Calendar, CarFront, ChevronRight, Gauge, RefreshCw, TrendingUp, Users } from 'lucide-react';
 import { DatabaseService } from '../services/DatabaseService';
-import { getCars } from '../services/carService';
+import { getCarsWithOwners } from '../services/carService';
+import { getMonthlyAgencyCommission } from '../services/consignmentService';
 import { getVehicleExpenses } from '../services/expenseService';
 import { getVidangeAlert, getAssuranceAlert, getControleAlert, getChaineAlert } from '../utils/vidangeAlerts';
 import { ReservationsService } from '../services/ReservationsService';
-import { getReservationAlerts } from '../utils/reservationAlerts';
-import { ReservationAlertCard } from './ReservationAlertCard';
+import { getReservationAlerts, ReservationAlert } from '../utils/reservationAlerts';
 import { scheduleNotification, checkAndTriggerScheduledNotifications, requestNotificationPermission } from '../services/notificationService';
-
-// Mock data for dashboard (removed - now using real data)
 
 interface DashboardPageProps {
   lang: Language;
@@ -20,274 +18,28 @@ interface DashboardPageProps {
   user?: User | null;
 }
 
-interface AlertCardProps {
-  alert: MaintenanceAlert;
-  lang: Language;
-  onAlertClick?: (alert: MaintenanceAlert) => void;
-}
+/** Palette d'une ligne d'alerte selon la sévérité. */
+const severityTheme = (severity: string) => {
+  switch (severity) {
+    case 'critical':
+      return { bar: 'bg-red-500', chip: 'bg-red-100 text-red-700', ring: 'hover:ring-red-100', iconBg: 'bg-red-50 text-red-600' };
+    case 'high':
+      return { bar: 'bg-orange-500', chip: 'bg-orange-100 text-orange-700', ring: 'hover:ring-orange-100', iconBg: 'bg-orange-50 text-orange-600' };
+    case 'medium':
+      return { bar: 'bg-amber-400', chip: 'bg-amber-100 text-amber-700', ring: 'hover:ring-amber-100', iconBg: 'bg-amber-50 text-amber-600' };
+    default:
+      return { bar: 'bg-emerald-500', chip: 'bg-emerald-100 text-emerald-700', ring: 'hover:ring-emerald-100', iconBg: 'bg-emerald-50 text-emerald-600' };
+  }
+};
 
-const AlertCard: React.FC<AlertCardProps> = ({ alert, lang, onAlertClick }) => {
-  const getSeverityStyles = (severity: string) => {
-    switch (severity) {
-      case 'low':
-        return {
-          bg: 'bg-gradient-to-br from-green-50 to-emerald-100 dark:from-green-900/20 dark:to-emerald-900/20',
-          border: 'border-green-200 dark:border-green-800',
-          text: 'text-green-800 dark:text-green-200',
-          accent: 'bg-green-500',
-          icon: '🟢',
-          glow: 'shadow-green-500/20'
-        };
-      case 'medium':
-        return {
-          bg: 'bg-gradient-to-br from-yellow-50 to-orange-100 dark:from-yellow-900/20 dark:to-orange-900/20',
-          border: 'border-yellow-200 dark:border-yellow-800',
-          text: 'text-yellow-800 dark:text-yellow-200',
-          accent: 'bg-yellow-500',
-          icon: '🟡',
-          glow: 'shadow-yellow-500/20'
-        };
-      case 'high':
-        return {
-          bg: 'bg-gradient-to-br from-orange-50 to-red-100 dark:from-orange-900/20 dark:to-red-900/20',
-          border: 'border-orange-200 dark:border-orange-800',
-          text: 'text-orange-800 dark:text-orange-200',
-          accent: 'bg-orange-500',
-          icon: '🟠',
-          glow: 'shadow-orange-500/20'
-        };
-      case 'critical':
-        return {
-          bg: 'bg-gradient-to-br from-red-50 to-rose-100 dark:from-red-900/20 dark:to-rose-900/20',
-          border: 'border-red-200 dark:border-red-800',
-          text: 'text-red-800 dark:text-red-200',
-          accent: 'bg-red-500',
-          icon: '🔴',
-          glow: 'shadow-red-500/20'
-        };
-      default:
-        return {
-          bg: 'bg-gradient-to-br from-gray-50 to-slate-100 dark:from-gray-900/20 dark:to-slate-900/20',
-          border: 'border-gray-200 dark:border-gray-800',
-          text: 'text-gray-800 dark:text-gray-200',
-          accent: 'bg-gray-500',
-          icon: '⚪',
-          glow: 'shadow-gray-500/20'
-        };
-    }
-  };
-
-  const styles = getSeverityStyles(alert.severity);
-
-  const getAlertIcon = (type: string) => {
-    switch (type) {
-      case 'vidange': return '🛢️';
-      case 'assurance': return '🛡️';
-      case 'controle': return '🔍';
-      case 'chaine': return '⛓️';
-      default: return '⚠️';
-    }
-  };
-
-  const getProgressPercentage = () => {
-    if ((alert.type === 'vidange' || alert.type === 'chaine') && alert.currentMileage !== undefined && alert.nextServiceMileage) {
-      return Math.min(((alert.currentMileage || 0) / alert.nextServiceMileage) * 100, 100);
-    }
-    if (alert.dueDate) {
-      const totalDays = alert.type === 'assurance' ? 365 : 180; // Approximate annual cycles
-      const daysUntilDue = alert.daysUntilDue || 0;
-      const daysSinceCreation = Math.max(0, totalDays - daysUntilDue);
-      return Math.min((daysSinceCreation / totalDays) * 100, 100);
-    }
-    return 0;
-  };
-
-  const progressPercentage = getProgressPercentage();
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20, scale: 0.95 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      whileHover={{
-        scale: 1.03,
-        boxShadow: `0 20px 40px -12px ${styles.glow}`,
-        y: -2
-      }}
-      transition={{
-        type: "spring",
-        stiffness: 300,
-        damping: 20
-      }}
-      className={`relative overflow-hidden p-6 rounded-2xl border-2 ${styles.bg} ${styles.border} shadow-xl hover:shadow-2xl transition-all duration-500 backdrop-blur-sm`}
-    >
-      {/* Animated background pattern */}
-      <div className="absolute inset-0 opacity-5">
-        <div className="absolute top-0 right-0 w-32 h-32 bg-current rounded-full -translate-y-16 translate-x-16"></div>
-        <div className="absolute bottom-0 left-0 w-24 h-24 bg-current rounded-full translate-y-12 -translate-x-12"></div>
-      </div>
-
-      {/* Severity indicator stripe */}
-      <div className={`absolute top-0 left-0 right-0 h-1 ${styles.accent}`}></div>
-
-      <div className="relative flex items-start gap-4">
-        {/* Animated Icon */}
-        <motion.div
-          animate={{
-            rotate: alert.severity === 'critical' ? [0, 10, -10, 0] : [0, 5, -5, 0],
-            scale: alert.severity === 'critical' ? [1, 1.1, 1] : [1, 1.05, 1]
-          }}
-          transition={{
-            duration: alert.severity === 'critical' ? 1.5 : 2,
-            repeat: Infinity
-          }}
-          className="text-3xl flex-shrink-0 p-2 bg-white/20 rounded-xl backdrop-blur-sm"
-        >
-          {getAlertIcon(alert.type)}
-        </motion.div>
-
-        <div className="flex-1 min-w-0">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <h4 className={`font-bold text-lg uppercase tracking-tight ${styles.text}`}>
-                {alert.title}
-              </h4>
-              <motion.div
-                animate={{ scale: [1, 1.2, 1] }}
-                transition={{ duration: 2, repeat: Infinity }}
-                className="text-lg"
-              >
-                {styles.icon}
-              </motion.div>
-            </div>
-            <div className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${
-              alert.isExpired
-                ? 'bg-red-500 text-white'
-                : alert.severity === 'critical'
-                ? 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200'
-                : alert.severity === 'high'
-                ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-200'
-                : 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200'
-            }`}>
-              {alert.isExpired
-                ? (lang === 'fr' ? 'EXPIRÉ' : 'منتهي الصلاحية')
-                : alert.daysUntilDue !== undefined
-                ? (lang === 'fr' ? `${alert.daysUntilDue} JOURS` : `${alert.daysUntilDue} أيام`)
-                : (lang === 'fr' ? 'À VENIR' : 'قادم')
-              }
-            </div>
-          </div>
-
-          {/* Main Message */}
-          <p className={`${styles.text} text-sm mb-4 leading-relaxed font-medium`}>
-            {alert.message}
-          </p>
-
-          {/* Car Information */}
-          <div className={`mb-4 p-3 rounded-xl bg-white/30 backdrop-blur-sm border border-white/20`}>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-lg">🚗</span>
-              <span className={`font-semibold text-sm ${styles.text}`}>
-                {alert.carInfo}
-              </span>
-            </div>
-
-            {/* Mileage Progress for Vidange and Chaine */}
-            {(alert.type === 'vidange' || alert.type === 'chaine') && alert.currentMileage !== undefined && alert.nextServiceMileage && (
-              <div className="space-y-2">
-                <div className="flex justify-between items-center text-xs">
-                  <span className={styles.text}>
-                    {lang === 'fr' ? 'Kilométrage actuel:' : 'الكيلومترات الحالية:'}
-                  </span>
-                  <span className={`font-bold ${styles.text}`}>
-                    {alert.currentMileage.toLocaleString()} km
-                  </span>
-                </div>
-                <div className="flex justify-between items-center text-xs">
-                  <span className={styles.text}>
-                    {lang === 'fr' ? 'Prochaine vidange:' : 'الفيد الثاني:'}
-                  </span>
-                  <span className={`font-bold ${styles.text}`}>
-                    {alert.nextServiceMileage.toLocaleString()} km
-                  </span>
-                </div>
-                <div className="w-full bg-white/30 rounded-full h-2 overflow-hidden">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${progressPercentage}%` }}
-                    transition={{ duration: 1, delay: 0.5 }}
-                    className={`h-full rounded-full ${styles.accent}`}
-                  />
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span className={styles.text}>
-                    {lang === 'fr' ? 'Progression:' : 'التقدم:'}
-                  </span>
-                  <span className={`font-bold ${styles.text}`}>
-                    {progressPercentage.toFixed(1)}%
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {/* Date Progress for Assurance/Controle */}
-            {(alert.type === 'assurance' || alert.type === 'controle') && alert.dueDate && (
-              <div className="space-y-2">
-                <div className="flex justify-between items-center text-xs">
-                  <span className={styles.text}>
-                    {lang === 'fr' ? 'Échéance:' : 'الموعد النهائي:'}
-                  </span>
-                  <span className={`font-bold ${styles.text}`}>
-                    {new Date(alert.dueDate).toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'ar-SA')}
-                  </span>
-                </div>
-                <div className="w-full bg-white/30 rounded-full h-2 overflow-hidden">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${progressPercentage}%` }}
-                    transition={{ duration: 1, delay: 0.5 }}
-                    className={`h-full rounded-full ${styles.accent}`}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Additional Details */}
-          <div className={`grid grid-cols-2 gap-2 text-xs ${styles.text}`}>
-            <div className="flex justify-between">
-              <span>{lang === 'fr' ? 'Type:' : 'النوع:'}</span>
-              <span className="font-medium capitalize">{alert.type}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>{lang === 'fr' ? 'Sévérité:' : 'الخطورة:'}</span>
-              <span className="font-medium capitalize">{alert.severity}</span>
-            </div>
-            <div className="flex justify-between col-span-2">
-              <span>{lang === 'fr' ? 'Créé le:' : 'تم الإنشاء:'}</span>
-              <span className="font-medium">
-                {new Date(alert.createdAt).toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'ar-SA')}
-              </span>
-            </div>
-          </div>
-
-          {/* Action Button */}
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => onAlertClick?.(alert)}
-            className={`mt-4 w-full py-2 px-4 rounded-xl font-semibold text-sm transition-all duration-200 ${
-              alert.isExpired
-                ? 'bg-red-500 hover:bg-red-600 text-white'
-                : 'bg-white/20 hover:bg-white/30 text-current backdrop-blur-sm border border-white/30'
-            }`}
-          >
-            {lang === 'fr' ? 'Ajouter une dépense' : 'إضافة نفقة'}
-          </motion.button>
-        </div>
-      </div>
-    </motion.div>
-  );
+const maintenanceIcon = (type: string) => {
+  switch (type) {
+    case 'vidange': return '🛢️';
+    case 'assurance': return '🛡️';
+    case 'controle': return '🔍';
+    case 'chaine': return '⛓️';
+    default: return '⚠️';
+  }
 };
 
 export const DashboardPage: React.FC<DashboardPageProps> = ({ lang, isAuthLoading = false, user = null }) => {
@@ -300,108 +52,126 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ lang, isAuthLoadin
     totalClients: 0,
     totalCars: 0,
     availableCars: 0,
+    personalCars: 0,
+    consignmentCars: 0,
     maintenanceAlerts: 0,
     overduePayments: 0,
     recentReservations: [],
     revenueByMonth: [],
     carUtilization: []
   });
-  const [alerts, setAlerts] = useState<MaintenanceAlert[]>([]);
   const [cars, setCars] = useState<Car[]>([]);
+  /** Commissions encaissées sur les locations de conciergerie clôturées ce mois-ci. */
+  const [monthlyCommission, setMonthlyCommission] = useState(0);
   const [vehicleExpenses, setVehicleExpenses] = useState<VehicleExpense[]>([]);
   const [reservations, setReservations] = useState<ReservationDetails[]>([]);
-  const [showOnlyReservationAlerts, setShowOnlyReservationAlerts] = useState(false);
   const [alertFilter, setAlertFilter] = useState<'all' | 'maintenance' | 'reservations'>('all');
-  const [currentTime, setCurrentTime] = useState(new Date());
+  const [showAllAlerts, setShowAllAlerts] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const loadDashboardData = async (isManualRefresh = false) => {
+    try {
+      if (isManualRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+      setError(null);
+
+      // Fetch real data from database in parallel
+      // Page admin : getCarsWithOwners joint car_owners (réf interne, propriétaire, commission).
+      const [dbStats, , carsResult, expensesResult, reservationsResult, commissionThisMonth] = await Promise.all([
+        DatabaseService.getDashboardStats(),
+        DatabaseService.getMaintenanceAlerts(),
+        getCarsWithOwners(),
+        getVehicleExpenses(),
+        ReservationsService.getReservations(),
+        getMonthlyAgencyCommission()
+      ]);
+
+      setMonthlyCommission(commissionThisMonth);
+
+      // Set cars and expenses for vidange alerts
+      if (carsResult.success && carsResult.cars) {
+        setCars(carsResult.cars.map(dbCar => ({
+          id: dbCar.id || '',
+          brand: dbCar.brand,
+          model: dbCar.model,
+          registration: dbCar.plate_number,
+          year: dbCar.year,
+          color: dbCar.color || 'Premium',
+          vin: dbCar.vin || '',
+          energy: dbCar.energy || 'Essence',
+          transmission: dbCar.transmission || 'Automatique',
+          seats: dbCar.seats || 5,
+          doors: dbCar.doors || 4,
+          priceDay: Math.round(Number(dbCar.price_per_day)),
+          priceWeek: Math.round(Number(dbCar.price_week || dbCar.price_per_day * 2)),
+          priceMonth: Math.round(Number(dbCar.price_month || dbCar.price_per_day * 4)),
+          deposit: Math.round(Number(dbCar.deposit || dbCar.price_per_day * 2)),
+          images: dbCar.image_url ? [dbCar.image_url] : ['https://picsum.photos/seed/car/400/300'],
+          mileage: dbCar.mileage || 0,
+          status: dbCar.status === 'maintenance' ? 'maintenance' : 'disponible',
+          ownershipType: dbCar.ownership_type === 'consignment' ? 'consignment' : 'personal',
+          ownerInfo: dbCar.owner
+            ? {
+                carId: dbCar.id || '',
+                ownerName: dbCar.owner.owner_name,
+                ownerPhone: dbCar.owner.owner_phone || undefined,
+                internalRef: dbCar.owner.internal_ref || undefined,
+                commissionType: dbCar.owner.commission_type === 'amount' ? 'amount' : 'percentage',
+                commissionValue: Number(dbCar.owner.commission_value || 0),
+              }
+            : null,
+        })));
+      }
+
+      if (expensesResult.success && expensesResult.expenses) {
+        setVehicleExpenses(expensesResult.expenses);
+      }
+
+      // Set reservations for alerts
+      if (Array.isArray(reservationsResult)) {
+        setReservations(reservationsResult);
+      }
+
+      // Map database stats to component state
+      setStats({
+        totalRevenue: dbStats.totalRevenue,
+        totalClients: dbStats.totalClients,
+        totalCars: dbStats.totalCars,
+        activeReservations: dbStats.activeReservations,
+        maintenanceAlerts: dbStats.maintenanceAlerts,
+        monthlyRevenue: dbStats.monthlyRevenue || 0,
+        totalReservations: dbStats.totalReservations || 0,
+        availableCars: dbStats.availableCars || 0,
+        personalCars: dbStats.personalCars || 0,
+        consignmentCars: dbStats.consignmentCars || 0,
+        overduePayments: dbStats.overduePayments || 0,
+        recentReservations: dbStats.recentReservations || [],
+        revenueByMonth: dbStats.revenueByMonth || [],
+        carUtilization: dbStats.carUtilization || []
+      });
+
+      setLoading(false);
+      setRefreshing(false);
+    } catch (err: any) {
+      console.error('Error loading dashboard data:', err);
+      setError(err.message || 'Failed to load dashboard data');
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  // Chargement UNIQUE à l'arrivée sur la page — aucun rafraîchissement
+  // automatique. Le bouton « Actualiser » relance le chargement à la demande.
   useEffect(() => {
-    // Skip loading if authentication is still in progress or user not available
     if (isAuthLoading) return;
     if (!user) return;
-
-    const loadDashboardData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-
-        // Fetch real data from database in parallel
-        const [dbStats, dbAlerts, carsResult, expensesResult, reservationsResult] = await Promise.all([
-          DatabaseService.getDashboardStats(),
-          DatabaseService.getMaintenanceAlerts(),
-          getCars(),
-          getVehicleExpenses(),
-          ReservationsService.getReservations()
-        ]);
-
-        // Set cars and expenses for vidange alerts
-        if (carsResult.success && carsResult.cars) {
-          setCars(carsResult.cars.map(dbCar => ({
-            id: dbCar.id || '',
-            brand: dbCar.brand,
-            model: dbCar.model,
-            registration: dbCar.plate_number,
-            year: dbCar.year,
-            color: dbCar.color || 'Premium',
-            vin: dbCar.vin || '',
-            energy: dbCar.energy || 'Essence',
-            transmission: dbCar.transmission || 'Automatique',
-            seats: dbCar.seats || 5,
-            doors: dbCar.doors || 4,
-            priceDay: Math.round(Number(dbCar.price_per_day)),
-            priceWeek: Math.round(Number(dbCar.price_week || dbCar.price_per_day * 2)),
-            priceMonth: Math.round(Number(dbCar.price_month || dbCar.price_per_day * 4)),
-            deposit: Math.round(Number(dbCar.deposit || dbCar.price_per_day * 2)),
-            images: dbCar.image_url ? [dbCar.image_url] : ['https://picsum.photos/seed/car/400/300'],
-            mileage: dbCar.mileage || 0,
-          })));
-        }
-
-        if (expensesResult.success && expensesResult.expenses) {
-          setVehicleExpenses(expensesResult.expenses);
-        }
-
-        // Set reservations for alerts
-        if (Array.isArray(reservationsResult)) {
-          setReservations(reservationsResult);
-        }
-
-        // Map database stats to component state
-        setStats({
-          totalRevenue: dbStats.totalRevenue,
-          totalExpenses: dbStats.totalExpenses,
-          netProfit: dbStats.netProfit,
-          totalClients: dbStats.totalClients,
-          totalCars: dbStats.totalCars,
-          activeReservations: dbStats.activeReservations,
-          maintenanceAlerts: dbStats.maintenanceAlerts,
-          // Use actual data from database
-          monthlyRevenue: dbStats.monthlyRevenue || 0,
-          totalReservations: dbStats.totalReservations || 0,
-          availableCars: dbStats.availableCars || 0,
-          overduePayments: dbStats.overduePayments || 0,
-          recentReservations: dbStats.recentReservations || [],
-          revenueByMonth: dbStats.revenueByMonth || [],
-          carUtilization: dbStats.carUtilization || []
-        });
-
-        setAlerts(dbAlerts);
-
-        setLoading(false);
-      } catch (err: any) {
-        console.error('Error loading dashboard data:', err);
-        setError(err.message || 'Failed to load dashboard data');
-        setLoading(false);
-      }
-    };
-
     loadDashboardData();
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
-
-    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, isAuthLoading]);
 
   // Schedule notifications for reservations expiring tomorrow
@@ -421,27 +191,23 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ lang, isAuthLoadin
       const clientName = `${alert.reservation.client.firstName} ${alert.reservation.client.lastName}`;
       const vehicleName = `${alert.reservation.car.brand} ${alert.reservation.car.model}`;
       const message = `La réservation de ${clientName} pour ${vehicleName} expire demain!`;
-      
+
       scheduleNotification(alert.reservationId, returnDate, message);
     });
-
-    console.log(`[Dashboard] Scheduled ${expiringTomorrowAlerts.length} notification(s) for expiring reservations`);
   }, [reservations]);
 
-  // Check and trigger scheduled notifications every minute
+  // Déclenche les notifications navigateur planifiées. Cette boucle ne touche
+  // AUCUN état React : elle ne provoque donc aucun re-render / refresh de l'UI.
   useEffect(() => {
+    checkAndTriggerScheduledNotifications();
     const notificationCheckInterval = setInterval(() => {
       checkAndTriggerScheduledNotifications();
-    }, 60000); // Check every minute
-
-    // Check immediately on mount
-    checkAndTriggerScheduledNotifications();
-
+    }, 60000);
     return () => clearInterval(notificationCheckInterval);
   }, []);
 
-  // Filter maintenance alerts by status (exclude 'ok' status which means resolved)
-  const maintenanceAlerts = cars
+  // ── Alertes maintenance (vidange / assurance / contrôle / chaîne) ──────────
+  const maintenanceAlerts = useMemo(() => cars
     .flatMap(car => [
       { type: 'vidange', alert: getVidangeAlert(car, vehicleExpenses), car },
       { type: 'assurance', alert: getAssuranceAlert(car, vehicleExpenses), car },
@@ -461,31 +227,65 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ lang, isAuthLoadin
       dueDate: (item.alert as any).expirationDate || null,
       currentMileage: (item.alert as any).currentMileage || 0,
       nextServiceMileage: (item.alert as any).nextVidangeKm || 0,
-      isExpired: (item.alert as any).status === 'overdue'
-    } as MaintenanceAlert));
+      isExpired: (item.alert as any).status === 'overdue',
+      createdAt: new Date().toISOString()
+    } as MaintenanceAlert)), [cars, vehicleExpenses]);
 
-  const reservationAlerts = getReservationAlerts(reservations);
+  const reservationAlerts = useMemo(() => getReservationAlerts(reservations), [reservations]);
 
-  // Commandes du site public en attente d'acceptation par l'agence.
+  // Commandes du site public en attente d'acceptation par l'agence
+  // (statut dédié 'website_reservation').
   const pendingWebOrdersCount = reservations.filter(
-    r => r.source === 'website' && r.status === 'pending'
+    r => r.source === 'website' && (r.status as string) === 'website_reservation'
   ).length;
 
-  // Apply alert filter
-  let visibleAlerts = maintenanceAlerts;
-  let visibleResAlerts = reservationAlerts;
-  
-  if (alertFilter === 'maintenance') {
-    visibleResAlerts = [];
-  } else if (alertFilter === 'reservations') {
-    visibleAlerts = [];
-  }
+  // ── File unifiée des notifications, triée par sévérité ─────────────────────
+  const severityRank: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+  type UnifiedAlert =
+    | { kind: 'maintenance'; severity: string; data: MaintenanceAlert }
+    | { kind: 'reservation'; severity: string; data: ReservationAlert };
 
-  const criticalAlerts = visibleAlerts.filter(a => a.severity === 'critical');
-  const highAlerts = visibleAlerts.filter(a => a.severity === 'high');
-  const otherAlerts = visibleAlerts.filter(a => a.severity !== 'critical' && a.severity !== 'high');
+  const unifiedAlerts: UnifiedAlert[] = useMemo(() => {
+    const list: UnifiedAlert[] = [
+      ...maintenanceAlerts.map(a => ({ kind: 'maintenance' as const, severity: a.severity, data: a })),
+      ...reservationAlerts.map(a => ({ kind: 'reservation' as const, severity: a.severity, data: a })),
+    ];
+    return list.sort((a, b) => (severityRank[a.severity] ?? 9) - (severityRank[b.severity] ?? 9));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [maintenanceAlerts, reservationAlerts]);
 
-  const handleAlertClick = (alert: MaintenanceAlert) => {
+  const filteredAlerts = unifiedAlerts.filter(a =>
+    alertFilter === 'all' ? true : alertFilter === 'maintenance' ? a.kind === 'maintenance' : a.kind === 'reservation'
+  );
+  const displayedAlerts = showAllAlerts ? filteredAlerts : filteredAlerts.slice(0, 6);
+
+  const criticalCount = unifiedAlerts.filter(a => a.severity === 'critical').length;
+  const highCount = unifiedAlerts.filter(a => a.severity === 'high').length;
+
+  // ── Parc scindé : véhicules de l'agence / véhicules confiés (conciergerie) ──
+  const personalCarsList    = cars.filter(c => c.ownershipType !== 'consignment');
+  const consignmentCarsList = cars.filter(c => c.ownershipType === 'consignment');
+
+  /** Disponible = ni en maintenance, ni couvert aujourd'hui par une réservation en cours. */
+  const countAvailable = (list: Car[]) => {
+    const today = new Date().toISOString().substring(0, 10);
+    const busyCarIds = new Set(
+      reservations
+        .filter(r => ['pending', 'confirmed', 'active'].includes(r.status))
+        .filter(r => {
+          const dep = (r.step1?.departureDate || '').substring(0, 10);
+          const ret = (r.step1?.returnDate || '').substring(0, 10);
+          return dep <= today && today <= ret;
+        })
+        .map(r => r.carId || r.car?.id)
+    );
+    return list.filter(c => c.status !== 'maintenance' && !busyCarIds.has(c.id)).length;
+  };
+
+  const personalAvailableCount    = countAvailable(personalCarsList);
+  const consignmentAvailableCount = countAvailable(consignmentCarsList);
+
+  const handleMaintenanceAlertClick = (alert: MaintenanceAlert) => {
     // Navigate to maintenance page with pre-selected car and expense type
     navigate('/maintenance', {
       state: {
@@ -495,6 +295,17 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ lang, isAuthLoadin
       }
     });
   };
+
+  const handleReservationAlertClick = (alert: ReservationAlert) => {
+    navigate('/planificateur', {
+      state: {
+        selectedReservationId: alert.reservationId,
+        viewMode: 'details'
+      }
+    });
+  };
+
+  const fmtDA = (n: number) => `${Math.round(n).toLocaleString()} DA`;
 
   if (loading) {
     return (
@@ -519,1273 +330,569 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ lang, isAuthLoadin
           <h3 className="text-xl font-bold text-saas-text-main mb-2">
             {lang === 'fr' ? 'Erreur de chargement' : 'خطأ في التحميل'}
           </h3>
-          <p className="text-saas-text-muted">{error}</p>
+          <p className="text-saas-text-muted mb-6">{error}</p>
+          <button
+            onClick={() => loadDashboardData(true)}
+            className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors"
+          >
+            {lang === 'fr' ? 'Réessayer' : 'إعادة المحاولة'}
+          </button>
         </div>
       </div>
     );
   }
 
-  return (
-    <div className="space-y-8">
-      {/* Alerte : nouvelles commandes du site web en attente d'acceptation */}
-      <AnimatePresence>
-        {pendingWebOrdersCount > 0 && (
-          <motion.button
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            onClick={() => navigate('/planner', { state: { openWebOrders: true } })}
-            className="w-full flex items-center gap-4 bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 rounded-3xl px-6 py-5 text-left text-white shadow-xl shadow-indigo-500/20 transition-all"
-          >
-            <motion.span
-              animate={{ scale: [1, 1.2, 1], rotate: [0, -8, 8, 0] }}
-              transition={{ duration: 1.5, repeat: Infinity }}
-              className="text-3xl flex-shrink-0"
-            >
-              🔔
-            </motion.span>
-            <div className="flex-1">
-              <p className="font-black text-lg uppercase tracking-tight">
-                {lang === 'fr'
-                  ? `${pendingWebOrdersCount} nouvelle${pendingWebOrdersCount > 1 ? 's' : ''} commande${pendingWebOrdersCount > 1 ? 's' : ''} du site web`
-                  : `${pendingWebOrdersCount} طلب جديد من الموقع`}
-              </p>
-              <p className="text-indigo-100 text-sm font-medium">
-                {lang === 'fr'
-                  ? 'En attente de votre acceptation — cliquez pour les traiter dans le planificateur'
-                  : 'في انتظار موافقتك — انقر لمعالجتها في المخطط'}
-              </p>
-            </div>
-            <span className="px-5 py-2.5 bg-white/20 backdrop-blur border border-white/30 font-bold rounded-xl text-sm whitespace-nowrap">
-              {lang === 'fr' ? 'Traiter →' : 'معالجة →'}
-            </span>
-          </motion.button>
-        )}
-      </AnimatePresence>
+  const kpiCards = [
+    {
+      key: 'revenue',
+      label: lang === 'fr' ? 'Revenus du mois' : 'إيرادات الشهر',
+      value: fmtDA(stats.monthlyRevenue),
+      sub: lang === 'fr' ? `Total encaissé : ${fmtDA(stats.totalRevenue)}` : `الإجمالي : ${fmtDA(stats.totalRevenue)}`,
+      icon: <TrendingUp size={22} />,
+      accent: 'bg-blue-600',
+      soft: 'bg-blue-50 text-blue-700',
+    },
+    {
+      key: 'reservations',
+      label: lang === 'fr' ? 'Réservations actives' : 'الحجوزات النشطة',
+      value: `${stats.activeReservations}`,
+      sub: lang === 'fr' ? `${stats.totalReservations} au total` : `${stats.totalReservations} إجمالاً`,
+      icon: <Calendar size={22} />,
+      accent: 'bg-indigo-600',
+      soft: 'bg-indigo-50 text-indigo-700',
+    },
+    {
+      key: 'cars',
+      label: lang === 'fr' ? 'Véhicules disponibles' : 'المركبات المتاحة',
+      value: `${stats.availableCars}/${stats.totalCars}`,
+      sub: lang === 'fr'
+        ? `${stats.personalCars} agence · ${stats.consignmentCars} conciergerie`
+        : `${stats.personalCars} وكالة · ${stats.consignmentCars} أمانة`,
+      icon: <CarFront size={22} />,
+      accent: 'bg-emerald-600',
+      soft: 'bg-emerald-50 text-emerald-700',
+    },
+    {
+      key: 'clients',
+      label: lang === 'fr' ? 'Clients' : 'العملاء',
+      value: `${stats.totalClients}`,
+      sub: lang === 'fr' ? `${unifiedAlerts.length} alerte(s) en cours` : `${unifiedAlerts.length} تنبيه جارٍ`,
+      icon: <Users size={22} />,
+      accent: 'bg-violet-600',
+      soft: 'bg-violet-50 text-violet-700',
+    },
+  ];
 
-      {/* Alert Filter Controls - Simple & Clean Design */}
-      <div className="space-y-3">
-        <h3 className="text-sm font-bold text-saas-text-main uppercase tracking-widest">
-          {lang === 'fr' ? 'Filtrer les alertes' : 'تصفية التنبيهات'}
-        </h3>
-        
-        <div className="flex flex-wrap gap-3">
-          <motion.button
-            whileHover={{ y: -2, scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => setAlertFilter('all')}
-            className={`px-6 py-3 rounded-xl font-bold text-sm uppercase tracking-wide transition-all duration-300 flex items-center gap-2 border-2 ${
-              alertFilter === 'all'
-                ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white border-transparent shadow-lg shadow-blue-500/30'
-                : 'bg-white/5 border-blue-200/30 text-blue-100 hover:bg-white/10 hover:border-blue-300/50'
-            }`}
+  return (
+    <div className="space-y-6">
+
+      {/* ════ EN-TÊTE ════ */}
+      <div className="relative overflow-hidden bg-gradient-to-r from-slate-900 via-blue-950 to-indigo-950 px-8 py-7 rounded-3xl text-white shadow-xl">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full -translate-y-32 translate-x-32" />
+        <div className="absolute bottom-0 left-1/3 w-40 h-40 bg-indigo-500/10 rounded-full translate-y-20" />
+        <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-5">
+          <div>
+            <h1 className="text-3xl font-black tracking-tight flex items-center gap-3">
+              <span className="w-11 h-11 rounded-2xl bg-white/10 border border-white/15 flex items-center justify-center text-2xl">📊</span>
+              {lang === 'fr' ? 'Tableau de Bord' : 'لوحة القيادة'}
+            </h1>
+            <p className="text-blue-200/80 text-sm font-medium mt-2 capitalize">
+              {new Date().toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'ar-DZ', {
+                weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+              })}
+            </p>
+          </div>
+          <button
+            onClick={() => loadDashboardData(true)}
+            disabled={refreshing}
+            className="self-start md:self-auto flex items-center gap-2 px-5 py-2.5 bg-white/10 hover:bg-white/20 disabled:opacity-60 border border-white/15 rounded-xl font-bold text-sm transition-colors"
+            title={lang === 'fr' ? 'Recharger les données' : 'إعادة تحميل البيانات'}
           >
-            <span className="text-xl">📋</span>
-            <span>{lang === 'fr' ? 'Toutes' : 'الجميع'}</span>
-          </motion.button>
-          
-          <motion.button
-            whileHover={{ y: -2, scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => setAlertFilter('maintenance')}
-            className={`px-6 py-3 rounded-xl font-bold text-sm uppercase tracking-wide transition-all duration-300 flex items-center gap-2 border-2 ${
-              alertFilter === 'maintenance'
-                ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white border-transparent shadow-lg shadow-emerald-500/30'
-                : 'bg-white/5 border-emerald-200/30 text-emerald-100 hover:bg-white/10 hover:border-emerald-300/50'
-            }`}
-          >
-            <span className="text-xl">🔧</span>
-            <span>{lang === 'fr' ? 'Maintenance' : 'الصيانة'}</span>
-          </motion.button>
-          
-          <motion.button
-            whileHover={{ y: -2, scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => setAlertFilter('reservations')}
-            className={`px-6 py-3 rounded-xl font-bold text-sm uppercase tracking-wide transition-all duration-300 flex items-center gap-2 border-2 ${
-              alertFilter === 'reservations'
-                ? 'bg-gradient-to-r from-cyan-500 to-sky-600 text-white border-transparent shadow-lg shadow-cyan-500/30'
-                : 'bg-white/5 border-cyan-200/30 text-cyan-100 hover:bg-white/10 hover:border-cyan-300/50'
-            }`}
-          >
-            <span className="text-xl">📅</span>
-            <span>{lang === 'fr' ? 'Réservations' : 'الحجوزات'}</span>
-          </motion.button>
+            <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
+            {lang === 'fr' ? 'Actualiser' : 'تحديث'}
+          </button>
         </div>
       </div>
 
-      {/* Vidange Alerts Section */}
-      {(alertFilter === 'all' || alertFilter === 'maintenance') && (
-      <div
-        className="relative"
-      >
-        {(() => {
-          const vidangeAlerts = cars
-            .map(car => ({
-              car,
-              alert: getVidangeAlert(car, vehicleExpenses)
-            }))
-            .filter(item => item.alert !== null && item.alert.status !== 'ok');
-
-          if (vidangeAlerts.length === 0) return null;
-
-          const overdueAlerts = vidangeAlerts.filter(item => item.alert?.status === 'overdue');
-          const warningAlerts = vidangeAlerts.filter(item => item.alert?.status === 'warning');
-
-          return (
-            <>
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-4">
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.5, delay: 0.2 }}
-                    className="relative"
-                  >
-                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg ${
-                      overdueAlerts.length > 0
-                        ? 'bg-gradient-to-br from-red-500 to-red-600'
-                        : 'bg-gradient-to-br from-amber-500 to-amber-600'
-                    }`}>
-                      <span className="text-2xl">🛢️</span>
-                    </div>
-                    {(overdueAlerts.length > 0 || warningAlerts.length > 0) && (
-                      <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full animate-pulse"></div>
-                    )}
-                  </motion.div>
-                  <div>
-                    <h2 className="text-2xl font-black text-saas-text-main uppercase tracking-tighter">
-                      {lang === 'fr' ? 'Alertes Vidange' : 'تنبيهات الصيانة'}
-                    </h2>
-                    <p className="text-saas-text-muted font-medium">
-                      {overdueAlerts.length} {lang === 'fr' ? 'en retard' : 'متأخرة'}, {warningAlerts.length} {lang === 'fr' ? 'avertissements' : 'تحذيرات'}
-                    </p>
-                  </div>
-                </div>
+      {/* ════ NOTIFICATIONS & ALERTES — EN HAUT DE L'INTERFACE ════ */}
+      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 px-6 py-5 border-b border-slate-100 bg-slate-50/60">
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center shadow-md shadow-blue-600/20">
+                <Bell size={20} className="text-white" />
               </div>
+              {(criticalCount > 0 || pendingWebOrdersCount > 0) && (
+                <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 border-2 border-white rounded-full animate-pulse" />
+              )}
+            </div>
+            <div>
+              <h2 className="text-lg font-black text-slate-900 tracking-tight">
+                {lang === 'fr' ? 'Alertes & Notifications' : 'التنبيهات والإشعارات'}
+              </h2>
+              <p className="text-xs font-semibold text-slate-500">
+                {unifiedAlerts.length === 0
+                  ? (lang === 'fr' ? 'Tout est en ordre' : 'كل شيء على ما يرام')
+                  : lang === 'fr'
+                    ? `${unifiedAlerts.length} alerte(s) — ${criticalCount} critique(s), ${highCount} élevée(s)`
+                    : `${unifiedAlerts.length} تنبيه — ${criticalCount} حرج، ${highCount} مرتفع`}
+              </p>
+            </div>
+          </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {vidangeAlerts.map((item, index) => {
-                  const { car, alert } = item;
-                  if (!alert) return null;
-
-                  return (
-                    <motion.div
-                      key={car.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: index * 0.1 }}
-                      whileHover={{ scale: 1.02, y: -2 }}
-                      onClick={() => {
-                        navigate('/maintenance', {
-                          state: {
-                            selectedCarId: car.id,
-                            expenseType: 'vidange',
-                            showExpenseModal: true
-                          }
-                        });
-                      }}
-                      className={`p-5 rounded-2xl border-2 flex flex-col gap-3 cursor-pointer transition-all ${
-                        alert.status === 'overdue'
-                          ? 'bg-red-50 border-red-300 hover:shadow-red-200'
-                          : alert.status === 'warning'
-                          ? 'bg-amber-50 border-amber-300 hover:shadow-amber-200'
-                          : 'bg-green-50 border-green-300 hover:shadow-green-200'
-                      } shadow-lg hover:shadow-2xl`}
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <p className={`font-black text-sm uppercase tracking-tight ${
-                            alert.status === 'overdue'
-                              ? 'text-red-700'
-                              : alert.status === 'warning'
-                              ? 'text-amber-700'
-                              : 'text-green-700'
-                          }`}>
-                            {car.brand} {car.model}
-                          </p>
-                          <p className="text-xs text-gray-600 mt-1">{car.registration}</p>
-                        </div>
-                        <AlertCircle className={`flex-shrink-0 ${
-                          alert.status === 'overdue'
-                            ? 'text-red-600'
-                            : alert.status === 'warning'
-                            ? 'text-amber-600'
-                            : 'text-green-600'
-                        }`} size={20} />
-                      </div>
-                      <p className={`text-xs font-bold ${
-                        alert.status === 'overdue'
-                          ? 'text-red-600'
-                          : alert.status === 'warning'
-                          ? 'text-amber-600'
-                          : 'text-green-600'
-                      }`}>
-                        {alert.message}
-                      </p>
-                      <p className="text-xs text-gray-600 border-t pt-2">
-                        Kilométrage: {alert.currentMileage.toLocaleString()} / {alert.nextVidangeKm.toLocaleString()} KM
-                      </p>
-                    </motion.div>
-                  );
-                })}
-              </div>
-            </>
-          );
-        })()}
-      </div>
-      )}
-
-      {/* Assurance Alerts Section */}
-      {(alertFilter === 'all' || alertFilter === 'maintenance') && (
-      <div className="relative">
-        {(() => {
-          const assuranceAlerts = cars
-            .map(car => ({
-              car,
-              alert: getAssuranceAlert(car, vehicleExpenses)
-            }))
-            .filter(item => item.alert !== null && item.alert.status !== 'ok');
-
-          if (assuranceAlerts.length === 0) return null;
-
-          const expiredAlerts = assuranceAlerts.filter(item => item.alert?.status === 'overdue');
-          const warningAlerts = assuranceAlerts.filter(item => item.alert?.status === 'warning');
-          const okAlerts = assuranceAlerts.filter(item => item.alert?.status === 'ok');
-
-          return (
-            <>
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-4">
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.5, delay: 0.2 }}
-                    className="relative"
-                  >
-                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg ${
-                      expiredAlerts.length > 0
-                        ? 'bg-gradient-to-br from-red-500 to-red-600'
-                        : 'bg-gradient-to-br from-blue-500 to-blue-600'
-                    }`}>
-                      <span className="text-2xl">🛡️</span>
-                    </div>
-                    {(expiredAlerts.length > 0 || warningAlerts.length > 0) && (
-                      <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full animate-pulse"></div>
-                    )}
-                  </motion.div>
-                  <div>
-                    <h2 className="text-2xl font-black text-saas-text-main uppercase tracking-tighter">
-                      {lang === 'fr' ? 'Alertes Assurance' : 'تنبيهات التأمين'}
-                    </h2>
-                    <p className="text-saas-text-muted font-medium">
-                      {expiredAlerts.length} {lang === 'fr' ? 'expirées' : 'منتهية الصلاحية'}, {warningAlerts.length} {lang === 'fr' ? 'avertissements' : 'تحذيرات'}, {okAlerts.length} {lang === 'fr' ? 'valides' : 'صحيحة'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {assuranceAlerts.map((item, index) => {
-                  const { car, alert } = item;
-                  if (!alert) return null;
-
-                  return (
-                    <motion.div
-                      key={car.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: index * 0.1 }}
-                      whileHover={{ scale: 1.02, y: -2 }}
-                      onClick={() => {
-                        navigate('/maintenance', {
-                          state: {
-                            selectedCarId: car.id,
-                            expenseType: 'assurance',
-                            showExpenseModal: true
-                          }
-                        });
-                      }}
-                      className={`p-5 rounded-2xl border-2 flex flex-col gap-3 cursor-pointer transition-all ${
-                        alert.status === 'overdue'
-                          ? 'bg-red-50 border-red-300 hover:shadow-red-200'
-                          : alert.status === 'warning'
-                          ? 'bg-amber-50 border-amber-300 hover:shadow-amber-200'
-                          : 'bg-green-50 border-green-300 hover:shadow-green-200'
-                      } shadow-lg hover:shadow-2xl`}
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <p className={`font-black text-sm uppercase tracking-tight ${
-                            alert.status === 'overdue'
-                              ? 'text-red-700'
-                              : alert.status === 'warning'
-                              ? 'text-amber-700'
-                              : 'text-green-700'
-                          }`}>
-                            {car.brand} {car.model}
-                          </p>
-                          <p className="text-xs text-gray-600 mt-1">{car.registration}</p>
-                        </div>
-                        <Shield className={`flex-shrink-0 ${
-                          alert.status === 'overdue'
-                            ? 'text-red-600'
-                            : alert.status === 'warning'
-                            ? 'text-amber-600'
-                            : 'text-green-600'
-                        }`} size={20} />
-                      </div>
-                      <p className={`text-xs font-bold ${
-                        alert.status === 'overdue'
-                          ? 'text-red-600'
-                          : alert.status === 'warning'
-                          ? 'text-amber-600'
-                          : 'text-green-600'
-                      }`}>
-                        {alert.message}
-                      </p>
-                      <div className="text-xs text-gray-600 border-t pt-2 space-y-1">
-                        <p>
-                          {lang === 'fr' ? 'Expiration:' : 'الانتهاء:'} {alert.expirationDate ? new Date(alert.expirationDate).toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'ar-SA') : 'N/A'}
-                        </p>
-                        <p>
-                          {(alert.daysRemaining ?? 0) >= 0
-                            ? `${lang === 'fr' ? 'Jours restants:' : 'الأيام المتبقية:'} ${alert.daysRemaining}`
-                            : `${lang === 'fr' ? 'Jours expirés:' : 'الأيام المنتهية:'} ${Math.abs(alert.daysRemaining ?? 0)}`
-                          }
-                        </p>
-                      </div>
-                    </motion.div>
-                  );
-                })}
-              </div>
-            </>
-          );
-        })()}
-      </div>
-      )}
-
-      {/* Controle Technique Alerts Section */}
-      {(alertFilter === 'all' || alertFilter === 'maintenance') && (
-      <div className="relative">
-        {(() => {
-          const controleAlerts = cars
-            .map(car => ({
-              car,
-              alert: getControleAlert(car, vehicleExpenses)
-            }))
-            .filter(item => item.alert !== null && item.alert.status !== 'ok');
-
-          if (controleAlerts.length === 0) return null;
-
-          const expiredAlerts = controleAlerts.filter(item => item.alert?.status === 'overdue');
-          const warningAlerts = controleAlerts.filter(item => item.alert?.status === 'warning');
-          const okAlerts = controleAlerts.filter(item => item.alert?.status === 'ok');
-
-          return (
-            <>
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-4">
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.5, delay: 0.2 }}
-                    className="relative"
-                  >
-                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg ${
-                      expiredAlerts.length > 0
-                        ? 'bg-gradient-to-br from-red-500 to-red-600'
-                        : 'bg-gradient-to-br from-purple-500 to-purple-600'
-                    }`}>
-                      <span className="text-2xl">🔍</span>
-                    </div>
-                    {(expiredAlerts.length > 0 || warningAlerts.length > 0) && (
-                      <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full animate-pulse"></div>
-                    )}
-                  </motion.div>
-                  <div>
-                    <h2 className="text-2xl font-black text-saas-text-main uppercase tracking-tighter">
-                      {lang === 'fr' ? 'Alertes Contrôle Technique' : 'تنبيهات الفحص الفني'}
-                    </h2>
-                    <p className="text-saas-text-muted font-medium">
-                      {expiredAlerts.length} {lang === 'fr' ? 'expirées' : 'منتهية الصلاحية'}, {warningAlerts.length} {lang === 'fr' ? 'avertissements' : 'تحذيرات'}, {okAlerts.length} {lang === 'fr' ? 'valides' : 'صحيحة'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {controleAlerts.map((item, index) => {
-                  const { car, alert } = item;
-                  if (!alert) return null;
-
-                  return (
-                    <motion.div
-                      key={car.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: index * 0.1 }}
-                      whileHover={{ scale: 1.02, y: -2 }}
-                      onClick={() => {
-                        navigate('/maintenance', {
-                          state: {
-                            selectedCarId: car.id,
-                            expenseType: 'controle',
-                            showExpenseModal: true
-                          }
-                        });
-                      }}
-                      className={`p-5 rounded-2xl border-2 flex flex-col gap-3 cursor-pointer transition-all ${
-                        alert.status === 'overdue'
-                          ? 'bg-red-50 border-red-300 hover:shadow-red-200'
-                          : alert.status === 'warning'
-                          ? 'bg-amber-50 border-amber-300 hover:shadow-amber-200'
-                          : 'bg-green-50 border-green-300 hover:shadow-green-200'
-                      } shadow-lg hover:shadow-2xl`}
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <p className={`font-black text-sm uppercase tracking-tight ${
-                            alert.status === 'overdue'
-                              ? 'text-red-700'
-                              : alert.status === 'warning'
-                              ? 'text-amber-700'
-                              : 'text-green-700'
-                          }`}>
-                            {car.brand} {car.model}
-                          </p>
-                          <p className="text-xs text-gray-600 mt-1">{car.registration}</p>
-                        </div>
-                        <FileCheck className={`flex-shrink-0 ${
-                          alert.status === 'overdue'
-                            ? 'text-red-600'
-                            : alert.status === 'warning'
-                            ? 'text-amber-600'
-                            : 'text-green-600'
-                        }`} size={20} />
-                      </div>
-                      <p className={`text-xs font-bold ${
-                        alert.status === 'overdue'
-                          ? 'text-red-600'
-                          : alert.status === 'warning'
-                          ? 'text-amber-600'
-                          : 'text-green-600'
-                      }`}>
-                        {alert.message}
-                      </p>
-                      <div className="text-xs text-gray-600 border-t pt-2 space-y-1">
-                        <p>
-                          {lang === 'fr' ? 'Expiration:' : 'الانتهاء:'} {alert.expirationDate ? new Date(alert.expirationDate).toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'ar-SA') : 'N/A'}
-                        </p>
-                        <p>
-                          {(alert.daysRemaining ?? 0) >= 0
-                            ? `${lang === 'fr' ? 'Jours restants:' : 'الأيام المتبقية:'} ${alert.daysRemaining}`
-                            : `${lang === 'fr' ? 'Jours expirés:' : 'الأيام المنتهية:'} ${Math.abs(alert.daysRemaining ?? 0)}`
-                          }
-                        </p>
-                      </div>
-                    </motion.div>
-                  );
-                })}
-              </div>
-            </>
-          );
-        })()}
-      </div>
-      )}
-
-      {/* Chaîne (Chain/Belt) Alerts Section */}
-      {(alertFilter === 'all' || alertFilter === 'maintenance') && (
-      <div className="relative">
-        {(() => {
-          const chaineAlerts = cars
-            .map(car => ({
-              car,
-              alert: getChaineAlert(car, vehicleExpenses)
-            }))
-            .filter(item => item.alert !== null && item.alert.status !== 'ok');
-
-          if (chaineAlerts.length === 0) return null;
-
-          const overdueAlerts = chaineAlerts.filter(item => item.alert?.status === 'overdue');
-          const warningAlerts = chaineAlerts.filter(item => item.alert?.status === 'warning');
-
-          return (
-            <>
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-4">
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.5, delay: 0.2 }}
-                    className="relative"
-                  >
-                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg ${
-                      overdueAlerts.length > 0
-                        ? 'bg-gradient-to-br from-red-500 to-red-600'
-                        : 'bg-gradient-to-br from-orange-500 to-orange-600'
-                    }`}>
-                      <span className="text-2xl">⛓️</span>
-                    </div>
-                    {(overdueAlerts.length > 0 || warningAlerts.length > 0) && (
-                      <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full animate-pulse"></div>
-                    )}
-                  </motion.div>
-                  <div>
-                    <h2 className="text-2xl font-black text-saas-text-main uppercase tracking-tighter">
-                      {lang === 'fr' ? 'Alertes Chaîne / Courroie' : 'تنبيهات السلسلة / التيمي'}
-                    </h2>
-                    <p className="text-saas-text-muted font-medium">
-                      {overdueAlerts.length} {lang === 'fr' ? 'en retard' : 'متأخرة'}, {warningAlerts.length} {lang === 'fr' ? 'avertissements' : 'تحذيرات'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {chaineAlerts.map((item, index) => {
-                  const { car, alert } = item;
-                  if (!alert) return null;
-
-                  return (
-                    <motion.div
-                      key={car.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: index * 0.1 }}
-                      whileHover={{ scale: 1.02, y: -2 }}
-                      onClick={() => {
-                        navigate('/maintenance', {
-                          state: {
-                            selectedCarId: car.id,
-                            expenseType: 'chaine',
-                            showExpenseModal: true
-                          }
-                        });
-                      }}
-                      className={`p-5 rounded-2xl border-2 flex flex-col gap-3 cursor-pointer transition-all ${
-                        alert.status === 'overdue'
-                          ? 'bg-red-50 border-red-300 hover:shadow-red-200'
-                          : alert.status === 'warning'
-                          ? 'bg-amber-50 border-amber-300 hover:shadow-amber-200'
-                          : 'bg-green-50 border-green-300 hover:shadow-green-200'
-                      } shadow-lg hover:shadow-2xl`}
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <p className={`font-black text-sm uppercase tracking-tight ${
-                            alert.status === 'overdue'
-                              ? 'text-red-700'
-                              : alert.status === 'warning'
-                              ? 'text-amber-700'
-                              : 'text-green-700'
-                          }`}>
-                            {car.brand} {car.model}
-                          </p>
-                          <p className="text-xs text-gray-600 mt-1">{car.registration}</p>
-                        </div>
-                        <span className="text-xl flex-shrink-0">⛓️</span>
-                      </div>
-                      <p className={`text-xs font-bold ${
-                        alert.status === 'overdue'
-                          ? 'text-red-600'
-                          : alert.status === 'warning'
-                          ? 'text-amber-600'
-                          : 'text-green-600'
-                      }`}>
-                        {alert.message}
-                      </p>
-                      <p className="text-xs text-gray-600 border-t pt-2">
-                        {lang === 'fr' ? 'Kilométrage:' : 'الكيلومترات:'} {alert.currentMileage.toLocaleString()} / {alert.nextVidangeKm.toLocaleString()} KM
-                      </p>
-                    </motion.div>
-                  );
-                })}
-              </div>
-            </>
-          );
-        })()}
-      </div>
-      )}
-
-      {/* Reservation Alerts Section */}
-      {(alertFilter === 'all' || alertFilter === 'reservations') && reservations && reservations.length > 0 && (() => {
-        const resAlerts = getReservationAlerts(reservations);
-        
-        if (resAlerts.length === 0) return null;
-
-        const criticalResAlerts = resAlerts.filter(a => a.severity === 'critical');
-        const highResAlerts = resAlerts.filter(a => a.severity === 'high');
-        const mediumResAlerts = resAlerts.filter(a => a.severity === 'medium');
-
-        return (
-          <div>
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-4">
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ duration: 0.5, delay: 0.2 }}
-                  className="relative"
-                >
-                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg ${
-                    criticalResAlerts.length > 0
-                      ? 'bg-gradient-to-br from-red-600 to-rose-600'
-                      : highResAlerts.length > 0
-                      ? 'bg-gradient-to-br from-orange-500 to-red-600'
-                      : 'bg-gradient-to-br from-yellow-500 to-orange-600'
-                  }`}>
-                    <span className="text-2xl">🚗</span>
-                  </div>
-                  {resAlerts.length > 0 && (
-                    <motion.div
-                      animate={{ scale: [1, 1.2, 1] }}
-                      transition={{ duration: 1.5, repeat: Infinity }}
-                      className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full animate-pulse shadow-lg"
-                    />
-                  )}
-                </motion.div>
-                <div>
-                  <h2 className="text-2xl font-black text-saas-text-main uppercase tracking-tighter">
-                    {lang === 'fr' ? 'Alertes Réservations' : 'تنبيهات الحجوزات'}
-                  </h2>
-                  <p className="text-saas-text-muted font-medium">
-                    {criticalResAlerts.length} {lang === 'fr' ? 'critiques' : 'حرجة'}, {highResAlerts.length} {lang === 'fr' ? 'élevées' : 'عالية'}, {mediumResAlerts.length} {lang === 'fr' ? 'moyennes' : 'متوسطة'}
-                  </p>
-                </div>
-              </div>
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => setShowOnlyReservationAlerts(!showOnlyReservationAlerts)}
-                className={`px-6 py-2 rounded-lg font-bold text-sm uppercase tracking-wide transition-all ${
-                  showOnlyReservationAlerts
-                    ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                    : 'bg-white/20 hover:bg-white/30 text-white border border-white/30'
+          {/* Filtres */}
+          <div className="flex flex-wrap gap-2">
+            {([
+              { id: 'all', label: lang === 'fr' ? 'Toutes' : 'الكل', icon: '📋' },
+              { id: 'maintenance', label: lang === 'fr' ? 'Maintenance' : 'الصيانة', icon: '🔧' },
+              { id: 'reservations', label: lang === 'fr' ? 'Réservations' : 'الحجوزات', icon: '📅' },
+            ] as const).map(f => (
+              <button
+                key={f.id}
+                onClick={() => setAlertFilter(f.id)}
+                className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wide transition-all border ${
+                  alertFilter === f.id
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-600/25'
+                    : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-700'
                 }`}
               >
-                {lang === 'fr' ? '+ Voir Alertes' : '+ عرض التنبيهات'}
-              </motion.button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {resAlerts.map((alert, index) => (
-                <ReservationAlertCard
-                  key={alert.id}
-                  alert={alert}
-                  onAlertClick={(res) => {
-                    console.log('[Reservation Alert] Clicked alert:', res.reservationId, res.id);
-                    navigate('/planner', {
-                      state: {
-                        selectedReservationId: res.reservationId,
-                        viewMode: 'details'
-                      }
-                    });
-                  }}
-                />
-              ))}
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* Enhanced Header with Better Design */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-700 p-8 rounded-3xl text-white shadow-2xl">
-        {/* Animated Background Elements */}
-        <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-16 translate-x-16"></div>
-        <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full translate-y-12 -translate-x-12"></div>
-
-        <div className="relative flex flex-col lg:flex-row lg:items-center justify-between gap-8">
-          <div className="space-y-2">
-            <motion.h1
-              initial={{ x: -50, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              transition={{ delay: 0.4 }}
-              className="text-4xl font-black tracking-tighter uppercase flex items-center gap-4"
-            >
-              <motion.span
-                animate={{ rotate: [0, 10, -10, 0] }}
-                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                className="text-5xl"
-              >
-                📊
-              </motion.span>
-              {lang === 'fr' ? 'Tableau de Bord' : 'لوحة القيادة'}
-            </motion.h1>
-            <motion.p
-              initial={{ x: -50, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              transition={{ delay: 0.6 }}
-              className="text-blue-100 font-bold text-sm uppercase tracking-[0.3em]"
-            >
-              {lang === 'fr' ? 'Vue d\'ensemble Premium' : 'نظرة عامة مميزة'}
-            </motion.p>
-            <motion.p
-              initial={{ x: -50, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              transition={{ delay: 0.8 }}
-              className="text-blue-200 text-sm font-medium mt-3 flex items-center gap-2"
-            >
-              <span className="text-lg">🕐</span>
-              {currentTime.toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'ar-DZ', {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-              })}
-            </motion.p>
-          </div>
-
-          <div className="flex gap-4">
-            <div className="text-center">
-              <div className="text-3xl font-black text-white">
-                {stats.totalClients}
-              </div>
-              <div className="text-xs text-blue-200 uppercase tracking-widest">
-                {lang === 'fr' ? 'Clients' : 'العملاء'}
-              </div>
-            </div>
+                {f.icon} {f.label}
+              </button>
+            ))}
           </div>
         </div>
-      </div>
 
-      {/* Enhanced Key Metrics with Better Gradients */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-
-        <motion.div
-          initial={{ opacity: 0, y: 30, rotateY: -15 }}
-          animate={{ opacity: 1, y: 0, rotateY: 0 }}
-          transition={{ delay: 0.4, type: "spring", stiffness: 100 }}
-          whileHover={{ scale: 1.05, rotateY: 5 }}
-          className="relative overflow-hidden bg-gradient-to-br from-blue-500 via-indigo-600 to-purple-700 p-6 rounded-3xl text-white shadow-2xl hover:shadow-blue-500/25"
-        >
-          <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-10 translate-x-10"></div>
-          <div className="relative flex items-center justify-between">
-            <div>
-              <p className="text-white/90 text-xs font-bold uppercase tracking-[0.2em] mb-2">
-                {lang === 'fr' ? 'Réservations Actives' : 'الحجوزات النشطة'}
-              </p>
-              <p className="text-3xl font-black mb-3">{stats.activeReservations}</p>
-              <div className="flex items-center gap-2">
-                <motion.div
-                  animate={{ rotate: [0, 10, -10, 0] }}
-                  transition={{ duration: 2, repeat: Infinity }}
-                >
-                  📅
-                </motion.div>
-                <span className="text-xs font-bold bg-white/20 px-2 py-1 rounded-full">
-                  {lang === 'fr' ? 'Ce mois' : 'هذا الشهر'}
-                </span>
-              </div>
-            </div>
-            <motion.div
-              animate={{ scale: [1, 1.1, 1] }}
-              transition={{ duration: 2.5, repeat: Infinity }}
-              className="text-6xl opacity-90"
-            >
-              🚗
-            </motion.div>
-          </div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 30, rotateY: -15 }}
-          animate={{ opacity: 1, y: 0, rotateY: 0 }}
-          transition={{ delay: 0.5, type: "spring", stiffness: 100 }}
-          whileHover={{ scale: 1.05, rotateY: 5 }}
-          className="relative overflow-hidden bg-gradient-to-br from-orange-400 via-red-500 to-pink-600 p-6 rounded-3xl text-white shadow-2xl hover:shadow-orange-500/25"
-        >
-          <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-10 translate-x-10"></div>
-          <div className="relative flex items-center justify-between">
-            <div>
-              <p className="text-white/90 text-xs font-bold uppercase tracking-[0.2em] mb-2">
-                {lang === 'fr' ? 'Véhicules Disponibles' : 'المركبات المتاحة'}
-              </p>
-              <p className="text-3xl font-black mb-3">
-                {stats.availableCars}/{stats.totalCars}
-              </p>
-              <div className="flex items-center gap-2">
-                <motion.div
-                  animate={{ x: [0, 5, 0] }}
-                  transition={{ duration: 1.8, repeat: Infinity }}
-                >
-                  🚙
-                </motion.div>
-                <span className="text-xs font-bold bg-white/20 px-2 py-1 rounded-full">
-                  {Math.round((stats.availableCars / stats.totalCars) * 100)}%
-                </span>
-              </div>
-            </div>
-            <motion.div
-              animate={{ scale: [1, 1.1, 1] }}
-              transition={{ duration: 2.2, repeat: Infinity }}
-              className="text-6xl opacity-90"
-            >
-              🏁
-            </motion.div>
-          </div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 30, rotateY: -15 }}
-          animate={{ opacity: 1, y: 0, rotateY: 0 }}
-          transition={{ delay: 0.6, type: "spring", stiffness: 100 }}
-          whileHover={{ scale: 1.05, rotateY: 5 }}
-          className="relative overflow-hidden bg-gradient-to-br from-red-500 via-rose-600 to-pink-700 p-6 rounded-3xl text-white shadow-2xl hover:shadow-red-500/25"
-        >
-          <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-10 translate-x-10"></div>
-          <div className="relative flex items-center justify-between">
-            <div>
-              <p className="text-white/90 text-xs font-bold uppercase tracking-[0.2em] mb-2">
-                {lang === 'fr' ? 'Alertes Maintenance' : 'تنبيهات الصيانة'}
-              </p>
-              <p className="text-3xl font-black mb-3">{stats.maintenanceAlerts}</p>
-              <div className="flex items-center gap-2">
-                <motion.div
-                  animate={{ rotate: [0, -10, 10, 0] }}
-                  transition={{ duration: 1.5, repeat: Infinity }}
-                >
-                  ⚠️
-                </motion.div>
-                <span className="text-xs font-bold bg-white/20 px-2 py-1 rounded-full">
-                  {criticalAlerts.length} {lang === 'fr' ? 'critiques' : 'حرجة'}
-                </span>
-              </div>
-            </div>
-            <motion.div
-              animate={{ scale: [1, 1.2, 1] }}
-              transition={{ duration: 1.8, repeat: Infinity }}
-              className="text-6xl opacity-90"
-            >
-              🔧
-            </motion.div>
-          </div>
-        </motion.div>
-      </div>
-
-      {/* Enhanced Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Revenue Chart with Better Design */}
-        <motion.div
-          initial={{ opacity: 0, x: -50 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.7 }}
-          className="relative overflow-hidden bg-gradient-to-br from-white via-slate-50 to-gray-100 p-8 rounded-3xl border border-slate-200 shadow-xl"
-        >
-          <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-blue-400/20 to-purple-500/20 rounded-full -translate-y-16 translate-x-16"></div>
-
-          <div className="relative">
-            <div className="flex items-center gap-3 mb-8">
-              <motion.div
-                animate={{ y: [0, -5, 0] }}
-                transition={{ duration: 2, repeat: Infinity }}
-                className="text-3xl"
+        <div className="p-5 space-y-3">
+          {/* Nouvelles commandes du site web */}
+          <AnimatePresence>
+            {pendingWebOrdersCount > 0 && (
+              <motion.button
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                onClick={() => navigate('/website-commandes')}
+                className="w-full flex items-center gap-4 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 rounded-2xl px-5 py-4 text-left text-white shadow-lg shadow-indigo-500/20 transition-all"
               >
-                📊
-              </motion.div>
-              <h3 className="text-2xl font-black text-slate-800 uppercase tracking-tighter">
-                {lang === 'fr' ? 'Évolution des Revenus' : 'تطور الإيرادات'}
-              </h3>
-            </div>
-
-            <div className="space-y-6">
-              {stats.revenueByMonth.map((item, index) => (
-                <motion.div
-                  key={item.month}
-                  initial={{ opacity: 0, x: -30 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.8 + index * 0.1 }}
-                  className="flex items-center gap-4 p-4 bg-white/60 backdrop-blur-sm rounded-2xl border border-slate-200 hover:shadow-lg transition-all"
+                <motion.span
+                  animate={{ rotate: [0, -12, 12, 0] }}
+                  transition={{ duration: 1.6, repeat: Infinity }}
+                  className="text-2xl flex-shrink-0"
                 >
-                  <div className="w-12 text-lg font-black text-slate-700 bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent">
-                    {item.month}
-                  </div>
-                  <div className="flex-1">
-                    <div className="bg-slate-200 rounded-full h-4 overflow-hidden shadow-inner">
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: `${(item.revenue / Math.max(...stats.revenueByMonth.map(m => m.revenue))) * 100}%` }}
-                        transition={{ delay: 1 + index * 0.1, duration: 1, ease: "easeOut" }}
-                        className="h-full bg-gradient-to-r from-blue-500 via-indigo-600 to-purple-700 rounded-full shadow-lg"
-                      />
-                    </div>
-                  </div>
-                  <div className="w-24 text-right">
-                    <div className="text-lg font-black text-slate-800">
-                      {item.revenue.toLocaleString()}
-                    </div>
-                    <div className="text-xs text-slate-500 uppercase tracking-widest">
-                      DZD
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          </div>
-        </motion.div>
+                  🔔
+                </motion.span>
+                <div className="flex-1 min-w-0">
+                  <p className="font-black text-sm uppercase tracking-tight">
+                    {lang === 'fr'
+                      ? `${pendingWebOrdersCount} nouvelle${pendingWebOrdersCount > 1 ? 's' : ''} commande${pendingWebOrdersCount > 1 ? 's' : ''} du site web`
+                      : `${pendingWebOrdersCount} طلب جديد من الموقع`}
+                  </p>
+                  <p className="text-indigo-100 text-xs font-medium truncate">
+                    {lang === 'fr'
+                      ? 'En attente de votre acceptation — cliquez pour les traiter'
+                      : 'في انتظار موافقتك — انقر لمعالجتها'}
+                  </p>
+                </div>
+                <span className="px-4 py-2 bg-white/20 border border-white/30 font-bold rounded-xl text-xs whitespace-nowrap">
+                  {lang === 'fr' ? 'Traiter →' : 'معالجة ←'}
+                </span>
+              </motion.button>
+            )}
+          </AnimatePresence>
 
-        {/* Car Utilization with Enhanced Design */}
-        <motion.div
-          initial={{ opacity: 0, x: 50 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.8 }}
-          className="relative overflow-hidden bg-gradient-to-br from-white via-emerald-50 to-teal-100 p-8 rounded-3xl border border-emerald-200 shadow-xl"
-        >
-          <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-emerald-400/20 to-teal-500/20 rounded-full -translate-y-16 translate-x-16"></div>
-
-          <div className="relative">
-            <div className="flex items-center gap-3 mb-8">
-              <motion.div
-                animate={{ rotate: [0, 10, -10, 0] }}
-                transition={{ duration: 3, repeat: Infinity }}
-                className="text-3xl"
-              >
-                🚗
-              </motion.div>
-              <h3 className="text-2xl font-black text-slate-800 uppercase tracking-tighter">
-                {lang === 'fr' ? 'Taux d\'Utilisation' : 'معدلات الاستخدام'}
-              </h3>
-            </div>
-
-            <div className="space-y-6">
-              {stats.carUtilization.map((car, index) => (
-                <motion.div
-                  key={car.carId}
-                  initial={{ opacity: 0, x: 30 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.9 + index * 0.1 }}
-                  className="p-4 bg-white/60 backdrop-blur-sm rounded-2xl border border-emerald-200 hover:shadow-lg transition-all"
-                >
-                  <div className="flex items-center gap-4">
-                    <motion.div
-                      animate={{ scale: [1, 1.1, 1] }}
-                      transition={{ duration: 2, repeat: Infinity, delay: index * 0.5 }}
-                      className="text-2xl"
-                    >
-                      {car.utilization > 80 ? '🔴' : car.utilization > 60 ? '🟠' : '🟢'}
-                    </motion.div>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-bold text-slate-800">{car.carInfo}</span>
-                        <span className="text-lg font-black text-emerald-600">{car.utilization}%</span>
-                      </div>
-                      <div className="bg-emerald-200 rounded-full h-3 overflow-hidden shadow-inner">
-                        <motion.div
-                          initial={{ width: 0 }}
-                          animate={{ width: `${car.utilization}%` }}
-                          transition={{ delay: 1.1 + index * 0.1, duration: 1, ease: "easeOut" }}
-                          className={`h-full rounded-full shadow-lg ${
-                            car.utilization > 80 ? 'bg-gradient-to-r from-red-500 to-red-600' :
-                            car.utilization > 60 ? 'bg-gradient-to-r from-orange-500 to-orange-600' :
-                            'bg-gradient-to-r from-emerald-500 to-teal-600'
-                          }`}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          </div>
-        </motion.div>
-      </div>
-
-      {/* Enhanced Maintenance Alerts */}
-      <motion.div
-        initial={{ opacity: 0, y: 50 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 1 }}
-        className="relative overflow-hidden bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100 p-8 rounded-3xl border border-slate-200 shadow-xl"
-      >
-        <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-br from-slate-400/10 to-gray-500/10 rounded-full -translate-y-20 translate-x-20"></div>
-
-        <div className="relative">
-          <div className="flex items-center justify-between mb-8">
-            <div className="flex items-center gap-4">
-              <motion.div
-                animate={{ rotate: [0, 15, -15, 0] }}
-                transition={{ duration: 2, repeat: Infinity }}
-                className="text-4xl"
-              >
-                🔧
-              </motion.div>
+          {/* Liste unifiée des alertes */}
+          {displayedAlerts.length === 0 && pendingWebOrdersCount === 0 && (
+            <div className="flex items-center gap-4 px-5 py-6 rounded-2xl bg-emerald-50 border border-emerald-100">
+              <span className="text-3xl">✅</span>
               <div>
-                <h3 className="text-2xl font-black text-slate-800 uppercase tracking-tighter">
-                  {lang === 'fr' ? 'Alertes de Maintenance' : 'تنبيهات الصيانة'}
-                </h3>
-                <p className="text-slate-600 text-sm font-medium mt-1">
-                  {lang === 'fr' ? 'Suivi des véhicules et interventions' : 'متابعة المركبات والتدخلات'}
+                <p className="font-black text-emerald-800 text-sm">
+                  {lang === 'fr' ? 'Aucune alerte active' : 'لا توجد تنبيهات نشطة'}
+                </p>
+                <p className="text-xs font-semibold text-emerald-600">
+                  {lang === 'fr' ? 'Véhicules et réservations sous contrôle.' : 'المركبات والحجوزات تحت السيطرة.'}
                 </p>
               </div>
             </div>
+          )}
 
-            <div className="flex gap-3">
-              {criticalAlerts.length > 0 && (
-                <motion.div
-                  animate={{ scale: [1, 1.05, 1] }}
-                  transition={{ duration: 1.5, repeat: Infinity }}
-                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-full text-sm font-bold uppercase shadow-lg"
+          {displayedAlerts.map((item, index) => {
+            const theme = severityTheme(item.severity);
+            if (item.kind === 'maintenance') {
+              const alert = item.data;
+              return (
+                <motion.button
+                  key={`m-${alert.id}`}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.04 }}
+                  onClick={() => handleMaintenanceAlertClick(alert)}
+                  className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl bg-white border border-slate-200 hover:border-slate-300 hover:shadow-md ring-1 ring-transparent ${theme.ring} transition-all text-left group`}
                 >
-                  <span className="text-lg">🚨</span>
-                  {criticalAlerts.length} {lang === 'fr' ? 'Critiques' : 'حرجة'}
-                </motion.div>
-              )}
-              {highAlerts.length > 0 && (
-                <motion.div
-                  animate={{ scale: [1, 1.03, 1] }}
-                  transition={{ duration: 2, repeat: Infinity }}
-                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-full text-sm font-bold uppercase shadow-lg"
-                >
-                  <span className="text-lg">⚠️</span>
-                  {highAlerts.length} {lang === 'fr' ? 'Élevées' : 'مرتفعة'}
-                </motion.div>
-              )}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {/* Critical alerts first */}
-            {criticalAlerts.slice(0, 3).map((alert, index) => (
-              <motion.button
-                key={alert.id}
-                initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                transition={{ delay: 1.1 + index * 0.1 }}
-                whileHover={{ scale: 1.02 }}
-                onClick={() => handleAlertClick(alert)}
-                className="relative text-left overflow-hidden bg-gradient-to-br from-red-50 to-red-100 p-6 rounded-2xl border-2 border-red-200 shadow-lg hover:shadow-red-500/25 transition-all active:scale-95"
-              >
-                <div className="absolute top-0 right-0 w-16 h-16 bg-red-500/10 rounded-full -translate-y-8 translate-x-8"></div>
-                <div className="relative">
-                  <div className="flex items-start gap-3 mb-4">
-                    <motion.div
-                      animate={{ rotate: [0, 10, -10, 0] }}
-                      transition={{ duration: 2, repeat: Infinity }}
-                      className="text-3xl"
-                    >
-                      {alert.type === 'vidange' ? '🛢️' : alert.type === 'assurance' ? '🛡️' : alert.type === 'controle' ? '🔍' : '⛓️'}
-                    </motion.div>
-                    <div className="flex-1">
-                      <h4 className="font-bold text-red-800 uppercase tracking-tighter text-sm mb-1">
-                        {alert.title}
-                      </h4>
-                      <p className="text-red-700 text-sm">{alert.message}</p>
+                  <span className={`w-1.5 self-stretch rounded-full ${theme.bar}`} />
+                  <span className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0 ${theme.iconBg}`}>
+                    {maintenanceIcon(alert.type)}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="font-black text-sm text-slate-900">{alert.title}</p>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        {lang === 'fr' ? 'Maintenance' : 'صيانة'}
+                      </span>
                     </div>
+                    <p className="text-xs font-semibold text-slate-500 truncate">{alert.carInfo}</p>
+                    <p className="text-xs text-slate-600 truncate">{alert.message}</p>
                   </div>
-
-                  <div className="flex items-center justify-between text-xs text-red-600">
-                    <span className="font-medium">{alert.carInfo ? alert.carInfo.split(' - ')[0] : 'N/A'}</span>
-                    <span className={`font-bold ${alert.isExpired ? 'text-red-800' : ''}`}>
-                      {alert.isExpired
-                        ? (lang === 'fr' ? 'Expiré' : 'منتهي الصلاحية')
-                        : (lang === 'fr' ? `${alert.daysUntilDue} jours` : `${alert.daysUntilDue} أيام`)
-                      }
+                  <span className={`px-3 py-1.5 rounded-lg text-[11px] font-black whitespace-nowrap ${theme.chip}`}>
+                    {alert.isExpired
+                      ? (lang === 'fr' ? 'EXPIRÉ' : 'منتهي')
+                      : (alert.type === 'vidange' || alert.type === 'chaine')
+                        ? `${Math.max(0, (alert.nextServiceMileage || 0) - (alert.currentMileage || 0)).toLocaleString()} km`
+                        : `${alert.daysUntilDue} ${lang === 'fr' ? 'jours' : 'أيام'}`}
+                  </span>
+                  <ChevronRight size={16} className="text-slate-300 group-hover:text-slate-500 transition-colors flex-shrink-0" />
+                </motion.button>
+              );
+            }
+            const alert = item.data;
+            return (
+              <motion.button
+                key={`r-${alert.id}`}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.04 }}
+                onClick={() => handleReservationAlertClick(alert)}
+                className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl bg-white border border-slate-200 hover:border-slate-300 hover:shadow-md ring-1 ring-transparent ${theme.ring} transition-all text-left group`}
+              >
+                <span className={`w-1.5 self-stretch rounded-full ${theme.bar}`} />
+                <span className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl flex-shrink-0 ${theme.iconBg}`}>
+                  {alert.icon || '📅'}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="font-black text-sm text-slate-900 truncate">{alert.title}</p>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      {lang === 'fr' ? 'Réservation' : 'حجز'}
                     </span>
                   </div>
+                  <p className="text-xs font-semibold text-slate-500 truncate">
+                    {alert.car?.brand} {alert.car?.model} · {alert.reservation?.client?.firstName} {alert.reservation?.client?.lastName}
+                  </p>
+                  <p className="text-xs text-slate-600 truncate">{alert.message}</p>
                 </div>
+                <span className={`px-3 py-1.5 rounded-lg text-[11px] font-black whitespace-nowrap ${theme.chip}`}>
+                  {alert.daysOverdue !== undefined && alert.daysOverdue > 0
+                    ? (lang === 'fr' ? `+${alert.daysOverdue} j retard` : `+${alert.daysOverdue} يوم تأخير`)
+                    : alert.daysUntil !== undefined
+                      ? (alert.daysUntil === 0
+                          ? (lang === 'fr' ? "Aujourd'hui" : 'اليوم')
+                          : `${alert.daysUntil} ${lang === 'fr' ? 'jours' : 'أيام'}`)
+                      : (lang === 'fr' ? 'Action requise' : 'إجراء مطلوب')}
+                </span>
+                <ChevronRight size={16} className="text-slate-300 group-hover:text-slate-500 transition-colors flex-shrink-0" />
               </motion.button>
-            ))}
+            );
+          })}
 
-            {/* High priority alerts */}
-            {highAlerts.slice(0, 3).map((alert, index) => (
-              <motion.button
-                key={alert.id}
-                initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                transition={{ delay: 1.2 + index * 0.1 }}
-                whileHover={{ scale: 1.02 }}
-                onClick={() => handleAlertClick(alert)}
-                className="relative text-left overflow-hidden bg-gradient-to-br from-orange-50 to-orange-100 p-6 rounded-2xl border-2 border-orange-200 shadow-lg hover:shadow-orange-500/25 transition-all active:scale-95"
-              >
-                <div className="absolute top-0 right-0 w-16 h-16 bg-orange-500/10 rounded-full -translate-y-8 translate-x-8"></div>
-                <div className="relative">
-                  <div className="flex items-start gap-3 mb-4">
-                    <motion.div
-                      animate={{ scale: [1, 1.1, 1] }}
-                      transition={{ duration: 1.5, repeat: Infinity }}
-                      className="text-3xl"
-                    >
-                      {alert.type === 'vidange' ? '🛢️' : alert.type === 'assurance' ? '🛡️' : alert.type === 'controle' ? '🔍' : '⛓️'}
-                    </motion.div>
-                    <div className="flex-1">
-                      <h4 className="font-bold text-orange-800 uppercase tracking-tighter text-sm mb-1">
-                        {alert.title}
-                      </h4>
-                      <p className="text-orange-700 text-sm">{alert.message}</p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between text-xs text-orange-600">
-                    <span className="font-medium">{alert.carInfo ? alert.carInfo.split(' - ')[0] : 'N/A'}</span>
-                    <span className="font-bold">
-                      {lang === 'fr' ? `${alert.daysUntilDue} jours` : `${alert.daysUntilDue} أيام`}
-                    </span>
-                  </div>
-                </div>
-              </motion.button>
-            ))}
-
-            {/* Other alerts */}
-            {otherAlerts.slice(0, 3).map((alert, index) => (
-              <motion.button
-                key={alert.id}
-                initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                transition={{ delay: 1.3 + index * 0.1 }}
-                whileHover={{ scale: 1.02 }}
-                onClick={() => handleAlertClick(alert)}
-                className="relative text-left overflow-hidden bg-gradient-to-br from-green-50 to-emerald-100 p-6 rounded-2xl border-2 border-green-200 shadow-lg hover:shadow-green-500/25 transition-all active:scale-95"
-              >
-                <div className="absolute top-0 right-0 w-16 h-16 bg-green-500/10 rounded-full -translate-y-8 translate-x-8"></div>
-                <div className="relative">
-                  <div className="flex items-start gap-3 mb-4">
-                    <motion.div
-                      animate={{ scale: [1, 1.08, 1] }}
-                      transition={{ duration: 2, repeat: Infinity }}
-                      className="text-3xl"
-                    >
-                      {alert.type === 'vidange' ? '🛢️' : alert.type === 'assurance' ? '🛡️' : alert.type === 'controle' ? '🔍' : '⛓️'}
-                    </motion.div>
-                    <div className="flex-1">
-                      <h4 className="font-bold text-green-800 uppercase tracking-tighter text-sm mb-1">
-                        {alert.title}
-                      </h4>
-                      <p className="text-green-700 text-sm">{alert.message}</p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between text-xs text-green-600">
-                    <span className="font-medium">{alert.carInfo ? alert.carInfo.split(' - ')[0] : 'N/A'}</span>
-                    <span className="font-bold">
-                      {lang === 'fr' ? `${alert.daysUntilDue} jours` : `${alert.daysUntilDue} أيام`}
-                    </span>
-                  </div>
-                </div>
-              </motion.button>
-            ))}
-          </div>
-
-          {alerts.length > 9 && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 1.5 }}
-              className="text-center mt-8"
+          {filteredAlerts.length > 6 && (
+            <button
+              onClick={() => setShowAllAlerts(!showAllAlerts)}
+              className="w-full py-2.5 rounded-xl border border-dashed border-slate-300 text-xs font-black uppercase tracking-widest text-slate-500 hover:text-blue-700 hover:border-blue-300 transition-colors"
             >
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className="px-8 py-3 bg-gradient-to-r from-slate-600 to-slate-700 text-white rounded-2xl hover:from-slate-700 hover:to-slate-800 transition-all font-bold uppercase tracking-widest text-sm shadow-lg"
-              >
-                👁️ {lang === 'fr' ? 'Voir Toutes les Alertes' : 'عرض جميع التنبيهات'}
-              </motion.button>
-            </motion.div>
+              {showAllAlerts
+                ? (lang === 'fr' ? 'Réduire' : 'تقليص')
+                : (lang === 'fr' ? `Voir les ${filteredAlerts.length - 6} autres alertes` : `عرض ${filteredAlerts.length - 6} تنبيهات أخرى`)}
+            </button>
           )}
         </div>
-      </motion.div>
+      </div>
 
-      {/* Enhanced Quick Actions */}
-      <motion.div
-        initial={{ opacity: 0, y: 50 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 1.2 }}
-        className="grid grid-cols-1 md:grid-cols-3 gap-8"
-      >
+      {/* ════ INDICATEURS CLÉS ════ */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
+        {kpiCards.map((kpi, i) => (
+          <motion.div
+            key={kpi.key}
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 + i * 0.07 }}
+            className="relative overflow-hidden bg-white p-6 rounded-3xl border border-slate-200 shadow-sm hover:shadow-lg transition-shadow"
+          >
+            <span className={`absolute top-0 left-0 right-0 h-1 ${kpi.accent}`} />
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">{kpi.label}</p>
+                <p className="text-2xl font-black text-slate-900 mt-2 truncate" title={kpi.value}>{kpi.value}</p>
+                <p className="text-xs font-semibold text-slate-500 mt-1.5 truncate">{kpi.sub}</p>
+              </div>
+              <span className={`w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 ${kpi.soft}`}>
+                {kpi.icon}
+              </span>
+            </div>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* ════ PARC : VÉHICULES PERSONNELS vs CONCIERGERIE ════ */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {/* 🚗 Véhicules de l'agence */}
         <motion.div
-          whileHover={{ scale: 1.05, y: -5 }}
-          whileTap={{ scale: 0.95 }}
-          className="relative overflow-hidden bg-gradient-to-br from-blue-500 via-indigo-600 to-purple-700 p-8 rounded-3xl text-white shadow-2xl hover:shadow-blue-500/25 text-center group"
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col gap-4"
         >
-          <div className="absolute inset-0 bg-gradient-to-br from-blue-400/20 to-purple-600/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-          <div className="relative">
-            <motion.div
-              animate={{ y: [0, -10, 0] }}
-              transition={{ duration: 2, repeat: Infinity }}
-              className="text-6xl mb-6"
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-base font-black text-slate-900 tracking-tight flex items-center gap-2">
+                <span className="w-9 h-9 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center">🚗</span>
+                {lang === 'fr' ? 'Mes véhicules personnels' : 'مركباتي الشخصية'}
+              </h3>
+              <p className="text-3xl font-black text-slate-900 mt-3">{stats.personalCars}</p>
+              <p className="text-xs font-bold text-slate-500 mt-1">
+                {personalAvailableCount}/{personalCarsList.length} {lang === 'fr' ? 'disponibles' : 'متاحة'}
+              </p>
+            </div>
+            <button
+              onClick={() => navigate('/vehicules', { state: { carsTab: 'personal' } })}
+              className="text-xs font-bold text-blue-600 hover:text-blue-800 underline underline-offset-4 whitespace-nowrap"
             >
-              📅
-            </motion.div>
-            <h4 className="text-xl font-black uppercase tracking-tighter mb-3">
-              {lang === 'fr' ? 'Nouvelles Réservations' : 'حجوزات جديدة'}
-            </h4>
-            <p className="text-blue-100 text-sm mb-6 leading-relaxed">
-              {lang === 'fr' ? 'Créer une nouvelle réservation pour vos clients' : 'إنشاء حجز جديد لعملائك'}
-            </p>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => navigate('/planificateur')}
-              className="w-full py-3 bg-white/20 backdrop-blur-sm text-white rounded-2xl hover:bg-white/30 transition-all font-bold uppercase tracking-widest text-sm border border-white/30"
-            >
-              🚀 {lang === 'fr' ? 'Créer' : 'إنشاء'}
-            </motion.button>
+              {lang === 'fr' ? 'Voir tout' : 'عرض الكل'}
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            {personalCarsList.slice(0, 5).map(car => (
+              <div key={car.id} className="flex items-center justify-between gap-3 px-3 py-2 rounded-xl bg-slate-50 border border-slate-100">
+                <span className="text-xs font-bold text-slate-700 truncate">{car.brand} {car.model}</span>
+                <span className={`text-[10px] font-black px-2 py-0.5 rounded-md ${
+                  car.status === 'maintenance' ? 'bg-gray-200 text-gray-700' : 'bg-green-100 text-green-700'
+                }`}>
+                  {car.status === 'maintenance'
+                    ? (lang === 'fr' ? 'Maintenance' : 'صيانة')
+                    : (lang === 'fr' ? 'Disponible' : 'متاح')}
+                </span>
+              </div>
+            ))}
+            {personalCarsList.length === 0 && (
+              <p className="text-xs text-slate-400 py-4 text-center">
+                {lang === 'fr' ? 'Aucun véhicule personnel.' : 'لا توجد مركبات شخصية.'}
+              </p>
+            )}
           </div>
         </motion.div>
 
+        {/* 🤝 Véhicules confiés — données propriétaire visibles par l'admin uniquement */}
         <motion.div
-          whileHover={{ scale: 1.05, y: -5 }}
-          whileTap={{ scale: 0.95 }}
-          className="relative overflow-hidden bg-gradient-to-br from-emerald-500 via-teal-600 to-cyan-700 p-8 rounded-3xl text-white shadow-2xl hover:shadow-emerald-500/25 text-center group"
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.35 }}
+          className="bg-white p-6 rounded-3xl border border-amber-200 shadow-sm flex flex-col gap-4"
         >
-          <div className="absolute inset-0 bg-gradient-to-br from-emerald-400/20 to-cyan-600/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-          <div className="relative">
-            <motion.div
-              animate={{ rotate: [0, 10, -10, 0] }}
-              transition={{ duration: 2.5, repeat: Infinity }}
-              className="text-6xl mb-6"
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-base font-black text-amber-900 tracking-tight flex items-center gap-2">
+                <span className="w-9 h-9 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center">🤝</span>
+                {lang === 'fr' ? 'Véhicules en conciergerie' : 'مركبات بالوكالة'}
+              </h3>
+              <p className="text-3xl font-black text-amber-950 mt-3">{stats.consignmentCars}</p>
+              <p className="text-xs font-bold text-amber-700 mt-1">
+                {consignmentAvailableCount}/{consignmentCarsList.length} {lang === 'fr' ? 'disponibles' : 'متاحة'}
+              </p>
+            </div>
+            <button
+              onClick={() => navigate('/vehicules', { state: { carsTab: 'consignment' } })}
+              className="text-xs font-bold text-amber-700 hover:text-amber-900 underline underline-offset-4 whitespace-nowrap"
             >
-              🚗
-            </motion.div>
-            <h4 className="text-xl font-black uppercase tracking-tighter mb-3">
-              {lang === 'fr' ? 'Ajouter un Véhicule' : 'إضافة مركبة'}
-            </h4>
-            <p className="text-emerald-100 text-sm mb-6 leading-relaxed">
-              {lang === 'fr' ? 'Étendre votre flotte automobile' : 'توسيع أسطولك السيارات'}
+              {lang === 'fr' ? 'Voir tout' : 'عرض الكل'}
+            </button>
+          </div>
+
+          <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3">
+            <p className="text-[10px] font-black uppercase tracking-widest text-amber-700">
+              {lang === 'fr' ? 'Commission agence — ce mois' : 'عمولة الوكالة — هذا الشهر'}
             </p>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => navigate('/vehicules')}
-              className="w-full py-3 bg-white/20 backdrop-blur-sm text-white rounded-2xl hover:bg-white/30 transition-all font-bold uppercase tracking-widest text-sm border border-white/30"
-            >
-              ➕ {lang === 'fr' ? 'Ajouter' : 'إضافة'}
-            </motion.button>
+            <p className="text-2xl font-black text-amber-900 mt-1">
+              {fmtDA(monthlyCommission)}
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            {consignmentCarsList.slice(0, 5).map(car => (
+              <div key={car.id} className="flex items-center justify-between gap-3 px-3 py-2 rounded-xl bg-amber-50/60 border border-amber-100">
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-amber-900 truncate">
+                    {car.ownerInfo?.internalRef && (
+                      <span className="text-amber-700" dir="ltr">{car.ownerInfo.internalRef} · </span>
+                    )}
+                    {car.brand} {car.model}
+                  </p>
+                  {car.ownerInfo && (
+                    <p className="text-[10px] font-bold text-amber-700/80 truncate">👤 {car.ownerInfo.ownerName}</p>
+                  )}
+                </div>
+                {car.ownerInfo && (
+                  <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-amber-200/70 text-amber-900 whitespace-nowrap">
+                    {car.ownerInfo.commissionValue.toLocaleString()} {car.ownerInfo.commissionType === 'percentage' ? '%' : 'DA'}
+                  </span>
+                )}
+              </div>
+            ))}
+            {consignmentCarsList.length === 0 && (
+              <p className="text-xs text-amber-700/60 py-4 text-center">
+                {lang === 'fr' ? 'Aucun véhicule en conciergerie.' : 'لا توجد مركبات بالوكالة.'}
+              </p>
+            )}
+          </div>
+        </motion.div>
+      </div>
+
+      {/* ════ GRAPHIQUES ════ */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {/* Évolution des revenus */}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+          className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm"
+        >
+          <div className="flex items-center gap-3 mb-6">
+            <span className="w-9 h-9 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center">
+              <TrendingUp size={18} />
+            </span>
+            <h3 className="text-base font-black text-slate-900 tracking-tight">
+              {lang === 'fr' ? 'Évolution des Revenus' : 'تطور الإيرادات'}
+            </h3>
+          </div>
+
+          <div className="space-y-3">
+            {stats.revenueByMonth.map((item, index) => {
+              const maxRevenue = Math.max(...stats.revenueByMonth.map(m => m.revenue), 1);
+              return (
+                <div key={item.month} className="flex items-center gap-3">
+                  <div className="w-10 text-xs font-black text-slate-500">{item.month}</div>
+                  <div className="flex-1 bg-slate-100 rounded-full h-3 overflow-hidden">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${(item.revenue / maxRevenue) * 100}%` }}
+                      transition={{ delay: 0.5 + index * 0.06, duration: 0.7, ease: 'easeOut' }}
+                      className="h-full bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full"
+                    />
+                  </div>
+                  <div className="w-28 text-right text-sm font-black text-slate-800">
+                    {item.revenue.toLocaleString()} <span className="text-[10px] text-slate-400 font-bold">DA</span>
+                  </div>
+                </div>
+              );
+            })}
+            {stats.revenueByMonth.length === 0 && (
+              <p className="text-xs text-slate-400 py-6 text-center">
+                {lang === 'fr' ? 'Aucune donnée de revenus.' : 'لا توجد بيانات إيرادات.'}
+              </p>
+            )}
           </div>
         </motion.div>
 
+        {/* Taux d'utilisation */}
         <motion.div
-          whileHover={{ scale: 1.05, y: -5 }}
-          whileTap={{ scale: 0.95 }}
-          className="relative overflow-hidden bg-gradient-to-br from-orange-500 via-red-600 to-pink-700 p-8 rounded-3xl text-white shadow-2xl hover:shadow-orange-500/25 text-center group"
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.45 }}
+          className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm"
         >
-          <div className="absolute inset-0 bg-gradient-to-br from-orange-400/20 to-pink-600/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-          <div className="relative">
-            <motion.div
-              animate={{ scale: [1, 1.1, 1] }}
-              transition={{ duration: 1.8, repeat: Infinity }}
-              className="text-6xl mb-6"
-            >
-              📊
-            </motion.div>
-            <h4 className="text-xl font-black uppercase tracking-tighter mb-3">
-              {lang === 'fr' ? 'Rapports Détaillés' : 'تقارير مفصلة'}
-            </h4>
-            <p className="text-orange-100 text-sm mb-6 leading-relaxed">
-              {lang === 'fr' ? 'Analyser vos performances et statistiques' : 'تحليل أدائك والإحصائيات'}
-            </p>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => navigate('/rapports')}
-              className="w-full py-3 bg-white/20 backdrop-blur-sm text-white rounded-2xl hover:bg-white/30 transition-all font-bold uppercase tracking-widest text-sm border border-white/30"
-            >
-              📈 {lang === 'fr' ? 'Voir' : 'عرض'}
-            </motion.button>
+          <div className="flex items-center gap-3 mb-6">
+            <span className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+              <Gauge size={18} />
+            </span>
+            <h3 className="text-base font-black text-slate-900 tracking-tight">
+              {lang === 'fr' ? "Taux d'Utilisation" : 'معدلات الاستخدام'}
+            </h3>
+          </div>
+
+          <div className="space-y-4">
+            {stats.carUtilization.map((car, index) => (
+              <div key={car.carId}>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs font-bold text-slate-700 truncate">{car.carInfo}</span>
+                  <span className={`text-sm font-black ${
+                    car.utilization > 80 ? 'text-red-600' : car.utilization > 60 ? 'text-orange-600' : 'text-emerald-600'
+                  }`}>{car.utilization}%</span>
+                </div>
+                <div className="bg-slate-100 rounded-full h-2.5 overflow-hidden">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${car.utilization}%` }}
+                    transition={{ delay: 0.55 + index * 0.06, duration: 0.7, ease: 'easeOut' }}
+                    className={`h-full rounded-full ${
+                      car.utilization > 80 ? 'bg-gradient-to-r from-red-500 to-rose-500' :
+                      car.utilization > 60 ? 'bg-gradient-to-r from-orange-400 to-orange-500' :
+                      'bg-gradient-to-r from-emerald-500 to-teal-500'
+                    }`}
+                  />
+                </div>
+              </div>
+            ))}
+            {stats.carUtilization.length === 0 && (
+              <p className="text-xs text-slate-400 py-6 text-center">
+                {lang === 'fr' ? "Aucune donnée d'utilisation." : 'لا توجد بيانات استخدام.'}
+              </p>
+            )}
           </div>
         </motion.div>
-      </motion.div>
+      </div>
+
+      {/* ════ ACTIONS RAPIDES ════ */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        {[
+          {
+            icon: '📅',
+            title: lang === 'fr' ? 'Nouvelle Réservation' : 'حجز جديد',
+            desc: lang === 'fr' ? 'Créer une réservation pour vos clients' : 'إنشاء حجز جديد لعملائك',
+            cta: lang === 'fr' ? 'Créer' : 'إنشاء',
+            to: '/planificateur',
+            grad: 'from-blue-600 to-indigo-700',
+            shadow: 'hover:shadow-blue-500/25',
+          },
+          {
+            icon: '🚗',
+            title: lang === 'fr' ? 'Ajouter un Véhicule' : 'إضافة مركبة',
+            desc: lang === 'fr' ? 'Étendre votre flotte automobile' : 'توسيع أسطول سياراتك',
+            cta: lang === 'fr' ? 'Ajouter' : 'إضافة',
+            to: '/vehicules',
+            grad: 'from-emerald-600 to-teal-700',
+            shadow: 'hover:shadow-emerald-500/25',
+          },
+          {
+            icon: '📊',
+            title: lang === 'fr' ? 'Rapports Détaillés' : 'تقارير مفصلة',
+            desc: lang === 'fr' ? 'Analyser vos performances' : 'تحليل أدائك وإحصائياتك',
+            cta: lang === 'fr' ? 'Voir' : 'عرض',
+            to: '/rapports',
+            grad: 'from-violet-600 to-purple-700',
+            shadow: 'hover:shadow-violet-500/25',
+          },
+        ].map((action, i) => (
+          <motion.button
+            key={action.to}
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5 + i * 0.07 }}
+            whileHover={{ y: -3 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => navigate(action.to)}
+            className={`relative overflow-hidden bg-gradient-to-br ${action.grad} p-6 rounded-3xl text-white shadow-lg ${action.shadow} text-left transition-shadow`}
+          >
+            <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -translate-y-12 translate-x-12" />
+            <div className="relative flex items-center gap-4">
+              <span className="text-4xl">{action.icon}</span>
+              <div className="flex-1 min-w-0">
+                <h4 className="text-base font-black tracking-tight">{action.title}</h4>
+                <p className="text-white/75 text-xs font-medium mt-0.5">{action.desc}</p>
+              </div>
+              <span className="px-4 py-2 bg-white/15 border border-white/25 rounded-xl text-xs font-black whitespace-nowrap">
+                {action.cta} →
+              </span>
+            </div>
+          </motion.button>
+        ))}
+      </div>
     </div>
   );
 };

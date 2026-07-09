@@ -1,5 +1,5 @@
 import { supabase } from '../supabase';
-import { Car, Client, Agency, Worker, WorkerAdvance, WorkerAbsence, WorkerPayment, StoreExpense, VehicleExpense, MaintenanceAlert, WebsiteOrder, ReservationDetails, SpecialOffer, ContactInfo, WebsiteSettings, PromoCode } from '../types';
+import { Car, CarOwnerInfo, Client, Agency, Worker, WorkerAdvance, WorkerAbsence, WorkerPayment, StoreExpense, VehicleExpense, MaintenanceAlert, WebsiteOrder, ReservationDetails, SpecialOffer, ContactInfo, WebsiteSettings, PromoCode } from '../types';
 
 // Generic database service functions
 export class DatabaseService {
@@ -30,6 +30,36 @@ export class DatabaseService {
       status: dbCar.status === 'maintenance' ? 'maintenance' : 'disponible',
       // === true : reste false tant que la migration n'a pas ajouté la colonne
       isHiddenFromSite: dbCar.is_hidden_from_site === true,
+      ownershipType: dbCar.ownership_type === 'consignment' ? 'consignment' : 'personal',
+      description: dbCar.description || undefined,
+      // Présent uniquement quand la requête a joint car_owners (pages admin).
+      ownerInfo: this.mapDbCarOwner(dbCar.owner),
+    };
+  }
+
+  /**
+   * DB-row → CarOwnerInfo. Le join 1-1 de PostgREST remonte soit un objet, soit
+   * un tableau (vide quand la voiture n'a pas de propriétaire).
+   *
+   * ⚠️ Ces données sont PRIVÉES (nom, téléphone, commission, contrat) : elles ne
+   * doivent jamais atteindre le site public.
+   */
+  private static mapDbCarOwner(row: any): CarOwnerInfo | undefined {
+    const owner = Array.isArray(row) ? row[0] : row;
+    if (!owner) return undefined;
+    return {
+      id: owner.id,
+      carId: owner.car_id,
+      ownerName: owner.owner_name,
+      ownerPhone: owner.owner_phone || undefined,
+      internalRef: owner.internal_ref || undefined,
+      consignmentDate: owner.consignment_date || undefined,
+      commissionType: owner.commission_type === 'amount' ? 'amount' : 'percentage',
+      commissionValue: Number(owner.commission_value || 0),
+      contractUrl: owner.contract_url || undefined,
+      privateNotes: owner.private_notes || undefined,
+      createdAt: owner.created_at,
+      updatedAt: owner.updated_at,
     };
   }
 
@@ -985,11 +1015,10 @@ export class DatabaseService {
             )
           )
         `)
-        // load both new pending orders and those we've already accepted so they stay visible here
-        .in('status', ['pending', 'accepted'])
-        // seules les commandes provenant du site public (source='website') —
-        // pas les réservations créées par l'agence qui seraient encore 'pending'.
-        // Colonne ajoutée par 20260708_reservation_source.sql.
+        // Toutes les commandes issues du site public, quel que soit leur statut :
+        // l'interface « Website commandes » est leur historique complet. Filtrer
+        // sur 'website_reservation' + 'cancelled' faisait disparaître les commandes
+        // acceptées. Les réservations créées par l'agence sont exclues (source).
         .eq('source', 'website')
         .order('created_at', { ascending: false });
 
@@ -1014,7 +1043,7 @@ export class DatabaseService {
                 )
               )
             `)
-            .in('status', ['pending', 'accepted'])
+            .in('status', ['website_reservation', 'cancelled'])
             .order('created_at', { ascending: false });
           if (retry.error) { console.warn('Website orders retry failed:', retry.error); return []; }
           return this.mapWebsiteOrders(retry.data || []);
@@ -1112,7 +1141,8 @@ export class DatabaseService {
   }
 
   static async createWebsiteOrder(order: Omit<WebsiteOrder, 'id' | 'created_at'>): Promise<WebsiteOrder> {
-    // Website orders are actually reservations with pending status
+    // Website orders are reservations awaiting agency acceptance: dedicated
+    // 'website_reservation' status + source='website'.
     const reservationData = {
       client_id: (order as any).clientId,
       car_id: order.carId,
@@ -1125,7 +1155,8 @@ export class DatabaseService {
       total_days: order.totalDays,
       total_price: order.totalPrice,
       additional_fees: order.servicesTotal,
-      status: 'pending',
+      status: 'website_reservation',
+      source: 'website',
     };
 
     const { data, error } = await supabase
@@ -1213,7 +1244,7 @@ export class DatabaseService {
           supabase.from('store_expenses').select('cost'),
           supabase.from('vehicle_expenses').select('cost'),
           supabase.from('clients').select('id', { count: 'exact' }),
-          supabase.from('cars').select('id', { count: 'exact' }),
+          supabase.from('cars').select('id, brand, model, ownership_type', { count: 'exact' }),
           supabase.from('reservations').select('car_id').in('status', ['pending', 'confirmed', 'active']),
           supabase.from('reservations').select('id', { count: 'exact' }),
           supabase.from('reservations').select('id', { count: 'exact' }).in('status', ['confirmed', 'active']),
@@ -1276,6 +1307,9 @@ export class DatabaseService {
       utilization: Math.floor(Math.random() * 40) + 60 // Placeholder - would need actual calculation
     })) || [];
 
+    // Répartition du parc : véhicules de l'agence vs véhicules confiés (conciergerie)
+    const consignmentCarsCount = cars?.filter((c: any) => c.ownership_type === 'consignment').length || 0;
+
     return {
       totalRevenue,
       totalExpenses,
@@ -1283,6 +1317,8 @@ export class DatabaseService {
       totalClients: clients?.length || 0,
       totalCars: cars?.length || 0,
       availableCars: availableCarsCount,
+      consignmentCars: consignmentCarsCount,
+      personalCars: (cars?.length || 0) - consignmentCarsCount,
       totalReservations: totalReservations?.length || 0,
       activeReservations: activeReservations?.length || 0,
       overduePayments: overduePayments?.length || 0,

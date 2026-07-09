@@ -660,7 +660,7 @@ as $$
   select departure_date, return_date
   from public.reservations
   where car_id = p_car_id
-    and status in ('pending', 'accepted', 'confirmed', 'active');
+    and status in ('website_reservation', 'pending', 'accepted', 'confirmed', 'active');
 $$;
 
 -- 9.3 get_unavailable_car_ids(from, to)
@@ -673,7 +673,7 @@ as $$
   select distinct car_id
   from public.reservations
   where car_id is not null
-    and status in ('pending', 'accepted', 'confirmed', 'active')
+    and status in ('website_reservation', 'pending', 'accepted', 'confirmed', 'active')
     and departure_date <= p_to
     and return_date   >= p_from;
 $$;
@@ -730,11 +730,12 @@ declare
   v_svc       jsonb;
   v_pc        public.promo_codes%rowtype;
 begin
-  -- Availability guard (overlapping active-ish reservations)
+  -- Availability guard (overlapping active-ish reservations, y compris les
+  -- commandes du site encore en attente d'acceptation 'website_reservation')
   if exists (
     select 1 from public.reservations
     where car_id = v_car_id
-      and status in ('pending','accepted','confirmed','active')
+      and status in ('website_reservation','pending','accepted','confirmed','active')
       and departure_date <= v_to
       and return_date   >= v_from
   ) then
@@ -779,7 +780,9 @@ begin
     nullif(p_reservation->>'protection_assurance_id','')::uuid,
     p_reservation->>'protection_assurance_name',
     coalesce((p_reservation->>'protection_assurance_price')::numeric, 0),
-    'pending', 'website'
+    -- Statut dédié : la commande attend l'acceptation de l'agence dans
+    -- « Website commandes » avant de rejoindre le planificateur ('pending').
+    'website_reservation', 'website'
   )
   returning id into v_res_id;
 

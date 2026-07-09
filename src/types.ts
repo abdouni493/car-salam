@@ -18,6 +18,31 @@ export interface SidebarItem {
   icon: string;
 }
 
+/** 'personal' = véhicule de l'agence · 'consignment' = véhicule confié par un tiers. */
+export type OwnershipType = 'personal' | 'consignment';
+/** 'amount' = commission fixe en DA · 'percentage' = pourcentage du total de la location. */
+export type CommissionType = 'amount' | 'percentage';
+
+/**
+ * Données PRIVÉES du propriétaire d'un véhicule en conciergerie.
+ * Vit dans la table `car_owners`, qui n'a AUCUNE policy pour le rôle `anon` :
+ * ces champs ne doivent jamais atteindre le site public.
+ */
+export interface CarOwnerInfo {
+  id?: string;
+  carId: string;
+  ownerName: string;          // 👤 privé
+  ownerPhone?: string;        // 📞 privé
+  internalRef?: string;       // 🚗 CS-001… (généré par la DB, lecture seule côté UI)
+  consignmentDate?: string;   // 📅 date de dépôt
+  commissionType: CommissionType; // 💰
+  commissionValue: number;
+  contractUrl?: string;       // 📄 contrat scanné
+  privateNotes?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface Car {
   id: string;
   brand: string;
@@ -42,6 +67,12 @@ export interface Car {
   status?: 'disponible' | 'reserve' | 'louer' | 'maintenance';
   // Masquée du site public (visible par défaut). Les vues admin l'affichent quand même.
   isHiddenFromSite?: boolean;
+  /** Défaut 'personal' côté DB. */
+  ownershipType?: OwnershipType;
+  /** Texte PUBLIC affiché sur le site. */
+  description?: string;
+  /** Chargé UNIQUEMENT par les pages admin (getCarsWithOwners). Jamais côté site public. */
+  ownerInfo?: CarOwnerInfo | null;
 }
 
 export type ExpenseType = 'vidange' | 'assurance' | 'controle' | 'chaine' | 'autre';
@@ -355,6 +386,12 @@ export interface AdditionalService {
   description?: string;
   price: number;
   selected: boolean;
+  // Alias des colonnes `reservation_services` : un service peut provenir du
+  // catalogue (name/id) ou d'un snapshot déjà enregistré (service_name/service_id).
+  service_name?: string;
+  service_id?: string;
+  /** ID du service maître dont ce snapshot est issu. */
+  originalServiceId?: string;
 }
 
 // Un item d'un forfait d'assurance de protection (avec son statut vrai/faux).
@@ -404,6 +441,19 @@ export interface ReservationDetails {
   excessMileage?: number;
   missingFuel?: number;
   additionalFees: number;
+  /** Frais de livraison du véhicule (DA). 0 = pas de livraison. */
+  deliveryFee?: number;
+  /**
+   * Qui paie la livraison. Fixé par un trigger DB à partir de `totalDays` :
+   * >= 10 jours → 'owner' (propriétaire), sinon 'client'. Null si `deliveryFee` = 0.
+   */
+  deliveryFeePayer?: 'client' | 'owner';
+  /**
+   * CONCIERGERIE — commission de l'agence (DA), figée par trigger DB à la
+   * clôture de la location (`commission_amount`). Absente sur les locations
+   * non terminées ou les véhicules personnels.
+   */
+  commissionAmount?: number;
   tvaApplied: boolean;
   notes?: string;
   conditions?: string;
@@ -414,6 +464,106 @@ export interface ReservationDetails {
   createdByName?: string;
   /** Origine de la réservation : 'website' (site public) ou 'agency' (admin). */
   source?: 'website' | 'agency';
+}
+
+// ─── Assistant de création / édition de réservation ──────────────────────────
+// `ReservationDetails` décrit une réservation *persistée*. Les formulaires, eux,
+// manipulent une structure par étapes qui n'a jamais correspondu à ce type — d'où
+// les centaines d'erreurs `tsc` sur `step2.selectedCar`, `step6.*`, etc.
+// `ReservationWizardData` décrit la forme réelle du state des deux wizards.
+
+export interface ReservationWizardStep1 {
+  departureDate: string;
+  departureTime: string;
+  returnDate: string;
+  returnTime: string;
+  /** Source de vérité pour résoudre l'agence (le libellé peut être édité/traduit). */
+  departureAgencyId?: string;
+  returnAgencyId?: string;
+  /** Libellés d'affichage uniquement — jamais utilisés pour retrouver l'agence. */
+  departureLocation?: string;
+  returnLocation?: string;
+  /** Champs hérités : id d'agence porté par une réservation déjà enregistrée. */
+  departureAgency?: string;
+  returnAgency?: string;
+  /** L'agence de retour diffère de celle du départ. */
+  differentReturnAgency?: boolean;
+}
+
+/** Étape « Tarification finale » (step6) du wizard. */
+export interface ReservationWizardPricing {
+  basePrice?: number;
+  totalPrice?: number;
+  isManualTotal?: boolean;
+  manualTotal?: number | string;
+  tvaApplied?: boolean;
+  tvaAmount?: number;
+  additionalFees?: number;
+  /** Frais de livraison (DA). Le payeur découle de la durée — cf. utils/deliveryFee. */
+  deliveryFee?: number;
+  advancePayment?: number;
+  remainingPayment?: number;
+  deposit?: number;
+  notes?: string;
+  paymentNotes?: string;
+  cautionEnabled?: boolean;
+  cautionCurrency?: 'DZD' | 'EUR';
+  euroAmount?: number | string;
+  euroRate?: number;
+  caution_amount_dzd?: number;
+  assuranceEnabled?: boolean;
+  assurancePercentage?: number | string;
+  assuranceAmount?: number;
+  finalTotal?: number;
+}
+
+/**
+ * Inspection telle que manipulée par le wizard : elle provient soit du
+ * formulaire (camelCase), soit d'une ligne DB déjà chargée (snake_case).
+ */
+export interface WizardInspection extends Partial<VehicleInspection> {
+  otherPhotos?: string[];
+  other_photos?: string[];
+  client_signature?: string;
+}
+
+export interface ReservationWizardData {
+  id?: string;
+  step1: ReservationWizardStep1;
+  /** L'édition conserve aussi le snapshot client saisi à l'étape 2. */
+  step2: { selectedCar: Car | null } & Partial<ReservationStep2>;
+  step3: { departureInspection: WizardInspection | null; selectedDriver?: Worker | null };
+  step4: { selectedClient: Client | null };
+  step5: { additionalServices: AdditionalService[] };
+  step6: ReservationWizardPricing;
+
+  // Champs à plat conservés depuis une réservation existante (mode édition/inspection).
+  clientId?: string;
+  carId?: string;
+  car?: Car;
+  client?: Client;
+  status?: ReservationDetails['status'];
+  deposit?: number;
+  totalDays?: number;
+  totalPrice?: number;
+  discountAmount?: number;
+  discountType?: 'percentage' | 'fixed';
+  additionalFees?: number;
+  advancePayment?: number;
+  remainingPayment?: number;
+  excessMileage?: number;
+  missingFuel?: number;
+  tvaApplied?: boolean;
+  notes?: string;
+  conditions?: string;
+  payments?: Payment[];
+  additionalServices?: AdditionalService[];
+  protectionAssurance?: ProtectionAssurance | null;
+  departureInspection?: VehicleInspection;
+  returnInspection?: VehicleInspection;
+  createdAt?: string;
+  activatedAt?: string;
+  completedAt?: string;
 }
 
 export interface Invoice {
@@ -461,6 +611,10 @@ export interface DashboardStats {
   totalClients: number;
   totalCars: number;
   availableCars: number;
+  /** Véhicules appartenant à l'agence (ownershipType !== 'consignment'). */
+  personalCars: number;
+  /** Véhicules confiés par des propriétaires tiers (ownershipType === 'consignment'). */
+  consignmentCars: number;
   maintenanceAlerts: number;
   overduePayments: number;
   recentReservations: ReservationDetails[];
@@ -484,7 +638,10 @@ export interface WebsiteOrder {
   protectionAssurance?: ProtectionAssurance;
   protectionAssuranceName?: string;
   assuranceTotal?: number;
-  status: 'pending' | 'accepted' | 'confirmed' | 'processing' | 'completed' | 'cancelled';
+  // 'website_reservation' = nouvelle commande du site en attente d'acceptation.
+  // Une fois acceptée elle devient 'pending' (réservation du planificateur) ;
+  // annulée elle passe à 'cancelled'.
+  status: 'website_reservation' | 'pending' | 'accepted' | 'confirmed' | 'processing' | 'completed' | 'cancelled';
   createdAt: string;
   source: 'website';
 }

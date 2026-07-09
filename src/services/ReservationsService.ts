@@ -57,6 +57,11 @@ export class ReservationsService {
     protectionAssuranceId?: string | null;
     protectionAssuranceName?: string | null;
     protectionAssurancePrice?: number | null;
+    /**
+     * Frais de livraison (DA). Le payeur (`delivery_fee_payer`) n'est PAS envoyé :
+     * un trigger DB le déduit de `total_days` (>= 10 jours → propriétaire).
+     */
+    deliveryFee?: number;
     createdBy?: string;
     createdByName?: string;
   }): Promise<{ id: string }> {
@@ -91,8 +96,12 @@ export class ReservationsService {
         protection_assurance_id: data.protectionAssuranceId || null,
         protection_assurance_name: data.protectionAssuranceName || null,
         protection_assurance_price: data.protectionAssurancePrice || 0,
+        delivery_fee: data.deliveryFee || 0,
         created_by: data.createdBy || null,
         created_by_name: data.createdByName || null,
+        // Réservation créée manuellement depuis le planificateur (agence),
+        // par opposition aux commandes du site public (source = 'website').
+        source: 'agency',
       }])
       .select()
       .single();
@@ -266,9 +275,12 @@ export class ReservationsService {
       remainingPayment: res.remaining_payment,
       tvaApplied: res.tva_applied || false,
       additionalFees: res.additional_fees || 0,
+      deliveryFee: Number(res.delivery_fee || 0),
+      deliveryFeePayer: res.delivery_fee_payer || undefined,
+      commissionAmount: res.commission_amount != null ? Number(res.commission_amount) : undefined,
       status: res.status,
       notes: res.notes,
-      conditions: res.conditions_text,
+      conditions: res.conditions,
       createdAt: res.created_at,
       activatedAt: res.activated_at,
       completedAt: res.completed_at,
@@ -481,6 +493,9 @@ export class ReservationsService {
       excessMileage: data.excess_mileage,
       missingFuel: data.missing_fuel,
       additionalFees: data.additional_fees || 0,
+      deliveryFee: Number(data.delivery_fee || 0),
+      deliveryFeePayer: data.delivery_fee_payer || undefined,
+      commissionAmount: data.commission_amount != null ? Number(data.commission_amount) : undefined,
       tvaApplied: data.tva_applied || false,
       deposit: data.deposit,
       totalDays: data.total_days,
@@ -494,7 +509,7 @@ export class ReservationsService {
       activatedAt: data.activated_at,
       completedAt: data.completed_at,
       notes: data.notes,
-      conditions: data.conditions_text,
+      conditions: data.conditions,
       assuranceEnabled: data.assurance_enabled || false,
       assurancePercentage: data.assurance_percentage,
       protectionAssuranceId: data.protection_assurance_id || undefined,
@@ -590,9 +605,14 @@ export class ReservationsService {
     remainingPayment: number;
     notes: string;
     conditionsText?: string;
+    /**
+     * Le montant de la TVA n'est pas stocké : il se déduit de `tva_applied`
+     * et de `total_price` (qui l'inclut déjà). Seul le drapeau est persisté.
+     */
     tvaApplied: boolean;
-    tvaAmount: number;
     additionalFees: number;
+    /** Le payeur est recalculé par le trigger DB à chaque changement de durée. */
+    deliveryFee: number;
     totalPrice: number;
     deposit: number;
     activatedAt?: string;
@@ -625,10 +645,10 @@ export class ReservationsService {
     if (updates.advancePayment !== undefined) updateData.advance_payment = updates.advancePayment;
     if (updates.remainingPayment !== undefined) updateData.remaining_payment = updates.remainingPayment;
     if (updates.notes !== undefined) updateData.notes = updates.notes;
-    if (updates.conditionsText !== undefined) updateData.conditions_text = updates.conditionsText;
+    if (updates.conditionsText !== undefined) updateData.conditions = updates.conditionsText;
     if (updates.tvaApplied !== undefined) updateData.tva_applied = updates.tvaApplied;
-    if (updates.tvaAmount !== undefined) updateData.tva_amount = updates.tvaAmount;
     if (updates.additionalFees !== undefined) updateData.additional_fees = updates.additionalFees;
+    if (updates.deliveryFee !== undefined) updateData.delivery_fee = updates.deliveryFee;
     if (updates.totalPrice !== undefined) updateData.total_price = updates.totalPrice;
     if (updates.deposit !== undefined) updateData.deposit = updates.deposit;
     if (updates.activatedAt !== undefined) updateData.activated_at = updates.activatedAt;

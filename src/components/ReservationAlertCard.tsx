@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ReservationAlert } from '../utils/reservationAlerts';
+import { formatAmount } from '../utils/format';
 import { motion } from 'motion/react';
 import { Calendar, User, Phone, DollarSign, ArrowRight } from 'lucide-react';
 
@@ -283,7 +284,7 @@ export const ReservationAlertCard: React.FC<ReservationAlertCardProps> = ({
               <span className="text-sm font-bold text-gray-700">Montant Total</span>
             </div>
             <span className="text-lg font-black text-blue-700">
-              {(reservation.totalPrice).toLocaleString('fr-FR')} DA
+              {formatAmount(reservation.totalPrice, 'fr-FR')} DA
             </span>
           </div>
         </div>

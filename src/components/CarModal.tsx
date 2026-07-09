@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Car, Language } from '../types';
+import { Car, CarOwnerInfo, Language, OwnershipType } from '../types';
 import { X, Plus, Loader2 } from 'lucide-react';
 import { uploadCarImage } from '../services/uploadCarImage';
+import { CarOwnerFields, OwnershipSelector, emptyOwnerInfo } from './CarOwnerFields';
 
 interface CarModalProps {
   isOpen: boolean;
@@ -13,56 +14,55 @@ interface CarModalProps {
   lang: Language;
 }
 
+const blankCar = (): Partial<Car> => ({
+  brand: '',
+  model: '',
+  registration: '',
+  year: new Date().getFullYear(),
+  color: '',
+  vin: '',
+  energy: 'Essence',
+  transmission: 'Manuelle',
+  seats: 5,
+  doors: 5,
+  priceDay: 0,
+  priceWeek: 0,
+  priceMonth: 0,
+  deposit: 0,
+  images: [],
+  mileage: 0,
+  ownershipType: 'personal',
+  description: '',
+});
+
 export const CarModal: React.FC<CarModalProps> = ({ isOpen, onClose, onSave, onDelete, car, lang }) => {
-  const [formData, setFormData] = useState<Partial<Car>>({
-    brand: '',
-    model: '',
-    registration: '',
-    year: new Date().getFullYear(),
-    color: '',
-    vin: '',
-    energy: 'Essence',
-    transmission: 'Manuelle',
-    seats: 5,
-    doors: 5,
-    priceDay: 0,
-    priceWeek: 0,
-    priceMonth: 0,
-    deposit: 0,
-    images: [],
-    mileage: 0,
-  });
+  const [formData, setFormData] = useState<Partial<Car>>(blankCar());
+  const [ownerInfo, setOwnerInfo] = useState<CarOwnerInfo>(emptyOwnerInfo());
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadingImages, setUploadingImages] = useState(false);
 
   useEffect(() => {
+    setValidationError(null);
     if (car) {
-      setFormData(car);
+      setFormData({ ...car, ownershipType: car.ownershipType || 'personal' });
+      setOwnerInfo(car.ownerInfo || emptyOwnerInfo(car.id));
     } else {
-      setFormData({
-        brand: '',
-        model: '',
-        registration: '',
-        year: new Date().getFullYear(),
-        color: '',
-        vin: '',
-        energy: 'Essence',
-        transmission: 'Manuelle',
-        seats: 5,
-        doors: 5,
-        priceDay: 0,
-        priceWeek: 0,
-        priceMonth: 0,
-        deposit: 0,
-        images: [],
-        mileage: 0,
-      });
+      setFormData(blankCar());
+      setOwnerInfo(emptyOwnerInfo());
     }
   }, [car, isOpen]);
 
   if (!isOpen) return null;
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const isConsignment = formData.ownershipType === 'consignment';
+
+  const handleOwnershipChange = (ownershipType: OwnershipType) => {
+    setValidationError(null);
+    setFormData(prev => ({ ...prev, ownershipType }));
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
@@ -106,9 +106,20 @@ export const CarModal: React.FC<CarModalProps> = ({ isOpen, onClose, onSave, onD
   };
 
   const handleSave = async () => {
+    if (isConsignment && !ownerInfo.ownerName.trim()) {
+      setValidationError(lang === 'fr'
+        ? 'Le nom du propriétaire est requis pour un véhicule en conciergerie.'
+        : 'اسم المالك مطلوب للمركبة بالوكالة.');
+      return;
+    }
+    setValidationError(null);
     setIsSubmitting(true);
     try {
-      await onSave(formData);
+      await onSave({
+        ...formData,
+        // `null` demande explicitement la suppression de la ligne `car_owners`.
+        ownerInfo: isConsignment ? ownerInfo : null,
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -136,6 +147,29 @@ export const CarModal: React.FC<CarModalProps> = ({ isOpen, onClose, onSave, onD
         </div>
 
         <div className="flex-1 overflow-y-auto p-8 space-y-12 custom-scrollbar bg-saas-bg">
+          {/* Type de propriété — personnel ou conciergerie */}
+          <section className="space-y-4">
+            <h3 className="text-xs font-black text-saas-primary-via flex items-center gap-3 uppercase tracking-[0.2em]">
+              <span className="p-2 bg-saas-primary-via/10 rounded-lg">🏠</span>
+              {lang === 'fr' ? 'Type de véhicule' : 'نوع المركبة'}
+            </h3>
+            <OwnershipSelector
+              value={formData.ownershipType || 'personal'}
+              onChange={handleOwnershipChange}
+              lang={lang}
+            />
+          </section>
+
+          {isConsignment && (
+            <CarOwnerFields value={ownerInfo} onChange={setOwnerInfo} lang={lang} carId={car?.id} />
+          )}
+
+          {validationError && (
+            <div className="bg-red-50 border-2 border-red-300 text-red-800 px-5 py-3 rounded-2xl text-sm font-bold">
+              {validationError}
+            </div>
+          )}
+
           {/* Media & Photos */}
           <section className="space-y-6">
             <h3 className="text-xs font-black text-saas-primary-via flex items-center gap-3 uppercase tracking-[0.2em]">
@@ -196,8 +230,23 @@ export const CarModal: React.FC<CarModalProps> = ({ isOpen, onClose, onSave, onD
                 <input name="model" value={formData.model} onChange={handleChange} className="input-saas" placeholder="ex: S-Class" />
               </div>
               <div className="space-y-2">
-                <label className="label-saas">Immatriculation</label>
-                <input name="registration" value={formData.registration} onChange={handleChange} className="input-saas" placeholder="ex: 12345-123-16" />
+                <label className="label-saas">
+                  {lang === 'fr' ? 'Immatriculation' : 'رقم التسجيل'}
+                  {isConsignment && (
+                    <span className="ms-2 font-normal normal-case tracking-normal text-saas-text-muted">
+                      ({lang === 'fr' ? 'optionnelle' : 'اختياري'})
+                    </span>
+                  )}
+                </label>
+                <input
+                  name="registration"
+                  value={formData.registration}
+                  onChange={handleChange}
+                  className="input-saas"
+                  placeholder={isConsignment
+                    ? (lang === 'fr' ? 'Optionnelle — visible uniquement par vous' : 'اختياري — مرئي لك فقط')
+                    : 'ex: 12345-123-16'}
+                />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -208,6 +257,24 @@ export const CarModal: React.FC<CarModalProps> = ({ isOpen, onClose, onSave, onD
                   <label className="label-saas">Couleur</label>
                   <input name="color" value={formData.color} onChange={handleChange} className="input-saas" placeholder="ex: Obsidian Black" />
                 </div>
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <label className="label-saas">
+                  {lang === 'fr' ? 'Description' : 'الوصف'}
+                  <span className="ms-2 font-normal normal-case tracking-normal text-saas-text-muted">
+                    ({lang === 'fr' ? 'affichée sur le site public' : 'تُعرض على الموقع العام'})
+                  </span>
+                </label>
+                <textarea
+                  name="description"
+                  value={formData.description || ''}
+                  onChange={handleChange}
+                  rows={3}
+                  className="input-saas resize-none"
+                  placeholder={lang === 'fr'
+                    ? 'ex : Berline confortable, climatisation, idéale pour les longs trajets.'
+                    : 'مثال: سيارة سيدان مريحة، مكيف هواء، مثالية للرحلات الطويلة.'}
+                />
               </div>
             </div>
           </section>

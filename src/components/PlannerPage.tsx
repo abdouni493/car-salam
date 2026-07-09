@@ -2,20 +2,22 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Language, ReservationDetails, Client, Car } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { Calendar, Users, Car as CarIcon, Plus, Search, Filter, Eye, Edit, Trash2, CheckCircle, XCircle, Clock, MapPin, Fuel, Camera, FileText, CreditCard, DollarSign, Printer, AlertTriangle, MoreVertical, Grid3x3, CalendarDays, X, Zap, Gauge, Heart } from 'lucide-react';
+import { Calendar, Users, Car as CarIcon, Plus, Search, Filter, Eye, Edit, Trash2, CheckCircle, XCircle, Clock, MapPin, Fuel, Camera, FileText, CreditCard, DollarSign, Printer, AlertTriangle, MoreVertical, Grid3x3, CalendarDays, List, X, Zap, Gauge, Heart, Phone } from 'lucide-react';
 import { ReservationDetailsView } from './ReservationDetailsView';
 import { CreateReservationForm } from './CreateReservationForm';
 import { EditReservationForm } from './EditReservationForm';
+import { formatAmount } from '../utils/format';
 import { ActivationModal, CompletionModal } from './ReservationDetailsView';
 import { ReservationTimelineView } from './ReservationTimelineView';
-import { ConditionsPersonalizer } from './ConditionsPersonalizer';
 import { SendContractModal } from './SendContractModal';
 import { WebsiteOrders } from './WebsiteOrders';
 import { ReservationsService } from '../services/ReservationsService';
 import { DatabaseService } from '../services/DatabaseService';
 import { getCars } from '../services/carService';
 import { supabase } from '../supabase';
-import { generateConditionsPrintHTML, getConditionsTemplate } from '../constants/ConditionsTemplates';
+import { generateConditionsPrintHTML } from '../constants/ConditionsTemplates';
+import { generateContractHTML as buildContractHTML } from './ContractHTMLGenerator';
+import { printHTMLDocument } from '../utils/printDocument';
 
 /**
  * Force a phone number (or any latin/number string) to render strictly left-to-right,
@@ -32,6 +34,35 @@ const ltrPhone = (value: any): string =>
  */
 const ltr = ltrPhone;
 
+/**
+ * Statuts « en cours de traitement » : ceux qui occupent encore le calendrier.
+ * - 'website_reservation' : commande du site non encore acceptée → « Website commandes »
+ * - 'accepted' / 'cancelled' : hors du flux de travail du planificateur
+ */
+const PLANNER_STATUSES = ['pending', 'confirmed', 'active'] as const;
+type PlannerStatus = typeof PLANNER_STATUSES[number];
+
+/** 'terminated' est un ancien libellé encore présent dans certaines lignes. */
+const isTerminatedStatus = (status: string) => status === 'completed' || status === 'terminated';
+
+/**
+ * La liste du planificateur affiche le flux de travail *et* les réservations
+ * terminées (elles restent consultables / réactivables). Seules
+ * 'website_reservation', 'accepted' et 'cancelled' en sont exclues.
+ */
+const isVisibleInPlanner = (status: string) =>
+  PLANNER_STATUSES.includes(status as PlannerStatus) || isTerminatedStatus(status);
+
+/**
+ * Le filtre « Terminées » couvre les deux libellés historiques,
+ * sinon les anciennes lignes 'terminated' seraient introuvables.
+ */
+const matchesStatusFilter = (status: string, filter: string) => {
+  if (filter === 'all') return true;
+  if (filter === 'completed') return isTerminatedStatus(status);
+  return status === filter;
+};
+
 interface PlannerPageProps {
   lang: Language;
   isAuthLoading?: boolean;
@@ -40,7 +71,7 @@ interface PlannerPageProps {
 
 export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = false, user = null }) => {
   const location = useLocation();
-  const [currentView, setCurrentView] = useState<'list' | 'calendar' | 'create' | 'create-alt' | 'details' | 'edit' | 'web-orders'>('list');
+  const [currentView, setCurrentView] = useState<'list' | 'calendar' | 'create' | 'details' | 'edit' | 'web-orders'>('list');
   const [displayMode, setDisplayMode] = useState<'grid' | 'calendar'>('grid');
   const [selectedReservation, setSelectedReservation] = useState<ReservationDetails | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -58,13 +89,11 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
   const buttonRefs = useRef<{[id: string]: HTMLButtonElement | null}>({});
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<ReservationDetails | null>(null);
   const [openPrintMenu, setOpenPrintMenu] = useState<string | null>(null);
-  const [showPrintModal, setShowPrintModal] = useState<{reservation: ReservationDetails, type: string} | null>(null);
   const [showPersonalization, setShowPersonalization] = useState<{reservation: ReservationDetails, type: string} | null>(null);
   const [showSendContractModal, setShowSendContractModal] = useState<ReservationDetails | null>(null);
   const [showInspectionMode, setShowInspectionMode] = useState(false);
   const [showConditionsModal, setShowConditionsModal] = useState(false);
   const [conditionsLanguage, setConditionsLanguage] = useState<'ar' | 'fr'>('ar');
-  const [showConditionsPersonalizer, setShowConditionsPersonalizer] = useState<ReservationDetails | null>(null);
   const [showDebtModal, setShowDebtModal] = useState<{ reservation: ReservationDetails } | null>(null);
   const [filterDebtOnly, setFilterDebtOnly] = useState(false);
   const [agencies, setAgencies] = useState<any[]>([]);
@@ -307,23 +336,16 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
   };
 
   const handlePrint = (reservation: ReservationDetails, type: 'quote' | 'contract' | 'invoice' | 'payment' | 'engagement' | 'versement' | 'inspection') => {
+    // Ouvre directement l'aperçu du document (plus d'étape de personnalisation).
     setOpenPrintMenu(null);
-    setShowPrintModal({reservation, type});
+    setShowPersonalization({ reservation, type });
   };
 
-  const handlePrintChoice = async (choice: 'same' | 'personalise') => {
-    if (!showPrintModal) return;
-
-    if (choice === 'same') {
-      // Print same template using the professional contract template from PersonalizationModal
-      setShowPersonalization({
-        reservation: showPrintModal.reservation,
-        type: showPrintModal.type
-      });
-    } else {
-      setShowPersonalization(showPrintModal);
-    }
-    setShowPrintModal(null);
+  // Ouvre l'aperçu imprimable des conditions de location.
+  const handleOpenConditions = () => {
+    setOpenPrintMenu(null);
+    setConditionsLanguage('ar');
+    setShowConditionsModal(true);
   };
 
   const generatePrintContent = (reservation: ReservationDetails, type: string) => {
@@ -394,15 +416,15 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
           </div>
           <div class="detail">
             <span class="label">${lang === 'fr' ? 'Prix Total:' : 'السعر الإجمالي:'}</span>
-            <span>${reservation.totalPrice.toLocaleString()} ${lang === 'fr' ? 'DA' : 'د.ج'}</span>
+            <span>${formatAmount(reservation.totalPrice)} ${lang === 'fr' ? 'DA' : 'د.ج'}</span>
           </div>
           <div class="detail">
             <span class="label">${lang === 'fr' ? 'Acompte:' : 'الدفعة المقدمة:'}</span>
-            <span>${reservation.advancePayment.toLocaleString()} ${lang === 'fr' ? 'DA' : 'د.ج'}</span>
+            <span>${formatAmount(reservation.advancePayment)} ${lang === 'fr' ? 'DA' : 'د.ج'}</span>
           </div>
           <div class="detail">
             <span class="label">${lang === 'fr' ? 'Reste à Payer:' : 'المبلغ المتبقي:'}</span>
-            <span>${reservation.remainingPayment.toLocaleString()} ${lang === 'fr' ? 'DA' : 'د.ج'}</span>
+            <span>${formatAmount(reservation.remainingPayment)} ${lang === 'fr' ? 'DA' : 'د.ج'}</span>
           </div>
         </div>
         
@@ -434,22 +456,18 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
 
   const isSearching = searchQuery.trim().length > 0;
 
+  /** Le calendrier n'affiche que les réservations en cours de traitement. */
+  const plannerReservations = reservations.filter(
+    r => PLANNER_STATUSES.includes(r.status as PlannerStatus)
+  );
+
   const filteredReservations = reservations.filter(reservation => {
     if (!reservation.client || !reservation.car) return false;
 
-    // Les commandes du site public ne rejoignent le planificateur qu'une fois
-    // ACCEPTÉES par l'agence : on masque les 'pending' (en attente d'acceptation)
-    // et les 'cancelled' (refusées). Les réservations de l'agence ne sont pas
-    // concernées (elles s'affichent dès leur création).
-    if (reservation.source === 'website' &&
-        (reservation.status === 'pending' || reservation.status === 'cancelled')) {
-      return false;
-    }
-
-    const isTerminated =
-      reservation.status === 'completed' || reservation.status === 'terminated';
-
-    if (isTerminated && !isSearching) return false;
+    // Sont exclues : 'website_reservation' (commande du site pas encore acceptée
+    // — gérée dans « Website commandes »), 'accepted' et 'cancelled'. Une commande
+    // du site acceptée passe à 'pending' et apparaît ici avec le badge « 🌐 Site web ».
+    if (!isVisibleInPlanner(reservation.status)) return false;
 
     const q = searchQuery.toLowerCase();
     const matchesSearch =
@@ -461,7 +479,7 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
       (reservation.car.registration || '').toLowerCase().includes(q) ||
       (reservation.client.phone || '').toLowerCase().includes(q);
 
-    const matchesFilter = filterStatus === 'all' || reservation.status === filterStatus;
+    const matchesFilter = matchesStatusFilter(reservation.status, filterStatus);
 
     const matchesSource = filterSource === 'all' || (reservation.source || 'agency') === filterSource;
 
@@ -475,8 +493,9 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
   });
 
   // Nombre de commandes du site public en attente d'acceptation (pour l'alerte).
+  // Une commande en attente porte désormais le statut dédié 'website_reservation'.
   const pendingWebOrdersCount = reservations.filter(
-    r => r.source === 'website' && r.status === 'pending'
+    r => r.source === 'website' && r.status === 'website_reservation'
   ).length;
 
   // Recharge les réservations (après acceptation/annulation d'une commande site).
@@ -489,17 +508,26 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
     }
   };
 
-      const terminatedCount = isSearching
-    ? filteredReservations.filter(r => r.status === 'completed' || r.status === 'terminated').length
-    : 0;
+  // Compteurs des chips KPI — calculés sur les réservations effectivement visibles.
+  const kpiCounts = {
+    pending:   filteredReservations.filter(r => r.status === 'pending').length,
+    confirmed: filteredReservations.filter(r => r.status === 'confirmed').length,
+    active:    filteredReservations.filter(r => r.status === 'active').length,
+    completed: filteredReservations.filter(r => isTerminatedStatus(r.status)).length,
+    debt:      filteredReservations.filter(r => {
+      const paid = (r.payments && r.payments.length > 0)
+        ? r.payments.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0)
+        : (Number(r.advancePayment) || 0);
+      return Math.max(0, (Number(r.totalPrice) || 0) - paid) > 0;
+    }).length,
+  };
 
 
-  if (currentView === 'create' || currentView === 'create-alt') {
+  if (currentView === 'create') {
     return (
       <CreateReservationForm
         lang={lang}
         defaultStatus="confirmed"
-        altFlow={currentView === 'create-alt'}
         onBack={async () => {
           setCurrentView('list');
           setShowInspectionMode(false);
@@ -521,9 +549,9 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
   if (currentView === 'calendar' && displayMode === 'calendar') {
     return (
       <div className="space-y-8">
-        <ReservationTimelineView 
-          lang={lang} 
-          reservations={reservations}
+        <ReservationTimelineView
+          lang={lang}
+          reservations={plannerReservations}
           onSelectReservation={(res) => {
             setSelectedReservation(res);
             setCurrentView('details');
@@ -594,119 +622,151 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
 
   return (
     <div className="space-y-8">
-      {/* Header */}
-      <div className="flex flex-col gap-2">
-        <h2 className="text-3xl font-black text-saas-text-main uppercase tracking-tighter">
-          📅 {lang === 'fr' ? 'Planificateur' : 'المخطط'}
-        </h2>
-        <p className="text-saas-text-muted font-bold uppercase text-[10px] tracking-widest">
-          {lang === 'fr' ? 'Gestion des réservations' : 'إدارة الحجوزات'}
-        </p>
-      </div>
-
-      {/* Controls */}
-      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-        <div className="flex flex-col sm:flex-row gap-4 flex-1">
-          {/* Search */}
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
-            <input
-              type="text"
-              placeholder={lang === 'fr' ? 'Rechercher...' : 'البحث...'}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
-
-          {/* Filter */}
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="all">{lang === 'fr' ? 'Tous les statuts' : 'جميع الحالات'}</option>
-            <option value="pending">{lang === 'fr' ? 'En attente' : 'في الانتظار'}</option>
-            <option value="accepted">{lang === 'fr' ? 'Accepté' : 'مقبول'}</option>
-            <option value="confirmed">{lang === 'fr' ? 'Confirmé' : 'مؤكد'}</option>
-            <option value="active">{lang === 'fr' ? 'Actif' : 'نشط'}</option>
-            <option value="cancelled">{lang === 'fr' ? 'Annulé' : 'ملغي'}</option>
-          </select>
-
-          {/* Source Filter (site web / agence) */}
-          <select
-            value={filterSource}
-            onChange={(e) => setFilterSource(e.target.value as 'all' | 'website' | 'agency')}
-            className="px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            title={lang === 'fr' ? 'Filtrer par origine' : 'تصفية حسب المصدر'}
-          >
-            <option value="all">{lang === 'fr' ? 'Toutes origines' : 'كل المصادر'}</option>
-            <option value="website">{lang === 'fr' ? '🌐 Site web' : '🌐 الموقع'}</option>
-            <option value="agency">{lang === 'fr' ? '🏢 Agence' : '🏢 الوكالة'}</option>
-          </select>
-
-          {/* Debt Filter Toggle */}
-          <button
-            onClick={() => setFilterDebtOnly(v => !v)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-all ${
-              filterDebtOnly
-                ? 'bg-red-500 text-white'
-                : 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100'
-            }`}
-          >
-            💰 {lang === 'fr' ? (filterDebtOnly ? 'Voir tout' : 'Dettes uniquement') : (filterDebtOnly ? 'عرض الكل' : 'الديون فقط')}
-          </button>
+      {/* Rangée 1 — Titre + actions */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+        <div className="flex flex-col gap-2">
+          <h2 className="text-3xl font-black text-saas-text-main uppercase tracking-tighter">
+            📅 {lang === 'fr' ? 'Planificateur' : 'المخطط'}
+          </h2>
+          <p className="text-saas-text-muted font-bold uppercase text-[10px] tracking-widest">
+            {lang === 'fr' ? 'Gestion des réservations' : 'إدارة الحجوزات'}
+          </p>
         </div>
 
-        {/* View Toggle Button */}
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={() => {
-            setDisplayMode('calendar');
-            setCurrentView('calendar');
-          }}
-          className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-bold rounded-lg transition-all"
-          title={lang === 'fr' ? 'Voir le calendrier' : 'عرض التقويم'}
-        >
-          <CalendarDays className="w-4 h-4" />
-          {lang === 'fr' ? 'Calendrier' : 'التقويم'}
-        </motion.button>
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Bascule Liste / Calendrier */}
+          <div className="flex gap-1 p-1 bg-white border border-saas-border rounded-xl shadow-sm">
+            <button
+              onClick={() => {
+                setDisplayMode('grid');
+                setCurrentView('list');
+              }}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-all ${
+                displayMode === 'grid'
+                  ? 'bg-saas-bg text-saas-primary-via border border-saas-border'
+                  : 'text-saas-text-muted hover:text-saas-text-main'
+              }`}
+            >
+              <List className="w-4 h-4" />
+              {lang === 'fr' ? 'Liste' : 'قائمة'}
+            </button>
+            <button
+              onClick={() => {
+                setDisplayMode('calendar');
+                setCurrentView('calendar');
+              }}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-all ${
+                displayMode === 'calendar'
+                  ? 'bg-saas-bg text-saas-primary-via border border-saas-border'
+                  : 'text-saas-text-muted hover:text-saas-text-main'
+              }`}
+            >
+              <CalendarDays className="w-4 h-4" />
+              {lang === 'fr' ? 'Calendrier' : 'التقويم'}
+            </button>
+          </div>
 
-        {/* Add New Reservation */}
+          <button onClick={() => setCurrentView('create')} className="btn-saas-primary">
+            <Plus className="w-4 h-4" />
+            {lang === 'fr' ? 'Nouvelle Réservation' : 'حجز جديد'}
+          </button>
+        </div>
+      </div>
+
+      {/* Rangée 2 — Chips KPI : raccourcis du filtre statut */}
+      <div className="flex flex-wrap gap-3">
+        {([
+          { key: 'pending',   dot: '🟡', label: lang === 'fr' ? 'En attente'  : 'في الانتظار', count: kpiCounts.pending,   cls: 'border-amber-200 bg-amber-50 text-amber-800',    active: 'border-amber-500 bg-amber-100' },
+          { key: 'confirmed', dot: '🟦', label: lang === 'fr' ? 'Confirmées'  : 'مؤكدة',       count: kpiCounts.confirmed, cls: 'border-blue-200 bg-blue-50 text-blue-800',       active: 'border-blue-500 bg-blue-100' },
+          { key: 'active',    dot: '🟢', label: lang === 'fr' ? 'Actives'     : 'نشطة',        count: kpiCounts.active,    cls: 'border-green-200 bg-green-50 text-green-800',    active: 'border-green-500 bg-green-100' },
+          { key: 'completed', dot: '🏁', label: lang === 'fr' ? 'Terminées'   : 'منتهية',      count: kpiCounts.completed, cls: 'border-purple-200 bg-purple-50 text-purple-800', active: 'border-purple-500 bg-purple-100' },
+        ] as const).map(chip => (
+          <button
+            key={chip.key}
+            onClick={() => setFilterStatus(filterStatus === chip.key ? 'all' : chip.key)}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border font-bold text-sm transition-all ${chip.cls} ${
+              filterStatus === chip.key ? chip.active : 'hover:brightness-95'
+            }`}
+          >
+            <span>{chip.dot}</span>
+            {chip.label}
+            <span className="font-black">({chip.count})</span>
+          </button>
+        ))}
         <button
-          onClick={() => setCurrentView('create')}
-          className="btn-saas-primary"
+          onClick={() => setFilterDebtOnly(v => !v)}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border font-bold text-sm transition-all border-red-200 bg-red-50 text-red-800 ${
+            filterDebtOnly ? 'border-red-500 bg-red-100' : 'hover:brightness-95'
+          }`}
         >
-          <Plus className="w-4 h-4" />
-          {lang === 'fr' ? 'Nouvelle Réservation' : 'حجز جديد'}
+          <span>💰</span>
+          {lang === 'fr' ? 'Dettes' : 'الديون'}
+          <span className="font-black">({kpiCounts.debt})</span>
         </button>
+      </div>
 
-        {/* Add New Reservation - Alternative order (Tarification first) */}
+      {/* Rangée 3 — Barre d'outils unique */}
+      <div className="bg-white rounded-2xl border border-saas-border shadow-sm p-3 flex flex-col sm:flex-row flex-wrap gap-3 sm:items-center">
+        {/* Recherche */}
+        <div className="flex-1 min-w-[220px]">
+          <div className="relative">
+            <Search className="absolute start-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none" />
+            <input
+              type="text"
+              placeholder={lang === 'fr' ? 'Nom, véhicule ou téléphone…' : 'الاسم أو المركبة أو الهاتف…'}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full ps-10 pe-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+        </div>
+
+        {/* Filtre Statut — pills segmentées */}
+        <div className="flex gap-1 p-1 bg-saas-bg border border-saas-border rounded-xl">
+          {([
+            { key: 'all',       label: lang === 'fr' ? 'Tous'      : 'الكل' },
+            { key: 'pending',   label: lang === 'fr' ? 'En attente': 'في الانتظار' },
+            { key: 'confirmed', label: lang === 'fr' ? 'Confirmée' : 'مؤكد' },
+            { key: 'active',    label: lang === 'fr' ? 'Active'    : 'نشط' },
+            { key: 'completed', label: lang === 'fr' ? 'Terminée'  : 'منتهي' },
+          ] as const).map(pill => (
+            <button
+              key={pill.key}
+              onClick={() => setFilterStatus(pill.key)}
+              className={`px-3.5 py-2 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${
+                filterStatus === pill.key
+                  ? 'bg-white text-saas-primary-via border border-saas-border shadow-sm'
+                  : 'text-saas-text-muted hover:text-saas-text-main'
+              }`}
+            >
+              {pill.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Filtre Origine */}
+        <select
+          value={filterSource}
+          onChange={(e) => setFilterSource(e.target.value as 'all' | 'website' | 'agency')}
+          className="px-3.5 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm font-bold"
+          title={lang === 'fr' ? 'Filtrer par origine' : 'تصفية حسب المصدر'}
+        >
+          <option value="all">{lang === 'fr' ? 'Toutes' : 'الكل'}</option>
+          <option value="website">{lang === 'fr' ? '🌐 Site web' : '🌐 الموقع'}</option>
+          <option value="agency">{lang === 'fr' ? '🏢 Agence' : '🏢 الوكالة'}</option>
+        </select>
+
+        {/* Dettes uniquement */}
         <button
-          onClick={() => setCurrentView('create-alt')}
-          className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold rounded-lg transition-all"
-          title={lang === 'fr' ? 'Nouvelle réservation (tarification avant le client)' : 'حجز جديد (التسعير قبل العميل)'}
+          onClick={() => setFilterDebtOnly(v => !v)}
+          className={`ms-auto flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm whitespace-nowrap transition-all ${
+            filterDebtOnly
+              ? 'bg-red-500 text-white'
+              : 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100'
+          }`}
         >
-          <Plus className="w-4 h-4" />
-          {lang === 'fr' ? 'Réservation (Tarif. d\'abord)' : 'حجز (التسعير أولا)'}
+          💰 {lang === 'fr' ? (filterDebtOnly ? 'Voir tout' : 'Dettes uniquement') : (filterDebtOnly ? 'عرض الكل' : 'الديون فقط')}
         </button>
-
-        {/* Commandes du site web (avec compteur de nouvelles commandes) */}
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={() => setCurrentView('web-orders')}
-          className="relative flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 text-white font-bold rounded-lg transition-all"
-          title={lang === 'fr' ? 'Commandes reçues du site web' : 'الطلبات الواردة من الموقع'}
-        >
-          🌐 {lang === 'fr' ? 'Commandes Site' : 'طلبات الموقع'}
-          {pendingWebOrdersCount > 0 && (
-            <span className="absolute -top-2 -right-2 min-w-[22px] h-[22px] px-1.5 flex items-center justify-center bg-red-500 text-white text-xs font-black rounded-full border-2 border-white shadow-lg animate-pulse">
-              {pendingWebOrdersCount}
-            </span>
-          )}
-        </motion.button>
       </div>
 
       {/* Alerte : nouvelles commandes du site web en attente d'acceptation */}
@@ -745,37 +805,6 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
         )}
       </AnimatePresence>
 
-            {/* Banner showing terminated results when searching */}
-      <AnimatePresence>
-        {isSearching && terminatedCount > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            className="flex items-center gap-3 bg-purple-50 border border-purple-200 rounded-xl px-5 py-3"
-          >
-            <span className="text-purple-600 text-lg">🔍</span>
-            <p className="text-purple-800 text-sm font-semibold">
-              {lang === 'fr'
-                ? `${terminatedCount} réservation${terminatedCount > 1 ? 's' : ''} terminée${terminatedCount > 1 ? 's' : ''} incluse${terminatedCount > 1 ? 's' : ''} dans les résultats`
-                : `${terminatedCount} حجز منتهية مضمنة في النتائج`}
-            </p>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Hint when not searching */}
-      {!isSearching && (
-        <p className="text-xs text-slate-400 font-medium -mt-4">
-          {lang === 'fr'
-            ? '💡 Recherchez un nom, véhicule ou téléphone pour afficher aussi les réservations terminées'
-            : '💡 ابحث باسم أو سيارة أو هاتف لعرض الحجوزات المنتهية أيضًا'}
-        </p>
-      )}
-
-
-
-      
       {/* Car Availability Filter */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
@@ -1044,18 +1073,38 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
             key={reservation.id}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-white rounded-2xl shadow-lg border border-slate-200 flex flex-col relative"
+            className="group bg-white rounded-2xl shadow-sm hover:shadow-2xl hover:shadow-slate-300/40 hover:-translate-y-1 border border-slate-200/80 flex flex-col relative transition-all duration-300"
           >
             {/* Car Image */}
-            <div className="relative h-48 overflow-hidden rounded-t-2xl">
+            <div className="relative h-44 overflow-hidden rounded-t-2xl">
               <img
                 src={reservation.car.images?.[0] || 'https://picsum.photos/seed/car/400/300'}
                 alt={`${reservation.car.brand} ${reservation.car.model}`}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                 referrerPolicy="no-referrer"
               />
-              {/* Client Avatar - Circular with Border */}
-              <div className="absolute top-4 right-4 w-16 h-16 rounded-full border-4 border-white overflow-hidden shadow-lg bg-slate-100 flex items-center justify-center">
+              {/* Dégradé pour la lisibilité du texte superposé */}
+              <div className="absolute inset-0 bg-gradient-to-t from-slate-900/85 via-slate-900/15 to-slate-900/10" />
+
+              {/* Badge de statut */}
+              <span className={`absolute top-3 left-3 px-3 py-1 rounded-full text-[11px] font-black shadow-md backdrop-blur-md border border-white/40 ${
+                reservation.status === 'confirmed' ? 'bg-green-500/90 text-white' :
+                reservation.status === 'accepted' ? 'bg-teal-500/90 text-white' :
+                reservation.status === 'active' ? 'bg-blue-500/90 text-white' :
+                reservation.status === 'completed' ? 'bg-purple-500/90 text-white' :
+                reservation.status === 'terminated' ? 'bg-red-500/90 text-white' :
+                'bg-amber-400/95 text-amber-950'
+              }`}>
+                {reservation.status === 'confirmed' ? '✅ Confirmé' :
+                 reservation.status === 'accepted' ? '✅ Accepté' :
+                 reservation.status === 'active' ? '🔄 Actif' :
+                 reservation.status === 'completed' ? '🏁 Terminé' :
+                 reservation.status === 'terminated' ? '🛑 Terminée' :
+                 '⏳ En attente'}
+              </span>
+
+              {/* Avatar client */}
+              <div className="absolute top-3 right-3 w-14 h-14 rounded-2xl border-2 border-white/80 overflow-hidden shadow-lg bg-slate-100 flex items-center justify-center">
                 {reservation.client.profilePhoto ? (
                   <img
                     src={reservation.client.profilePhoto}
@@ -1067,110 +1116,98 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                   <span className="text-2xl">👤</span>
                 )}
               </div>
-              {/* Status + Source Badges */}
-              <div className="absolute top-4 left-4 flex flex-col items-start gap-2">
-                <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                  reservation.status === 'confirmed' ? 'bg-green-100 text-green-800' :
-                  reservation.status === 'accepted' ? 'bg-teal-100 text-teal-800' :
-                  reservation.status === 'active' ? 'bg-blue-100 text-blue-800' :
-                  reservation.status === 'completed' ? 'bg-purple-100 text-purple-800' :
-                  reservation.status === 'terminated' ? 'bg-red-100 text-red-800' :
-                  'bg-yellow-100 text-yellow-800'
-                }`}>
-                  {reservation.status === 'confirmed' ? '✅ Confirmé' :
-                   reservation.status === 'accepted' ? '✅ Accepté' :
-                   reservation.status === 'active' ? '🔄 Actif' :
-                   reservation.status === 'completed' ? '🏁 Terminé' :
-                   reservation.status === 'terminated' ? '🛑 Terminée' :
-                   '⏳ En attente'}
-                </span>
-                {/* Origine : site web vs agence */}
-                <span className={`px-3 py-1 rounded-full text-xs font-bold shadow-sm ${
-                  reservation.source === 'website'
-                    ? 'bg-indigo-100 text-indigo-800'
-                    : 'bg-slate-100 text-slate-700'
+
+              {/* Véhicule + immatriculation + origine (superposés en bas) */}
+              <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between gap-2">
+                <div className="min-w-0">
+                  <h4 className="font-black text-white text-base leading-tight truncate drop-shadow-md">
+                    {reservation.car.brand} {reservation.car.model}
+                  </h4>
+                  <span className="inline-block mt-1 px-2 py-0.5 rounded-md bg-white/90 text-slate-800 text-[11px] font-black tracking-wide shadow-sm">
+                    {reservation.car.registration}
+                  </span>
+                </div>
+                <span className={`flex-shrink-0 px-2.5 py-1 rounded-lg text-[10px] font-black shadow-md backdrop-blur-md border border-white/40 ${
+                  reservation.source === 'website' ? 'bg-indigo-500/90 text-white' : 'bg-white/85 text-slate-700'
                 }`}>
                   {reservation.source === 'website'
-                    ? (lang === 'fr' ? '🌐 Site web' : '🌐 الموقع')
-                    : (lang === 'fr' ? '🏢 Agence' : '🏢 الوكالة')}
+                    ? (lang === 'fr' ? '🌐 Site' : '🌐 موقع')
+                    : (lang === 'fr' ? '🏢 Agence' : '🏢 وكالة')}
                 </span>
               </div>
             </div>
 
             {/* Content */}
-            <div className="p-6">
-              {/* Client & Car Info */}
-              <div className="space-y-3 mb-4">
-                <div>
-                  <h3 className="font-bold text-lg text-slate-900">
-                    {reservation.client.firstName} {reservation.client.lastName}
-                  </h3>
-                  <p className="text-sm text-slate-600">
-                    📱 {reservation.client.phone}
-                  </p>
-                </div>
-                <div>
-                  <h4 className="font-bold text-slate-900">
-                    🚗 {reservation.car.brand} {reservation.car.model}
-                  </h4>
-                  <p className="text-sm text-slate-600">
-                    🏷️ {reservation.car.registration}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-slate-600">
-                  <Calendar className="w-4 h-4" />
-                  <span>{reservation.step1.departureDate} → {reservation.step1.returnDate}</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-slate-600">
-                  <Clock className="w-4 h-4" />
-                  <span>{reservation.totalDays} {lang === 'fr' ? 'jours' : 'أيام'}</span>
-                </div>
-                <div className="mt-3 p-4 bg-gradient-to-r from-white to-slate-50 rounded-xl border border-slate-200">
-                  <div className="flex items-center justify-between mb-3">
-                    <div>
-                      <div className="text-xs text-slate-500">{lang === 'fr' ? 'Total Réservation' : 'الإجمالي'}</div>
-                      <div className="text-xl font-black text-slate-900">{displayTotalPrice.toLocaleString()} {lang === 'fr' ? 'DA' : 'د.ج'}</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-xs text-slate-500">{lang === 'fr' ? 'Payé' : 'مدفوع'}</div>
-                      <div className="text-lg font-bold text-green-700">{paidAmount.toLocaleString()} {lang === 'fr' ? 'DA' : 'د.ج'}</div>
-                      <div className="text-xs text-slate-400">{lang === 'fr' ? `(${servicesTotal.toLocaleString()} ${lang === 'fr' ? 'DA' : 'د.ج'} services)` : `(${servicesTotal.toLocaleString()} ${lang === 'fr' ? 'DA' : 'د.ج'} خدمات)`}</div>
-                    </div>
-                  </div>
+            <div className="p-5 flex flex-col flex-1">
+              {/* Client */}
+              <div className="mb-3">
+                <h3 className="font-black text-lg text-slate-900 leading-tight truncate">
+                  {reservation.client.firstName} {reservation.client.lastName}
+                </h3>
+                <p className="flex items-center gap-1.5 text-sm text-slate-500 mt-0.5">
+                  <Phone className="w-3.5 h-3.5 text-slate-400" /> {reservation.client.phone}
+                </p>
+              </div>
 
-                  <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden mb-2">
-                    <div
-                      className={`h-2 rounded-full ${remainingAmount === 0 ? 'bg-green-500' : 'bg-orange-400'}`}
-                      style={{ width: `${Math.min(100, Math.round((paidAmount / (displayTotalPrice || 1)) * 100))}%` }}
-                    />
-                  </div>
+              {/* Dates & durée */}
+              <div className="flex flex-wrap gap-2 mb-4">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-100 text-xs font-semibold text-slate-600">
+                  <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                  {reservation.step1.departureDate} → {reservation.step1.returnDate}
+                </span>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-100 text-xs font-semibold text-slate-600">
+                  <Clock className="w-3.5 h-3.5 text-slate-400" />
+                  {reservation.totalDays} {lang === 'fr' ? 'jours' : 'أيام'}
+                </span>
+              </div>
 
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="text-slate-600">{lang === 'fr' ? 'Reste à payer' : 'المتبقي'}</div>
-                    <div className={`font-bold ${remainingAmount === 0 ? 'text-green-700' : 'text-red-700'}`}>{remainingAmount.toLocaleString()} {lang === 'fr' ? 'DA' : 'د.ج'}</div>
+              {/* Bloc financier */}
+              <div className="p-4 rounded-2xl border border-slate-200/70 bg-gradient-to-br from-slate-50 to-white mb-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{lang === 'fr' ? 'Total Réservation' : 'الإجمالي'}</div>
+                    <div className="text-xl font-black text-slate-900">{displayTotalPrice.toLocaleString()} <span className="text-xs font-bold text-slate-400">{lang === 'fr' ? 'DA' : 'د.ج'}</span></div>
                   </div>
+                  <div className="text-right">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{lang === 'fr' ? 'Payé' : 'مدفوع'}</div>
+                    <div className="text-lg font-black text-emerald-600">{paidAmount.toLocaleString()} <span className="text-xs font-bold text-emerald-400">{lang === 'fr' ? 'DA' : 'د.ج'}</span></div>
+                  </div>
+                </div>
+
+                <div className="w-full bg-slate-200/70 rounded-full h-1.5 overflow-hidden mb-2">
+                  <div
+                    className={`h-1.5 rounded-full transition-all ${remainingAmount === 0 ? 'bg-gradient-to-r from-emerald-400 to-green-500' : 'bg-gradient-to-r from-amber-400 to-orange-500'}`}
+                    style={{ width: `${Math.min(100, Math.round((paidAmount / (displayTotalPrice || 1)) * 100))}%` }}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-slate-500">{lang === 'fr' ? 'Reste à payer' : 'المتبقي'}</span>
+                  <span className={`font-black ${remainingAmount === 0 ? 'text-emerald-600' : 'text-red-600'}`}>{remainingAmount.toLocaleString()} {lang === 'fr' ? 'DA' : 'د.ج'}</span>
                 </div>
               </div>
 
               {/* Actions */}
-              <div className="flex gap-2 mb-3">
+              <div className="mt-auto space-y-2.5">
+              <div className="flex gap-2">
                 <button
                   onClick={() => handleViewDetails(reservation)}
-                  className="flex-1 flex items-center justify-center gap-2 bg-blue-100 hover:bg-blue-200 text-blue-700 font-bold py-2 px-3 rounded-lg transition-colors"
+                  className="flex-1 flex items-center justify-center gap-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-sm py-2.5 px-3 rounded-xl border border-blue-100 transition-colors"
                 >
-                  👁️ {lang === 'fr' ? 'Détails' : 'التفاصيل'}
+                  <Eye className="w-4 h-4" /> {lang === 'fr' ? 'Détails' : 'التفاصيل'}
                 </button>
                 <button
                   onClick={() => handleEdit(reservation)}
-                  className="flex-1 flex items-center justify-center gap-2 bg-yellow-100 hover:bg-yellow-200 text-yellow-700 font-bold py-2 px-3 rounded-lg transition-colors"
+                  className="flex-1 flex items-center justify-center gap-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 font-bold text-sm py-2.5 px-3 rounded-xl border border-amber-100 transition-colors"
                 >
-                  ✏️ {lang === 'fr' ? 'Modifier' : 'تعديل'}
+                  <Edit className="w-4 h-4" /> {lang === 'fr' ? 'Modifier' : 'تعديل'}
                 </button>
                 <button
                   onClick={() => handleDelete(reservation)}
-                  className="flex items-center justify-center gap-2 bg-red-100 hover:bg-red-200 text-red-700 font-bold py-2 px-3 rounded-lg transition-colors"
+                  className="flex items-center justify-center bg-red-50 hover:bg-red-100 text-red-600 font-bold py-2.5 px-3 rounded-xl border border-red-100 transition-colors"
+                  title={lang === 'fr' ? 'Supprimer' : 'حذف'}
                 >
-                  🗑️
+                  <Trash2 className="w-4 h-4" />
                 </button>
               </div>
 
@@ -1185,7 +1222,7 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                       setShowInspectionMode(true);
                       setCurrentView('create');
                     }}
-                    className="flex-1 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white font-bold py-2 px-4 rounded-lg transition-all text-sm"
+                    className="flex-1 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white font-bold py-2.5 px-4 rounded-xl transition-all text-sm shadow-sm"
                   >
                     📋 {lang === 'fr' ? 'Inspection' : 'الفحص'}
                   </button>
@@ -1200,7 +1237,7 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                       setShowInspectionMode(true);
                       setCurrentView('edit');
                     }}
-                    className="flex-1 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white font-bold py-2 px-4 rounded-lg transition-all text-sm"
+                    className="flex-1 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white font-bold py-2.5 px-4 rounded-xl transition-all text-sm shadow-sm"
                   >
                     📋 {lang === 'fr' ? 'Inspection' : 'الفحص'}
                   </button>
@@ -1210,7 +1247,7 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                 {reservation.status === 'confirmed' && (
                   <button
                     onClick={() => handleActivate(reservation)}
-                    className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold py-2 px-4 rounded-lg transition-all text-sm"
+                    className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold py-2.5 px-4 rounded-xl transition-all text-sm shadow-sm"
                   >
                     ✅ {lang === 'fr' ? 'Activer' : 'تفعيل'}
                   </button>
@@ -1220,7 +1257,7 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                 {reservation.status === 'active' && (
                   <button
                     onClick={() => handleComplete(reservation)}
-                    className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold py-2 px-4 rounded-lg transition-all text-sm"
+                    className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold py-2.5 px-4 rounded-xl transition-all text-sm shadow-sm"
                   >
                     🏁 {lang === 'fr' ? 'Terminer' : 'إنهاء'}
                   </button>
@@ -1230,7 +1267,7 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                 {reservation.status === 'completed' && (
                   <button
                     onClick={() => handleActivate(reservation)}
-                    className="flex-1 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-all text-sm"
+                    className="flex-1 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-bold py-2.5 px-4 rounded-xl transition-all text-sm shadow-sm"
                   >
                     🔄 {lang === 'fr' ? 'Réactiver' : 'إعادة تفعيل'}
                   </button>
@@ -1240,7 +1277,7 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                 {reservation.status === 'terminated' && (
                   <button
                     onClick={() => handleActivate(reservation)}
-                    className="flex-1 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-all text-sm"
+                    className="flex-1 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-bold py-2.5 px-4 rounded-xl transition-all text-sm shadow-sm"
                   >
                     🔄 {lang === 'fr' ? 'Réactiver' : 'إعادة تفعيل'}
                   </button>
@@ -1250,7 +1287,7 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                 {remainingAmount > 0 && (
                   <button
                     onClick={() => setShowDebtModal({ reservation })}
-                    className="flex-1 bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white font-bold py-2 px-4 rounded-lg transition-all text-sm flex items-center justify-center gap-2"
+                    className="flex-1 bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white font-bold py-2.5 px-4 rounded-xl transition-all text-sm shadow-sm flex items-center justify-center gap-2"
                   >
                     💰 {lang === 'fr' ? 'Payer dette' : 'سداد الدين'}
                   </button>
@@ -1277,7 +1314,7 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                       }
                       setOpenPrintMenu(openPrintMenu === reservation.id ? null : reservation.id);
                     }}
-                    className="p-2 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-lg transition-colors flex items-center gap-1"
+                    className="p-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl border border-indigo-100 transition-colors flex items-center gap-1"
                     title={lang === 'fr' ? 'Plus d\'options' : 'خيارات أكثر'}
                   >
                     <MoreVertical className="w-4 h-4" />
@@ -1304,6 +1341,12 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                           className="w-full text-left px-4 py-3 hover:bg-indigo-50 text-saas-text-main font-bold flex items-center gap-2 border-b border-saas-border transition-colors"
                         >
                           📄 {lang === 'fr' ? 'Contrat' : 'عقد'}
+                        </button>
+                        <button
+                          onClick={() => handleOpenConditions()}
+                          className="w-full text-left px-4 py-3 hover:bg-indigo-50 text-saas-text-main font-bold flex items-center gap-2 border-b border-saas-border transition-colors"
+                        >
+                          📋 {lang === 'fr' ? 'Conditions' : 'الشروط'}
                         </button>
                         <button
                           onClick={() => handlePrint(reservation, 'invoice')}
@@ -1342,6 +1385,7 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                     )}
                   </AnimatePresence>
                 </div>
+              </div>
               </div>
             </div>
           </motion.div>
@@ -1401,68 +1445,6 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
         )}
       </AnimatePresence>
 
-      {/* Print Choice Modal */}
-      <AnimatePresence>
-        {showPrintModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="glass-card max-w-md w-full p-6 border border-saas-border"
-            >
-              <h3 className="text-xl font-black text-saas-text-main mb-6">
-                🖨️ {lang === 'fr' ? 'Options d\'Impression' : 'خيارات الطباعة'}
-              </h3>
-              <p className="text-saas-text-muted mb-6">
-                {lang === 'fr' ? 'Choisissez le mode d\'impression :' : 'اختر وضع الطباعة:'}
-              </p>
-              <div className="flex gap-3 mb-4">
-                <button
-                  onClick={() => handlePrintChoice('same')}
-                  className="flex-1 bg-saas-primary-start hover:bg-saas-primary-end text-white font-bold py-3 px-4 rounded-lg transition-all"
-                >
-                  📄 {lang === 'fr' ? 'Même Modèle' : 'نفس النموذج'}
-                </button>
-                <button
-                  onClick={() => handlePrintChoice('personalise')}
-                  className="flex-1 bg-saas-secondary-start hover:bg-saas-secondary-end text-white font-bold py-3 px-4 rounded-lg transition-all"
-                >
-                  🎨 {lang === 'fr' ? 'Personnaliser' : 'تخصيص'}
-            </button>
-          </div>
-          {showPrintModal?.type === 'contract' && (
-            <>
-              <button
-                onClick={() => {
-                  setShowPrintModal(null);
-                  setShowConditionsPersonalizer(showPrintModal?.reservation || null);
-                }}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-all mb-3"
-              >
-                📋 {lang === 'fr' ? 'Personnaliser les Conditions' : 'تخصيص الشروط'}
-              </button>
-              <button
-                onClick={() => {
-                  setShowPrintModal(null);
-                  setShowConditionsModal(true);
-                  setConditionsLanguage('ar'); // Reset to Arabic when opening
-                }}
-                className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-lg transition-all"
-              >
-                🖨️ {lang === 'fr' ? 'Imprimer les Conditions' : 'طباعة الشروط'}
-              </button>
-            </>
-          )}
-        </motion.div>
-      </motion.div>
-    )}
-  </AnimatePresence>
 
   {/* Pay Debt Modal */}
   <AnimatePresence>
@@ -1502,184 +1484,99 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
             reservation={showPersonalization.reservation}
             type={showPersonalization.type}
             onClose={() => setShowPersonalization(null)}
-            onPrint={(content) => {
-              const printWindow = window.open('', '', 'height=600,width=800');
-              if (printWindow) {
-                printWindow.document.write(content);
-                printWindow.document.close();
-                printWindow.print();
-              }
-            }}
+            onPrint={(content) => printHTMLDocument(content)}
           />
         )}
       </AnimatePresence>
 
-      {/* Conditions Modal - Streamlined */}
+      {/* Conditions Modal — aperçu imprimable (même design que l'interface du contrat) */}
       <AnimatePresence>
         {showConditionsModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto"
-          >
+          <>
             <motion.div
-              initial={{ scale: 0.95, opacity: 0, y: 10 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.95, opacity: 0, y: 10 }}
-              className="bg-white w-full max-w-5xl rounded-xl shadow-2xl overflow-hidden"
+              key="conditions-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 backdrop-blur-sm bg-black/40 z-40"
+              onClick={() => setShowConditionsModal(false)}
+            />
+            <motion.div
+              key="conditions-modal"
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-4"
             >
-              {/* Sleek Header */}
-              <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-4 md:px-8 py-4 md:py-5 flex items-center justify-between">
-                <div className="flex-1 min-w-0">
-                  <h2 className="text-lg md:text-xl font-bold text-white truncate">
-                    {conditionsLanguage === 'fr' ? 'Conditions de Location' : 'شروط الإيجار'}
-                  </h2>
-                  <p className="text-blue-100 text-xs md:text-sm mt-1 truncate">
-                    {(() => {
-                      const template = getConditionsTemplate(conditionsLanguage);
-                      return template.subtitle;
-                    })()}
-                  </p>
-                </div>
-
-                {/* Close Button */}
-                <button
-                  onClick={() => setShowConditionsModal(false)}
-                  className="flex-shrink-0 ml-3 p-2 hover:bg-white/20 rounded-lg transition"
-                  aria-label="Close"
-                >
-                  <X size={22} className="text-white" />
-                </button>
-              </div>
-
-              {/* Main Content */}
-              <div className="p-4 md:p-6 lg:p-8">
-                {/* Language Toggle - Minimal */}
-                <div className="flex gap-2 mb-6">
+              <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+                {/* Header */}
+                <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-8 py-6 flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <h2 className="text-2xl font-bold text-white">
+                      {conditionsLanguage === 'fr' ? 'Conditions de Location' : 'شروط الإيجار'}
+                    </h2>
+                    {/* Sélecteur de langue */}
+                    <div className="flex gap-2 ml-8">
+                      <button
+                        onClick={() => setConditionsLanguage('fr')}
+                        className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+                          conditionsLanguage === 'fr'
+                            ? 'bg-white text-blue-600'
+                            : 'bg-blue-500 text-white hover:bg-blue-400'
+                        }`}
+                      >
+                        🇫🇷 Français
+                      </button>
+                      <button
+                        onClick={() => setConditionsLanguage('ar')}
+                        className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+                          conditionsLanguage === 'ar'
+                            ? 'bg-white text-blue-600'
+                            : 'bg-blue-500 text-white hover:bg-blue-400'
+                        }`}
+                      >
+                        🇸🇦 العربية
+                      </button>
+                    </div>
+                  </div>
                   <button
-                    onClick={() => setConditionsLanguage('ar')}
-                    className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all ${
-                      conditionsLanguage === 'ar'
-                        ? 'bg-blue-600 text-white shadow-md'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
+                    onClick={() => setShowConditionsModal(false)}
+                    className="text-white hover:bg-white hover:bg-opacity-20 p-2 rounded-lg transition-all"
                   >
-                    العربية
-                  </button>
-                  <button
-                    onClick={() => setConditionsLanguage('fr')}
-                    className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all ${
-                      conditionsLanguage === 'fr'
-                        ? 'bg-blue-600 text-white shadow-md'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    Français
+                    <X size={24} />
                   </button>
                 </div>
 
-                {/* Conditions Table - Streamlined */}
-                <div className="overflow-hidden rounded-lg border border-gray-200 mb-6">
-                  <div style={{ direction: conditionsLanguage === 'ar' ? 'rtl' : 'ltr', textAlign: conditionsLanguage === 'ar' ? 'right' : 'left' }}>
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-50 border-b border-gray-200">
-                        <tr>
-                          <th className="w-8 px-3 py-3 text-center font-semibold text-gray-700">#</th>
-                          <th className="w-1/4 px-4 py-3 text-left font-semibold text-gray-700">
-                            {conditionsLanguage === 'fr' ? 'Condition' : 'الشرط'}
-                          </th>
-                          <th className="flex-1 px-4 py-3 text-left font-semibold text-gray-700">
-                            {conditionsLanguage === 'fr' ? 'Description' : 'التفاصيل'}
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200">
-                        {(() => {
-                          const template = getConditionsTemplate(conditionsLanguage);
-                          return template.conditions.map((condition, index) => (
-                            <motion.tr
-                              key={index}
-                              initial={{ opacity: 0 }}
-                              animate={{ opacity: 1 }}
-                              transition={{ delay: index * 0.02 }}
-                              className="hover:bg-blue-50 transition"
-                            >
-                              <td className="px-3 py-3 text-center font-bold text-blue-600">{index + 1}</td>
-                              <td className="px-4 py-3 font-semibold text-gray-800">{condition.title}</td>
-                              <td className="px-4 py-3 text-gray-700 leading-relaxed">{condition.content}</td>
-                            </motion.tr>
-                          ));
-                        })()}
-                      </tbody>
-                    </table>
+                {/* Zone d'aperçu */}
+                <div className="flex-1 overflow-auto bg-gradient-to-b from-gray-50 to-white p-8">
+                  <div className="bg-white rounded-lg shadow-lg p-0 mx-auto" style={{ width: '210mm' }}>
+                    <iframe
+                      srcDoc={generateConditionsPrintHTML(conditionsLanguage)}
+                      style={{ width: '100%', height: '600px', border: 'none', borderRadius: '0.5rem' }}
+                      title="Conditions Preview"
+                    />
                   </div>
                 </div>
 
-                {/* Signature Preview - Minimal */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                  {(() => {
-                    const template = getConditionsTemplate(conditionsLanguage);
-                    const dir = conditionsLanguage === 'ar' ? 'rtl' : 'ltr';
-                    return (
-                      <>
-                        <div className="flex flex-col" style={{ direction: dir }}>
-                          <div className="h-16 border-b-2 border-gray-400 mb-3"></div>
-                          <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                            {template.clientSignatureLabel}
-                          </p>
-                        </div>
-                        <div className="flex flex-col" style={{ direction: dir }}>
-                          <div className="h-16 border-b-2 border-gray-400 mb-3"></div>
-                          <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                            {template.agencySignatureLabel}
-                          </p>
-                        </div>
-                      </>
-                    );
-                  })()}
-                </div>
-
-                {/* Info Alert - Compact */}
-                <div className="bg-blue-50 border-l-4 border-blue-600 p-3 mb-6 rounded">
-                  <p className="text-blue-900 text-sm">
-                    <span className="font-semibold">ℹ️ Info:</span>{' '}
-                    {conditionsLanguage === 'fr' 
-                      ? 'Modèle standard optimisé pour impression A4 sur une seule page.' 
-                      : 'نموذج قياسي محسّن للطباعة على صفحة A4 واحدة.'}
-                  </p>
-                </div>
-
-                {/* Action Buttons - Compact and Modern */}
-                <div className="flex flex-wrap gap-3">
+                {/* Pied de page — actions */}
+                <div className="bg-gray-100 px-8 py-4 flex items-center justify-between border-t border-gray-200">
                   <button
                     onClick={() => setShowConditionsModal(false)}
-                    className="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold rounded-lg transition-all text-sm"
+                    className="px-6 py-2 bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold rounded-lg transition-all"
                   >
                     {conditionsLanguage === 'fr' ? 'Fermer' : 'إغلاق'}
                   </button>
                   <button
-                    onClick={() => {
-                      const content = generateConditionsPrintHTML(conditionsLanguage);
-                      const printWindow = window.open('', '', 'height=800,width=900');
-                      if (printWindow) {
-                        printWindow.document.write(content);
-                        printWindow.document.close();
-                        setTimeout(() => {
-                          printWindow.print();
-                          printWindow.close();
-                        }, 250);
-                      }
-                    }}
-                    className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-all flex items-center gap-2 text-sm shadow-md hover:shadow-lg"
+                    onClick={() => printHTMLDocument(generateConditionsPrintHTML(conditionsLanguage))}
+                    className="px-6 py-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold rounded-lg transition-all flex items-center gap-2"
                   >
                     <Printer size={18} />
-                    <span>{conditionsLanguage === 'fr' ? 'Imprimer' : 'طباعة'}</span>
+                    {conditionsLanguage === 'fr' ? 'Imprimer' : 'طباعة'}
                   </button>
                 </div>
               </div>
             </motion.div>
-          </motion.div>
+          </>
         )}
       </AnimatePresence>
 
@@ -1700,26 +1597,6 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
         />
       )}
       
-      {/* Conditions Personalizer */}
-      <AnimatePresence>
-        {showConditionsPersonalizer && (
-          <ConditionsPersonalizer
-            lang={lang}
-            reservationId={showConditionsPersonalizer.id}
-            onClose={() => setShowConditionsPersonalizer(null)}
-            onSave={(conditions) => {
-              // Update reservation with new conditions
-              if (selectedReservation) {
-                setSelectedReservation({
-                  ...selectedReservation,
-                  conditions: conditions
-                });
-              }
-            }}
-          />
-        )}
-      </AnimatePresence>
-
       {/* Send Contract by Email Modal */}
       <AnimatePresence>
         {showSendContractModal && (
@@ -2630,639 +2507,12 @@ export const PersonalizationModal: React.FC<{
     }
   };
 
-  const generateContractHTML = (templateLang: 'fr' | 'ar'): string => {
-    const isFrench = templateLang === 'fr';
-    const textDir = isFrench ? 'ltr' : 'rtl';
-    
-    const labels = {
-      contractTitle: isFrench ? 'Contrat de Location' : 'عقد كراء السيارة',
-      contractDate: isFrench ? 'Date du Contrat' : 'تاريخ العقد',
-      contractNumber: isFrench ? 'N° de Contrat' : 'رقم العقد',
-      client: isFrench ? 'Client' : 'العميل',
-      rentalPeriod: isFrench ? 'Période de Location' : 'فترة الإيجار',
-      departure: isFrench ? 'Départ' : 'المغادرة',
-      return: isFrench ? 'Retour' : 'العودة',
-      duration: isFrench ? 'Durée' : 'المدة',
-      days: isFrench ? 'jours' : 'أيام',
-      driverInfo: isFrench ? 'Conducteur Principal' : 'السائق الرئيسي',
-      secondDriver: isFrench ? 'Conducteur Secondaire' : 'السائق الثانوي',
-      fullName: isFrench ? 'Nom Complet' : 'الاسم الكامل',
-      birthDate: isFrench ? 'Date de Naissance' : 'تاريخ الميلاد',
-      birthPlace: isFrench ? 'Lieu de Naissance' : 'مكان الميلاد',
-      licenseNumber: isFrench ? 'Numéro de Permis' : 'رقم الرخصة',
-      licenseDeliveryDate: isFrench ? 'Délivrance Permis' : 'تاريخ إصدار الرخصة',
-      licenseExpirationDate: isFrench ? 'Expiration Permis' : 'تاريخ انتهاء الرخصة',
-      licenseDeliveryPlace: isFrench ? 'Lieu Délivrance Permis' : 'مكان إصدار الرخصة',
-      vehicleInfo: isFrench ? 'Informations du Véhicule' : 'معلومات المركبة',
-      model: isFrench ? 'Modèle' : 'الموديل',
-      registration: isFrench ? 'Immatriculation' : 'التسجيل',
-      color: isFrench ? 'Couleur' : 'اللون',
-      vin: isFrench ? 'VIN' : 'رقم المحرك',
-      fuel: isFrench ? 'Carburant' : 'الوقود',
-      mileage: isFrench ? 'Kilométrage' : 'الكيلومترات',
-      pricing: isFrench ? 'Tarification' : 'التسعير',
-      pricePerDay: isFrench ? 'Prix par Jour' : 'السعر في اليوم',
-      numberOfDays: isFrench ? 'Nombre de Jours' : 'عدد الأيام',
-      totalHT: isFrench ? 'Montant HT' : 'المبلغ غير ضريبي',
-      tva: isFrench ? 'TVA 19%' : 'الضريبة 19%',
-      totalTTC: isFrench ? 'TOTAL TTC' : 'الإجمالي',
-      conditions: isFrench ? 'Conditions Acceptées' : 'الشروط المقبولة',
-      signatures: isFrench ? 'Signatures' : 'التوقيعات',
-      clientSignature: isFrench ? 'Signature du Client' : 'توقيع العميل',
-      agencySignature: isFrench ? "Signature de l'Agence" : 'توقيع الوكالة',
-      dateAndSignature: isFrench ? 'Date et signature' : 'التاريخ والتوقيع',
-    };
-
-    const conditionsList = isFrench 
-      ? ['Permis de conduire valide', 'Assurance tous risques', 'Caution dépôt', 'Carburant plein', 'État du véhicule accepté', 'Pas de dégâts supplémentaires']
-      : ['رخصة قيادة سارية', 'تأمين شامل', 'ضمان الإيداع', 'خزان ممتلئ', 'حالة المركبة مقبولة', 'لا توجد أضرار إضافية'];
-
-    const hasSecondConductor = !!secondConductor;
-    const baseFontSize = hasSecondConductor ? 17 : 18;
-    const scaleFactor = 1;
-
-    const html = `
-    <!DOCTYPE html>
-    <html dir="${textDir}" lang="${isFrench ? 'fr' : 'ar'}">
-    <head>
-      <meta charset="UTF-8">
-      <title>Contrat de Location</title>
-      <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-          font-family: 'Segoe UI', Arial, sans-serif;
-          line-height: ${hasSecondConductor ? '1.4' : '1.45'};
-          color: #222;
-          background: white;
-          direction: ${textDir};
-          font-size: ${baseFontSize}px;
-          transform: scale(${scaleFactor});
-          transform-origin: top center;
-        }
-        .page {
-          width: 210mm;
-          height: 297mm;
-          padding: ${hasSecondConductor ? '2mm' : '2.5mm'};
-          margin: 0 auto;
-          background: white;
-          display: flex;
-          flex-direction: column;
-          border: 2px solid #d1d5db;
-          border-radius: 4px;
-          box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        }
-        .header {
-          border-bottom: 3px solid #1a3a8a;
-          padding-bottom: ${hasSecondConductor ? '2px' : '3px'};
-          margin-bottom: ${hasSecondConductor ? '3px' : '4px'};
-          display: flex;
-          align-items: center;
-          gap: 8px;
-        }
-        .logo {
-          width: ${hasSecondConductor ? '30px' : '35px'};
-          height: ${hasSecondConductor ? '30px' : '35px'};
-          object-fit: contain;
-          flex-shrink: 0;
-        }
-        .header-text {
-          flex: 1;
-        }
-        .agency-name {
-          font-size: ${hasSecondConductor ? '18px' : '20px'};
-          font-weight: bold;
-          color: #1a3a8a;
-          text-align: center;
-          margin: 0 0 2px 0;
-        }
-        .agency-contact {
-          font-size: ${hasSecondConductor ? '7px' : '8px'};
-          color: #555;
-          text-align: center;
-          line-height: 1.2;
-          margin-bottom: 1px;
-          display: flex;
-          flex-wrap: wrap;
-          justify-content: center;
-          gap: 6px;
-          align-items: center;
-        }
-        .agency-contact-item {
-          margin: 0;
-          white-space: nowrap;
-        }
-        .agency-contact-label {
-          font-weight: 600;
-          color: #1a3a8a;
-          display: none;
-        }
-        .contract-title {
-          font-size: ${hasSecondConductor ? '12px' : '14px'};
-          color: #555;
-          text-align: center;
-          margin-top: 1px;
-        }
-        .header-info {
-          display: grid;
-          grid-template-columns: 1fr 1fr 1fr;
-          gap: ${hasSecondConductor ? '2px' : '3px'};
-          margin-bottom: ${hasSecondConductor ? '3px' : '4px'};
-        }
-        .info-box {
-          padding: ${hasSecondConductor ? '3px 4px' : '4px 5px'};
-          border-radius: 3px;
-          font-size: ${hasSecondConductor ? '11px' : '12px'};
-          line-height: 1.3;
-        }
-        .info-box.blue {
-          background-color: #dbeafe;
-          border-left: 4px solid #2563eb;
-        }
-        .info-box.green {
-          background-color: #dcfce7;
-          border-left: 4px solid #16a34a;
-        }
-        .info-box.amber {
-          background-color: #fef3c7;
-          border-left: 4px solid #d97706;
-        }
-        .info-label {
-          font-weight: 600;
-          color: #222;
-          margin-bottom: 1px;
-          font-size: ${hasSecondConductor ? '10px' : '11px'};
-        }
-        .info-value {
-          color: #333;
-          font-size: ${hasSecondConductor ? '11px' : '12px'};
-        }
-        .section {
-          margin-bottom: ${hasSecondConductor ? '3px' : '4px'};
-          page-break-inside: avoid;
-          padding: ${hasSecondConductor ? '3px 4px' : '4px 5px'};
-          border-radius: 4px;
-          border: 1px solid #e5e7eb;
-        }
-        .section.driver-section {
-          background-color: #f0f9ff;
-          border: 1px solid #bfdbfe;
-        }
-        .section.vehicle-section {
-          background-color: #f0fdf4;
-          border: 1px solid #bbf7d0;
-        }
-        .section.pricing-section {
-          background-color: #fffbeb;
-          border: 1px solid #fde68a;
-        }
-        .section.conditions-section {
-          background-color: #faf5ff;
-          border: 1px solid #e9d5ff;
-        }
-        .section.inspection-section {
-          background-color: #faf5ff;
-          border: 1px solid #e9d5ff;
-        }
-        .section-title {
-          font-size: ${hasSecondConductor ? '11px' : '12px'};
-          font-weight: 700;
-          background-color: #f0f1f3;
-          padding: ${hasSecondConductor ? '2px 3px' : '3px 4px'};
-          border-radius: 2px;
-          margin-bottom: ${hasSecondConductor ? '2px' : '3px'};
-          border-left: 4px solid #2563eb;
-          color: #1a3a8a;
-        }
-        .section-content {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: ${hasSecondConductor ? '6px 5px' : '9px 7px'};
-          font-size: ${hasSecondConductor ? '14px' : '15px'};
-        }
-        .section-content.full {
-          grid-template-columns: 1fr 1fr 1fr;
-        }
-        .field {
-          padding: ${hasSecondConductor ? '1px 0' : '2px 0'};
-          border-bottom: 0.5px solid #ddd;
-        }
-        .field-label {
-          font-weight: 600;
-          color: #1a3a8a;
-          font-size: ${hasSecondConductor ? '13px' : '14px'};
-        }
-        .field-value {
-          color: #444;
-          margin-top: 0px;
-          font-size: ${hasSecondConductor ? '14px' : '15px'};
-        }
-        .pricing-table {
-          width: 100%;
-          margin-bottom: 4px;
-          font-size: 15px;
-          border-collapse: collapse;
-        }
-        .pricing-row {
-          display: flex;
-          justify-content: space-between;
-          padding: ${hasSecondConductor ? '1px 0' : '2px 0'};
-          border-bottom: 0.5px solid #ddd;
-        }
-        .pricing-row.total {
-          border-top: 1px solid #222;
-          font-weight: 600;
-          margin-top: 1px;
-          padding-top: ${hasSecondConductor ? '1px' : '2px'};
-        }
-        .pricing-row.grand-total {
-          font-size: ${hasSecondConductor ? '13px' : '14px'};
-          font-weight: 700;
-          color: #1a3a8a;
-          border-top: 2px solid #1a3a8a;
-          padding-top: ${hasSecondConductor ? '1px' : '2px'};
-        }
-        .conditions-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: ${hasSecondConductor ? '4px 5px' : '5px 6px'};
-          font-size: ${hasSecondConductor ? '13px' : '14px'};
-          margin-bottom: ${hasSecondConductor ? '3px' : '4px'};
-        }
-        .condition-item {
-          display: flex;
-          align-items: center;
-          gap: 3px;
-          line-height: ${hasSecondConductor ? '1.2' : '1.25'};
-        }
-        .checkbox {
-          width: 12px;
-          height: 12px;
-          border: 1px solid #999;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 8px;
-          flex-shrink: 0;
-        }
-        .signatures {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: ${hasSecondConductor ? '13px' : '20px'};
-          margin-top: auto;
-          font-size: ${hasSecondConductor ? '13px' : '14px'};
-          padding-top: ${hasSecondConductor ? '3px' : '4px'};
-        }
-        .signature-block {
-          text-align: center;
-        }
-        .signature-line {
-          border-top: 1px solid #333;
-          margin-bottom: ${hasSecondConductor ? '1px' : '2px'};
-          height: ${hasSecondConductor ? '20px' : '25px'};
-        }
-        .signature-label {
-          font-weight: 600;
-          font-size: ${hasSecondConductor ? '12px' : '13px'};
-        }
-        .date-sig {
-          font-size: ${hasSecondConductor ? '9px' : '10px'};
-          color: #666;
-          margin-top: 1px;
-        }
-        /* =============================================================
-           PRINT STYLES - FIXES FOR A4 CENTERED LAYOUT
-           Issues fixed:
-           - Contract was shifted to the left
-           - Not properly centered on page
-           - Inconsistent margins
-           - Frame did not align properly
-           ============================================================= */
-        @media print {
-          @page {
-            size: A4;
-            margin: 0;
-          }
-          
-          /* Reset for print */
-          html, body {
-            width: 210mm;
-            height: 297mm;
-            margin: 0;
-            padding: 0;
-            background: white;
-            overflow: hidden;
-          }
-          
-          /* Center container on page */
-          body { 
-            margin: 0; 
-            padding: 0;
-            display: flex;
-            justify-content: center;
-            align-items: flex-start;
-            overflow: hidden;
-          }
-          
-          /* Perfect centering with margins */
-          .page { 
-            margin: 0 auto;
-            padding: 10mm;
-            width: 190mm;
-            min-height: 277mm;
-            height: auto;
-            box-sizing: border-box;
-            border: 2px solid black;
-            left: 0;
-            right: 0;
-            transform: scale(1.15);
-            transform-origin: top center;
-          }
-          
-          /* Ensure proper box sizing */
-          *, *::before, *::after {
-            box-sizing: border-box;
-          }
-          
-          /* Hide non-contract elements */
-          body > * {
-            visibility: hidden;
-          }
-          
-          .page, .page * {
-            visibility: visible;
-          }
-        }
-      </style>
-    </head>
-    <body>
-      <div class="page">
-        <!-- Header -->
-        <div class="header">
-          ${agencySettings?.logo ? `<img src="${agencySettings.logo}" alt="Logo" class="logo">` : ''}
-          <div class="header-text">
-            <h1 class="agency-name">${agencySettings?.name || 'AGENCY NAME'}</h1>
-            <div class="agency-contact">
-              ${agencySettings?.address ? `<span class="agency-contact-item">${agencySettings.address}</span>` : ''}
-              ${agencySettings?.phone ? `<span class="agency-contact-item">📞 ${ltrPhone(agencySettings.phone)}</span>` : ''}
-              ${agencySettings?.phone_number_2 ? `<span class="agency-contact-item">📱 ${ltrPhone(agencySettings.phone_number_2)}</span>` : ''}
-              ${agencySettings?.bank_number ? `<span class="agency-contact-item">🏦 ${agencySettings.bank_number}</span>` : ''}
-            </div>
-            <p class="contract-title">${labels.contractTitle}</p>
-          </div>
-        </div>
-
-        <!-- Header Info Boxes -->
-        <div class="header-info">
-          <div class="info-box blue">
-            <div class="info-label">📅 ${labels.contractDate}</div>
-            <div class="info-value">${new Date().toLocaleDateString('en-US')}</div>
-          </div>
-          <div class="info-box green">
-            <div class="info-label">🔢 ${labels.contractNumber}</div>
-            <div class="info-value">#${reservation?.id ? reservation.id.toString().substring(0, 8).toUpperCase() : 'N/A'}</div>
-          </div>
-          <div class="info-box amber">
-            <div class="info-label">👤 ${labels.client}</div>
-            <div class="info-value">${reservation?.client?.lastName || 'N/A'}</div>
-          </div>
-        </div>
-
-        <!-- Rental Period -->
-        <div class="section">
-          <div class="section-title">📅 ${labels.rentalPeriod}</div>
-          <div class="section-content full">
-            <div class="field">
-              <div class="field-label">${labels.departure}</div>
-              <div class="field-value">${new Date(reservation?.step1?.departureDate).toLocaleDateString('fr-FR')}</div>
-            </div>
-            <div class="field">
-              <div class="field-label">${labels.return}</div>
-              <div class="field-value">${new Date(reservation?.step1?.returnDate).toLocaleDateString('fr-FR')}</div>
-            </div>
-            <div class="field">
-              <div class="field-label">${labels.duration}</div>
-              <div class="field-value">${reservation?.totalDays || 0} ${labels.days}</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Driver & Vehicle Info (2 columns) -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-          <!-- Driver Info -->
-          <div class="section driver-section">
-            <div class="section-title">👤 ${labels.driverInfo}</div>
-            <div class="section-content">
-              <div class="field">
-                <div class="field-label">${labels.fullName}</div>
-                <div class="field-value">${reservation?.client?.firstName} ${reservation?.client?.lastName}</div>
-              </div>
-              <div class="field">
-                <div class="field-label">${labels.licenseNumber}</div>
-                <div class="field-value">${reservation?.client?.licenseNumber || 'N/A'}</div>
-              </div>
-              <div class="field">
-                <div class="field-label">📅 ${labels.licenseDeliveryDate}</div>
-                <div class="field-value">${reservation?.client?.licenseDeliveryDate ? new Date(reservation.client.licenseDeliveryDate).toLocaleDateString('fr-FR') : 'dd/mm/yyyy'}</div>
-              </div>
-              <div class="field">
-                <div class="field-label">⏱️ ${labels.licenseExpirationDate}</div>
-                <div class="field-value">${reservation?.client?.licenseExpirationDate ? new Date(reservation.client.licenseExpirationDate).toLocaleDateString('fr-FR') : 'dd/mm/yyyy'}</div>
-              </div>
-              <div class="field">
-                <div class="field-label">📍 ${labels.licenseDeliveryPlace}</div>
-                <div class="field-value">${reservation?.client?.licenseDeliveryPlace || ''}</div>
-              </div>
-              <div class="field">
-                <div class="field-label">${labels.birthDate}</div>
-                <div class="field-value">${new Date(reservation?.client?.dateOfBirth).toLocaleDateString('fr-FR')}</div>
-              </div>
-              <div class="field">
-                <div class="field-label">${labels.birthPlace}</div>
-                <div class="field-value">${reservation?.client?.placeOfBirth || 'N/A'}</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Vehicle Info -->
-          <div class="section vehicle-section">
-            <div class="section-title">🚗 ${labels.vehicleInfo}</div>
-            <div class="section-content">
-              <div class="field">
-                <div class="field-label">${labels.model}</div>
-                <div class="field-value">${ltr((reservation?.car?.brand || '') + ' ' + (reservation?.car?.model || ''))}</div>
-              </div>
-              <div class="field">
-                <div class="field-label">${labels.registration}</div>
-                <div class="field-value">${ltr(reservation?.car?.registration || 'N/A')}</div>
-              </div>
-              <div class="field">
-                <div class="field-label">${labels.color}</div>
-                <div class="field-value">${reservation?.car?.color || 'N/A'}</div>
-              </div>
-              <div class="field">
-                <div class="field-label">${labels.fuel}</div>
-                <div class="field-value">${reservation?.car?.energy || 'N/A'}</div>
-              </div>
-              <div class="field">
-                <div class="field-label">${labels.vin}</div>
-                <div class="field-value">${ltr(reservation?.car?.vin || 'N/A')}</div>
-              </div>
-              <div class="field">
-                <div class="field-label">${labels.mileage}</div>
-                <div class="field-value">${ltr((reservation?.departureInspection?.mileage || 'N/A') + ' km')}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Second Driver Section (if exists) -->
-        ${secondConductor ? `
-        <div class="section">
-          <div class="section-title">👥 ${labels.secondDriver}</div>
-          <div class="section-content full">
-            <div class="field">
-              <div class="field-label">${labels.fullName}</div>
-              <div class="field-value">${(secondConductor?.first_name || secondConductor?.firstName)} ${(secondConductor?.last_name || secondConductor?.lastName)}</div>
-            </div>
-            <div class="field">
-              <div class="field-label">${labels.licenseNumber}</div>
-              <div class="field-value">${(secondConductor?.license_number || secondConductor?.licenseNumber) || 'N/A'}</div>
-            </div>
-            <div class="field">
-              <div class="field-label">${isFrench ? 'Téléphone' : 'الهاتف'}</div>
-              <div class="field-value">${secondConductor?.phone ? ltrPhone(secondConductor.phone) : 'N/A'}</div>
-            </div>
-            <div class="field">
-              <div class="field-label">${labels.birthDate}</div>
-              <div class="field-value">${(secondConductor?.date_of_birth || secondConductor?.dateOfBirth) ? new Date(secondConductor?.date_of_birth || secondConductor?.dateOfBirth).toLocaleDateString('en-US') : 'N/A'}</div>
-            </div>
-            <div class="field">
-              <div class="field-label">${labels.birthPlace}</div>
-              <div class="field-value">${(secondConductor?.place_of_birth || secondConductor?.placeOfBirth) || 'N/A'}</div>
-            </div>
-          </div>
-        </div>
-        ` : ''}
-
-        <!-- Pricing & Conditions (2 columns) -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-          <!-- Pricing -->
-          <div class="section pricing-section">
-            <div class="section-title">💰 ${labels.pricing}</div>
-            <div class="pricing-table">
-              <div class="pricing-row">
-                <span>${labels.pricePerDay}:</span>
-                <span>${reservation?.car?.priceDay || 0} DA</span>
-              </div>
-              <div class="pricing-row">
-                <span>${labels.numberOfDays}:</span>
-                <span>${reservation?.totalDays || 0}</span>
-              </div>
-              <div class="pricing-row total">
-                <span>${labels.totalHT}:</span>
-                <span>${(reservation?.totalPrice || 0).toFixed(2)} DA</span>
-              </div>
-              ${reservation?.tvaApplied ? `
-              <div class="pricing-row">
-                <span>${labels.tva}:</span>
-                <span>${((reservation?.totalPrice || 0) * 0.19).toFixed(2)} DA</span>
-              </div>
-              ` : ''}
-              <div class="pricing-row grand-total">
-                <span>${labels.totalTTC}:</span>
-                <span>${(reservation?.tvaApplied ? ((reservation?.totalPrice || 0) * 1.19) : (reservation?.totalPrice || 0)).toFixed(2)} DA</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Conditions -->
-          <div class="section conditions-section">
-            <div class="section-title">✓ ${labels.conditions}</div>
-            <div class="conditions-grid">
-              ${conditionsList.map(condition => `
-                <div class="condition-item">
-                  <div class="checkbox">✓</div>
-                  <span>${condition}</span>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-        </div>
-
-        <!-- Vehicle Inspection Info -->
-        <div class="section inspection-section">
-          <div class="section-title">🔍 ${isFrench ? 'État du Véhicule à la Prise en Charge' : 'حالة المركبة عند الاستلام'}</div>
-          <div class="section-content full">
-            <div class="field">
-              <div class="field-label">📏 ${isFrench ? 'Kilométrage de Départ' : 'كيلومتراج البداية'}</div>
-              <div class="field-value">${ltr((reservation?.departureInspection?.mileage || 0) + ' km')}</div>
-            </div>
-            <div class="field">
-              <div class="field-label">⛽ ${isFrench ? 'Niveau de Carburant' : 'مستوى الوقود'}</div>
-              <div class="field-value">${
-                (() => {
-                  const fuelLevel = reservation?.departureInspection?.fuelLevel?.toLowerCase() || '';
-                  const fuelMap = {
-                    'empty': '0',
-                    'vide': '0',
-                    'quarter': '1/4',
-                    'quart': '1/4',
-                    '1/4': '1/4',
-                    'half': '1/2',
-                    'moitié': '1/2',
-                    'demi': '1/2',
-                    '1/2': '1/2',
-                    'three-quarter': '3/4',
-                    'trois-quarts': '3/4',
-                    '3/4': '3/4',
-                    'full': 'Plein',
-                    'plein': 'Plein',
-                    'complet': 'Plein'
-                  };
-                  return fuelMap[fuelLevel] || reservation?.departureInspection?.fuelLevel || 'Plein';
-                })()
-              }</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Special Conditions (Red Text) -->
-        <div style="background-color: #fef2f2; padding: 6px; border: 1px solid #fecaca; border-radius: 4px; margin-bottom: 0px; font-size: 11px; line-height: 1.45;">
-          <div style="color: #dc2626; font-weight: 600; margin-bottom: 2px;">${isFrench ? 'CONDITIONS SPÉCIALES' : 'الشروط الخاصة'}</div>
-          <div style="color: #dc2626; direction: ${textDir}; text-align: ${isFrench ? 'left' : 'right'};">
-            ${isFrench ? `
-              <div style="margin: 1px 0;">1- Tout renouvellement doit être confirmé par le client 48 heures avant la date d'expiration du contrat de location</div>
-              <div style="margin: 1px 0;">2- Interdiction de conduire le véhicule avec le carburant de réserve</div>
-              <div style="margin: 1px 0;">3- Le renouvellement du contrat de location est la responsabilité du client à partir de la date d'expiration du contrat</div>
-              <div style="margin: 1px 0;">4- La non-restitution du contrat de location à la date convenue entraîne une facturation complète du tarif quotidien</div>
-            ` : `
-              <div style="margin: 1px 0;">1- كل تمديد يجب على الزبون اطمئان قبل 48 ساعة من تاريخ انتهاء صلاحيات عقد الكراء</div>
-              <div style="margin: 1px 0;">2- عدم قيادة السيارة بوقود احتياطي (réserve)</div>
-              <div style="margin: 1px 0;">3- تجديد عقد الكراء يكون من تاريخ انتهاء العقد من مسؤولية الزبون</div>
-              <div style="margin: 1px 0;">4- عدم تسليم عقد الكراء على الزبون ينتج مبلغ اليومي كاملا</div>
-            `}
-          </div>
-        </div>
-
-        <!-- Signatures -->
-        <div class="signatures" style="margin-top: 0px; padding-top: 4px;">
-          <div class="signature-block">
-            <div class="signature-line"></div>
-            <div class="signature-label">${labels.clientSignature}</div>
-            <div class="date-sig">${labels.dateAndSignature}</div>
-          </div>
-          <div class="signature-block">
-            <div class="signature-line"></div>
-            <div class="signature-label">${labels.agencySignature}</div>
-            <div class="date-sig">${labels.dateAndSignature}</div>
-          </div>
-        </div>
-      </div>
-    </body>
-    </html>
-    `;
-    return html;
-  };
+  /**
+   * CONTRAT DE LOCATION — délègue au générateur partagé. Aucune donnée
+   * propriétaire (conciergerie) ne figure sur ce document remis au client.
+   */
+  const generateContractHTML = (templateLang: 'fr' | 'ar'): string =>
+    buildContractHTML(reservation, agencySettings, secondConductor, templateLang);
 
   const generateDevisHTML = (templateLang: 'fr' | 'ar'): string => {
     const isFrench = templateLang === 'fr';
@@ -5071,14 +4321,8 @@ export const PersonalizationModal: React.FC<{
     }
     
     setTimeout(() => {
-      const printWindow = window.open('', '', 'height=600,width=800');
-      if (printWindow) {
-        printWindow.document.write(content);
-        printWindow.document.close();
-        printWindow.focus();
-        printWindow.print();
-        setTimeout(() => setIsPrinting(false), 100);
-      }
+      printHTMLDocument(content);
+      setTimeout(() => setIsPrinting(false), 100);
     }, 300);
   };
 

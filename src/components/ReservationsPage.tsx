@@ -56,8 +56,9 @@ const STATUS_LABEL: Record<string, { fr: string; ar: string }> = {
 };
 
 // ── Period options ────────────────────────────────────────────────────────────
-type PeriodKey = 'today' | '7d' | '30d' | 'custom';
+type PeriodKey = 'all' | 'today' | '7d' | '30d' | 'custom';
 const PERIODS: { key: PeriodKey; fr: string; ar: string }[] = [
+  { key: 'all',   fr: 'Tout',            ar: 'الكل'           },
   { key: 'today', fr: "Aujourd'hui",    ar: 'اليوم'          },
   { key: '7d',    fr: '7 derniers jours', ar: '٧ أيام أخيرة'  },
   { key: '30d',   fr: '30 derniers jours',ar: '٣٠ يوماً أخيراً'},
@@ -65,7 +66,8 @@ const PERIODS: { key: PeriodKey; fr: string; ar: string }[] = [
 ];
 
 const getPeriodRange = (key: PeriodKey): { startDate: string; endDate: string } => {
-  if (key === 'custom') return { startDate: '', endDate: '' };
+  // Bornes vides = aucun filtre de date (cf. inRange).
+  if (key === 'all' || key === 'custom') return { startDate: '', endDate: '' };
   const now  = new Date();
   const end  = now.toISOString().substring(0, 10);
   if (key === 'today') return { startDate: end, endDate: end };
@@ -100,7 +102,9 @@ export const ReservationsPage: React.FC<ReservationsPageProps> = ({ lang, isAuth
   const [showPersonalization, setShowPersonalization] = useState<{ reservation: ReservationDetails; type: string } | null>(null);
 
   // ── Filters
-  const [period, setPeriod]         = useState<PeriodKey>('today');
+  // 'all' par défaut : la page liste les locations TERMINÉES, dont presque aucune
+  // ne se clôture le jour même — filtrer sur « Aujourd'hui » la laissait vide.
+  const [period, setPeriod]         = useState<PeriodKey>('all');
   const todayStr = useMemo(() => new Date().toISOString().substring(0, 10), []);
   const [customStartDate, setCustomStartDate] = useState(todayStr);
   const [customEndDate, setCustomEndDate] = useState(todayStr);
