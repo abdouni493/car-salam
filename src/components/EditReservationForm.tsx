@@ -377,7 +377,6 @@ export const EditReservationForm: React.FC<EditReservationFormProps> = ({ lang, 
         remainingPayment: newRemainingPayment,
         notes: formData.step6?.paymentNotes || formData.notes,
         tvaApplied: formData.step6?.tvaApplied || formData.tvaApplied,
-        tvaAmount: formData.step6?.tvaAmount,
         additionalFees: formData.step6?.additionalFees || formData.additionalFees,
         // Le payeur (`delivery_fee_payer`) est recalculé par le trigger DB.
         deliveryFee,
