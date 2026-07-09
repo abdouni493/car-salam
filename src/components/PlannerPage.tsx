@@ -2,21 +2,20 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Language, ReservationDetails, Client, Car } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { Calendar, Users, Car as CarIcon, Plus, Search, Filter, Eye, Edit, Trash2, CheckCircle, XCircle, Clock, MapPin, Fuel, Camera, FileText, CreditCard, DollarSign, Printer, AlertTriangle, MoreVertical, Grid3x3, CalendarDays, List, X, Zap, Gauge, Heart } from 'lucide-react';
+import { Calendar, Users, Car as CarIcon, Plus, Search, Filter, Eye, Edit, Trash2, CheckCircle, XCircle, Clock, MapPin, Fuel, Camera, FileText, CreditCard, DollarSign, Printer, AlertTriangle, MoreVertical, Grid3x3, CalendarDays, List, X, Zap, Gauge, Heart, Phone } from 'lucide-react';
 import { ReservationDetailsView } from './ReservationDetailsView';
 import { CreateReservationForm } from './CreateReservationForm';
 import { EditReservationForm } from './EditReservationForm';
 import { formatAmount } from '../utils/format';
 import { ActivationModal, CompletionModal } from './ReservationDetailsView';
 import { ReservationTimelineView } from './ReservationTimelineView';
-import { ConditionsPersonalizer } from './ConditionsPersonalizer';
 import { SendContractModal } from './SendContractModal';
 import { WebsiteOrders } from './WebsiteOrders';
 import { ReservationsService } from '../services/ReservationsService';
 import { DatabaseService } from '../services/DatabaseService';
 import { getCars } from '../services/carService';
 import { supabase } from '../supabase';
-import { generateConditionsPrintHTML, getConditionsTemplate } from '../constants/ConditionsTemplates';
+import { generateConditionsPrintHTML } from '../constants/ConditionsTemplates';
 import { generateContractHTML as buildContractHTML } from './ContractHTMLGenerator';
 
 /**
@@ -72,13 +71,13 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
   const buttonRefs = useRef<{[id: string]: HTMLButtonElement | null}>({});
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<ReservationDetails | null>(null);
   const [openPrintMenu, setOpenPrintMenu] = useState<string | null>(null);
-  const [showPrintModal, setShowPrintModal] = useState<{reservation: ReservationDetails, type: string} | null>(null);
   const [showPersonalization, setShowPersonalization] = useState<{reservation: ReservationDetails, type: string} | null>(null);
   const [showSendContractModal, setShowSendContractModal] = useState<ReservationDetails | null>(null);
   const [showInspectionMode, setShowInspectionMode] = useState(false);
   const [showConditionsModal, setShowConditionsModal] = useState(false);
   const [conditionsLanguage, setConditionsLanguage] = useState<'ar' | 'fr'>('ar');
-  const [showConditionsPersonalizer, setShowConditionsPersonalizer] = useState<ReservationDetails | null>(null);
+  // Réservation ciblée par le document « Conditions » (aperçu + impression).
+  const [conditionsReservation, setConditionsReservation] = useState<ReservationDetails | null>(null);
   const [showDebtModal, setShowDebtModal] = useState<{ reservation: ReservationDetails } | null>(null);
   const [filterDebtOnly, setFilterDebtOnly] = useState(false);
   const [agencies, setAgencies] = useState<any[]>([]);
@@ -321,23 +320,17 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
   };
 
   const handlePrint = (reservation: ReservationDetails, type: 'quote' | 'contract' | 'invoice' | 'payment' | 'engagement' | 'versement' | 'inspection') => {
+    // Ouvre directement l'aperçu du document (plus d'étape de personnalisation).
     setOpenPrintMenu(null);
-    setShowPrintModal({reservation, type});
+    setShowPersonalization({ reservation, type });
   };
 
-  const handlePrintChoice = async (choice: 'same' | 'personalise') => {
-    if (!showPrintModal) return;
-
-    if (choice === 'same') {
-      // Print same template using the professional contract template from PersonalizationModal
-      setShowPersonalization({
-        reservation: showPrintModal.reservation,
-        type: showPrintModal.type
-      });
-    } else {
-      setShowPersonalization(showPrintModal);
-    }
-    setShowPrintModal(null);
+  // Ouvre l'aperçu imprimable des conditions de location (même design que le contrat).
+  const handleOpenConditions = (reservation: ReservationDetails) => {
+    setOpenPrintMenu(null);
+    setConditionsReservation(reservation);
+    setConditionsLanguage('ar');
+    setShowConditionsModal(true);
   };
 
   const generatePrintContent = (reservation: ReservationDetails, type: string) => {
@@ -1098,18 +1091,38 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
             key={reservation.id}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-white rounded-2xl shadow-lg border border-slate-200 flex flex-col relative"
+            className="group bg-white rounded-2xl shadow-sm hover:shadow-2xl hover:shadow-slate-300/40 hover:-translate-y-1 border border-slate-200/80 flex flex-col relative transition-all duration-300"
           >
             {/* Car Image */}
-            <div className="relative h-48 overflow-hidden rounded-t-2xl">
+            <div className="relative h-44 overflow-hidden rounded-t-2xl">
               <img
                 src={reservation.car.images?.[0] || 'https://picsum.photos/seed/car/400/300'}
                 alt={`${reservation.car.brand} ${reservation.car.model}`}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                 referrerPolicy="no-referrer"
               />
-              {/* Client Avatar - Circular with Border */}
-              <div className="absolute top-4 right-4 w-16 h-16 rounded-full border-4 border-white overflow-hidden shadow-lg bg-slate-100 flex items-center justify-center">
+              {/* Dégradé pour la lisibilité du texte superposé */}
+              <div className="absolute inset-0 bg-gradient-to-t from-slate-900/85 via-slate-900/15 to-slate-900/10" />
+
+              {/* Badge de statut */}
+              <span className={`absolute top-3 left-3 px-3 py-1 rounded-full text-[11px] font-black shadow-md backdrop-blur-md border border-white/40 ${
+                reservation.status === 'confirmed' ? 'bg-green-500/90 text-white' :
+                reservation.status === 'accepted' ? 'bg-teal-500/90 text-white' :
+                reservation.status === 'active' ? 'bg-blue-500/90 text-white' :
+                reservation.status === 'completed' ? 'bg-purple-500/90 text-white' :
+                reservation.status === 'terminated' ? 'bg-red-500/90 text-white' :
+                'bg-amber-400/95 text-amber-950'
+              }`}>
+                {reservation.status === 'confirmed' ? '✅ Confirmé' :
+                 reservation.status === 'accepted' ? '✅ Accepté' :
+                 reservation.status === 'active' ? '🔄 Actif' :
+                 reservation.status === 'completed' ? '🏁 Terminé' :
+                 reservation.status === 'terminated' ? '🛑 Terminée' :
+                 '⏳ En attente'}
+              </span>
+
+              {/* Avatar client */}
+              <div className="absolute top-3 right-3 w-14 h-14 rounded-2xl border-2 border-white/80 overflow-hidden shadow-lg bg-slate-100 flex items-center justify-center">
                 {reservation.client.profilePhoto ? (
                   <img
                     src={reservation.client.profilePhoto}
@@ -1121,110 +1134,98 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                   <span className="text-2xl">👤</span>
                 )}
               </div>
-              {/* Status + Source Badges */}
-              <div className="absolute top-4 left-4 flex flex-col items-start gap-2">
-                <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                  reservation.status === 'confirmed' ? 'bg-green-100 text-green-800' :
-                  reservation.status === 'accepted' ? 'bg-teal-100 text-teal-800' :
-                  reservation.status === 'active' ? 'bg-blue-100 text-blue-800' :
-                  reservation.status === 'completed' ? 'bg-purple-100 text-purple-800' :
-                  reservation.status === 'terminated' ? 'bg-red-100 text-red-800' :
-                  'bg-yellow-100 text-yellow-800'
-                }`}>
-                  {reservation.status === 'confirmed' ? '✅ Confirmé' :
-                   reservation.status === 'accepted' ? '✅ Accepté' :
-                   reservation.status === 'active' ? '🔄 Actif' :
-                   reservation.status === 'completed' ? '🏁 Terminé' :
-                   reservation.status === 'terminated' ? '🛑 Terminée' :
-                   '⏳ En attente'}
-                </span>
-                {/* Origine : site web vs agence */}
-                <span className={`px-3 py-1 rounded-full text-xs font-bold shadow-sm ${
-                  reservation.source === 'website'
-                    ? 'bg-indigo-100 text-indigo-800'
-                    : 'bg-slate-100 text-slate-700'
+
+              {/* Véhicule + immatriculation + origine (superposés en bas) */}
+              <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between gap-2">
+                <div className="min-w-0">
+                  <h4 className="font-black text-white text-base leading-tight truncate drop-shadow-md">
+                    {reservation.car.brand} {reservation.car.model}
+                  </h4>
+                  <span className="inline-block mt-1 px-2 py-0.5 rounded-md bg-white/90 text-slate-800 text-[11px] font-black tracking-wide shadow-sm">
+                    {reservation.car.registration}
+                  </span>
+                </div>
+                <span className={`flex-shrink-0 px-2.5 py-1 rounded-lg text-[10px] font-black shadow-md backdrop-blur-md border border-white/40 ${
+                  reservation.source === 'website' ? 'bg-indigo-500/90 text-white' : 'bg-white/85 text-slate-700'
                 }`}>
                   {reservation.source === 'website'
-                    ? (lang === 'fr' ? '🌐 Réservation du site web' : '🌐 حجز من الموقع')
-                    : (lang === 'fr' ? '🏢 Créée à l\'agence' : '🏢 أنشئت في الوكالة')}
+                    ? (lang === 'fr' ? '🌐 Site' : '🌐 موقع')
+                    : (lang === 'fr' ? '🏢 Agence' : '🏢 وكالة')}
                 </span>
               </div>
             </div>
 
             {/* Content */}
-            <div className="p-6">
-              {/* Client & Car Info */}
-              <div className="space-y-3 mb-4">
-                <div>
-                  <h3 className="font-bold text-lg text-slate-900">
-                    {reservation.client.firstName} {reservation.client.lastName}
-                  </h3>
-                  <p className="text-sm text-slate-600">
-                    📱 {reservation.client.phone}
-                  </p>
-                </div>
-                <div>
-                  <h4 className="font-bold text-slate-900">
-                    🚗 {reservation.car.brand} {reservation.car.model}
-                  </h4>
-                  <p className="text-sm text-slate-600">
-                    🏷️ {reservation.car.registration}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-slate-600">
-                  <Calendar className="w-4 h-4" />
-                  <span>{reservation.step1.departureDate} → {reservation.step1.returnDate}</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-slate-600">
-                  <Clock className="w-4 h-4" />
-                  <span>{reservation.totalDays} {lang === 'fr' ? 'jours' : 'أيام'}</span>
-                </div>
-                <div className="mt-3 p-4 bg-gradient-to-r from-white to-slate-50 rounded-xl border border-slate-200">
-                  <div className="flex items-center justify-between mb-3">
-                    <div>
-                      <div className="text-xs text-slate-500">{lang === 'fr' ? 'Total Réservation' : 'الإجمالي'}</div>
-                      <div className="text-xl font-black text-slate-900">{displayTotalPrice.toLocaleString()} {lang === 'fr' ? 'DA' : 'د.ج'}</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-xs text-slate-500">{lang === 'fr' ? 'Payé' : 'مدفوع'}</div>
-                      <div className="text-lg font-bold text-green-700">{paidAmount.toLocaleString()} {lang === 'fr' ? 'DA' : 'د.ج'}</div>
-                      <div className="text-xs text-slate-400">{lang === 'fr' ? `(${servicesTotal.toLocaleString()} ${lang === 'fr' ? 'DA' : 'د.ج'} services)` : `(${servicesTotal.toLocaleString()} ${lang === 'fr' ? 'DA' : 'د.ج'} خدمات)`}</div>
-                    </div>
-                  </div>
+            <div className="p-5 flex flex-col flex-1">
+              {/* Client */}
+              <div className="mb-3">
+                <h3 className="font-black text-lg text-slate-900 leading-tight truncate">
+                  {reservation.client.firstName} {reservation.client.lastName}
+                </h3>
+                <p className="flex items-center gap-1.5 text-sm text-slate-500 mt-0.5">
+                  <Phone className="w-3.5 h-3.5 text-slate-400" /> {reservation.client.phone}
+                </p>
+              </div>
 
-                  <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden mb-2">
-                    <div
-                      className={`h-2 rounded-full ${remainingAmount === 0 ? 'bg-green-500' : 'bg-orange-400'}`}
-                      style={{ width: `${Math.min(100, Math.round((paidAmount / (displayTotalPrice || 1)) * 100))}%` }}
-                    />
-                  </div>
+              {/* Dates & durée */}
+              <div className="flex flex-wrap gap-2 mb-4">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-100 text-xs font-semibold text-slate-600">
+                  <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                  {reservation.step1.departureDate} → {reservation.step1.returnDate}
+                </span>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-100 text-xs font-semibold text-slate-600">
+                  <Clock className="w-3.5 h-3.5 text-slate-400" />
+                  {reservation.totalDays} {lang === 'fr' ? 'jours' : 'أيام'}
+                </span>
+              </div>
 
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="text-slate-600">{lang === 'fr' ? 'Reste à payer' : 'المتبقي'}</div>
-                    <div className={`font-bold ${remainingAmount === 0 ? 'text-green-700' : 'text-red-700'}`}>{remainingAmount.toLocaleString()} {lang === 'fr' ? 'DA' : 'د.ج'}</div>
+              {/* Bloc financier */}
+              <div className="p-4 rounded-2xl border border-slate-200/70 bg-gradient-to-br from-slate-50 to-white mb-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{lang === 'fr' ? 'Total Réservation' : 'الإجمالي'}</div>
+                    <div className="text-xl font-black text-slate-900">{displayTotalPrice.toLocaleString()} <span className="text-xs font-bold text-slate-400">{lang === 'fr' ? 'DA' : 'د.ج'}</span></div>
                   </div>
+                  <div className="text-right">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{lang === 'fr' ? 'Payé' : 'مدفوع'}</div>
+                    <div className="text-lg font-black text-emerald-600">{paidAmount.toLocaleString()} <span className="text-xs font-bold text-emerald-400">{lang === 'fr' ? 'DA' : 'د.ج'}</span></div>
+                  </div>
+                </div>
+
+                <div className="w-full bg-slate-200/70 rounded-full h-1.5 overflow-hidden mb-2">
+                  <div
+                    className={`h-1.5 rounded-full transition-all ${remainingAmount === 0 ? 'bg-gradient-to-r from-emerald-400 to-green-500' : 'bg-gradient-to-r from-amber-400 to-orange-500'}`}
+                    style={{ width: `${Math.min(100, Math.round((paidAmount / (displayTotalPrice || 1)) * 100))}%` }}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-slate-500">{lang === 'fr' ? 'Reste à payer' : 'المتبقي'}</span>
+                  <span className={`font-black ${remainingAmount === 0 ? 'text-emerald-600' : 'text-red-600'}`}>{remainingAmount.toLocaleString()} {lang === 'fr' ? 'DA' : 'د.ج'}</span>
                 </div>
               </div>
 
               {/* Actions */}
-              <div className="flex gap-2 mb-3">
+              <div className="mt-auto space-y-2.5">
+              <div className="flex gap-2">
                 <button
                   onClick={() => handleViewDetails(reservation)}
-                  className="flex-1 flex items-center justify-center gap-2 bg-blue-100 hover:bg-blue-200 text-blue-700 font-bold py-2 px-3 rounded-lg transition-colors"
+                  className="flex-1 flex items-center justify-center gap-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-sm py-2.5 px-3 rounded-xl border border-blue-100 transition-colors"
                 >
-                  👁️ {lang === 'fr' ? 'Détails' : 'التفاصيل'}
+                  <Eye className="w-4 h-4" /> {lang === 'fr' ? 'Détails' : 'التفاصيل'}
                 </button>
                 <button
                   onClick={() => handleEdit(reservation)}
-                  className="flex-1 flex items-center justify-center gap-2 bg-yellow-100 hover:bg-yellow-200 text-yellow-700 font-bold py-2 px-3 rounded-lg transition-colors"
+                  className="flex-1 flex items-center justify-center gap-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 font-bold text-sm py-2.5 px-3 rounded-xl border border-amber-100 transition-colors"
                 >
-                  ✏️ {lang === 'fr' ? 'Modifier' : 'تعديل'}
+                  <Edit className="w-4 h-4" /> {lang === 'fr' ? 'Modifier' : 'تعديل'}
                 </button>
                 <button
                   onClick={() => handleDelete(reservation)}
-                  className="flex items-center justify-center gap-2 bg-red-100 hover:bg-red-200 text-red-700 font-bold py-2 px-3 rounded-lg transition-colors"
+                  className="flex items-center justify-center bg-red-50 hover:bg-red-100 text-red-600 font-bold py-2.5 px-3 rounded-xl border border-red-100 transition-colors"
+                  title={lang === 'fr' ? 'Supprimer' : 'حذف'}
                 >
-                  🗑️
+                  <Trash2 className="w-4 h-4" />
                 </button>
               </div>
 
@@ -1239,7 +1240,7 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                       setShowInspectionMode(true);
                       setCurrentView('create');
                     }}
-                    className="flex-1 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white font-bold py-2 px-4 rounded-lg transition-all text-sm"
+                    className="flex-1 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white font-bold py-2.5 px-4 rounded-xl transition-all text-sm shadow-sm"
                   >
                     📋 {lang === 'fr' ? 'Inspection' : 'الفحص'}
                   </button>
@@ -1254,7 +1255,7 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                       setShowInspectionMode(true);
                       setCurrentView('edit');
                     }}
-                    className="flex-1 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white font-bold py-2 px-4 rounded-lg transition-all text-sm"
+                    className="flex-1 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white font-bold py-2.5 px-4 rounded-xl transition-all text-sm shadow-sm"
                   >
                     📋 {lang === 'fr' ? 'Inspection' : 'الفحص'}
                   </button>
@@ -1264,7 +1265,7 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                 {reservation.status === 'confirmed' && (
                   <button
                     onClick={() => handleActivate(reservation)}
-                    className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold py-2 px-4 rounded-lg transition-all text-sm"
+                    className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold py-2.5 px-4 rounded-xl transition-all text-sm shadow-sm"
                   >
                     ✅ {lang === 'fr' ? 'Activer' : 'تفعيل'}
                   </button>
@@ -1274,7 +1275,7 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                 {reservation.status === 'active' && (
                   <button
                     onClick={() => handleComplete(reservation)}
-                    className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold py-2 px-4 rounded-lg transition-all text-sm"
+                    className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold py-2.5 px-4 rounded-xl transition-all text-sm shadow-sm"
                   >
                     🏁 {lang === 'fr' ? 'Terminer' : 'إنهاء'}
                   </button>
@@ -1284,7 +1285,7 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                 {reservation.status === 'completed' && (
                   <button
                     onClick={() => handleActivate(reservation)}
-                    className="flex-1 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-all text-sm"
+                    className="flex-1 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-bold py-2.5 px-4 rounded-xl transition-all text-sm shadow-sm"
                   >
                     🔄 {lang === 'fr' ? 'Réactiver' : 'إعادة تفعيل'}
                   </button>
@@ -1294,7 +1295,7 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                 {reservation.status === 'terminated' && (
                   <button
                     onClick={() => handleActivate(reservation)}
-                    className="flex-1 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-all text-sm"
+                    className="flex-1 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-bold py-2.5 px-4 rounded-xl transition-all text-sm shadow-sm"
                   >
                     🔄 {lang === 'fr' ? 'Réactiver' : 'إعادة تفعيل'}
                   </button>
@@ -1304,7 +1305,7 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                 {remainingAmount > 0 && (
                   <button
                     onClick={() => setShowDebtModal({ reservation })}
-                    className="flex-1 bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white font-bold py-2 px-4 rounded-lg transition-all text-sm flex items-center justify-center gap-2"
+                    className="flex-1 bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white font-bold py-2.5 px-4 rounded-xl transition-all text-sm shadow-sm flex items-center justify-center gap-2"
                   >
                     💰 {lang === 'fr' ? 'Payer dette' : 'سداد الدين'}
                   </button>
@@ -1331,7 +1332,7 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                       }
                       setOpenPrintMenu(openPrintMenu === reservation.id ? null : reservation.id);
                     }}
-                    className="p-2 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-lg transition-colors flex items-center gap-1"
+                    className="p-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl border border-indigo-100 transition-colors flex items-center gap-1"
                     title={lang === 'fr' ? 'Plus d\'options' : 'خيارات أكثر'}
                   >
                     <MoreVertical className="w-4 h-4" />
@@ -1358,6 +1359,12 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                           className="w-full text-left px-4 py-3 hover:bg-indigo-50 text-saas-text-main font-bold flex items-center gap-2 border-b border-saas-border transition-colors"
                         >
                           📄 {lang === 'fr' ? 'Contrat' : 'عقد'}
+                        </button>
+                        <button
+                          onClick={() => handleOpenConditions(reservation)}
+                          className="w-full text-left px-4 py-3 hover:bg-indigo-50 text-saas-text-main font-bold flex items-center gap-2 border-b border-saas-border transition-colors"
+                        >
+                          📋 {lang === 'fr' ? 'Conditions' : 'الشروط'}
                         </button>
                         <button
                           onClick={() => handlePrint(reservation, 'invoice')}
@@ -1396,6 +1403,7 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                     )}
                   </AnimatePresence>
                 </div>
+              </div>
               </div>
             </div>
           </motion.div>
@@ -1455,68 +1463,6 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
         )}
       </AnimatePresence>
 
-      {/* Print Choice Modal */}
-      <AnimatePresence>
-        {showPrintModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="glass-card max-w-md w-full p-6 border border-saas-border"
-            >
-              <h3 className="text-xl font-black text-saas-text-main mb-6">
-                🖨️ {lang === 'fr' ? 'Options d\'Impression' : 'خيارات الطباعة'}
-              </h3>
-              <p className="text-saas-text-muted mb-6">
-                {lang === 'fr' ? 'Choisissez le mode d\'impression :' : 'اختر وضع الطباعة:'}
-              </p>
-              <div className="flex gap-3 mb-4">
-                <button
-                  onClick={() => handlePrintChoice('same')}
-                  className="flex-1 bg-saas-primary-start hover:bg-saas-primary-end text-white font-bold py-3 px-4 rounded-lg transition-all"
-                >
-                  📄 {lang === 'fr' ? 'Même Modèle' : 'نفس النموذج'}
-                </button>
-                <button
-                  onClick={() => handlePrintChoice('personalise')}
-                  className="flex-1 bg-saas-secondary-start hover:bg-saas-secondary-end text-white font-bold py-3 px-4 rounded-lg transition-all"
-                >
-                  🎨 {lang === 'fr' ? 'Personnaliser' : 'تخصيص'}
-            </button>
-          </div>
-          {showPrintModal?.type === 'contract' && (
-            <>
-              <button
-                onClick={() => {
-                  setShowPrintModal(null);
-                  setShowConditionsPersonalizer(showPrintModal?.reservation || null);
-                }}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-all mb-3"
-              >
-                📋 {lang === 'fr' ? 'Personnaliser les Conditions' : 'تخصيص الشروط'}
-              </button>
-              <button
-                onClick={() => {
-                  setShowPrintModal(null);
-                  setShowConditionsModal(true);
-                  setConditionsLanguage('ar'); // Reset to Arabic when opening
-                }}
-                className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-lg transition-all"
-              >
-                🖨️ {lang === 'fr' ? 'Imprimer les Conditions' : 'طباعة الشروط'}
-              </button>
-            </>
-          )}
-        </motion.div>
-      </motion.div>
-    )}
-  </AnimatePresence>
 
   {/* Pay Debt Modal */}
   <AnimatePresence>
@@ -1568,175 +1514,103 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
         )}
       </AnimatePresence>
 
-      {/* Conditions Modal - Streamlined */}
+      {/* Conditions Modal — aperçu imprimable (même design que l'interface du contrat) */}
       <AnimatePresence>
         {showConditionsModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto"
-          >
+          <>
             <motion.div
-              initial={{ scale: 0.95, opacity: 0, y: 10 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.95, opacity: 0, y: 10 }}
-              className="bg-white w-full max-w-5xl rounded-xl shadow-2xl overflow-hidden"
+              key="conditions-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 backdrop-blur-sm bg-black/40 z-40"
+              onClick={() => setShowConditionsModal(false)}
+            />
+            <motion.div
+              key="conditions-modal"
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-4"
             >
-              {/* Sleek Header */}
-              <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-4 md:px-8 py-4 md:py-5 flex items-center justify-between">
-                <div className="flex-1 min-w-0">
-                  <h2 className="text-lg md:text-xl font-bold text-white truncate">
-                    {conditionsLanguage === 'fr' ? 'Conditions de Location' : 'شروط الإيجار'}
-                  </h2>
-                  <p className="text-blue-100 text-xs md:text-sm mt-1 truncate">
-                    {(() => {
-                      const template = getConditionsTemplate(conditionsLanguage);
-                      return template.subtitle;
-                    })()}
-                  </p>
-                </div>
-
-                {/* Close Button */}
-                <button
-                  onClick={() => setShowConditionsModal(false)}
-                  className="flex-shrink-0 ml-3 p-2 hover:bg-white/20 rounded-lg transition"
-                  aria-label="Close"
-                >
-                  <X size={22} className="text-white" />
-                </button>
-              </div>
-
-              {/* Main Content */}
-              <div className="p-4 md:p-6 lg:p-8">
-                {/* Language Toggle - Minimal */}
-                <div className="flex gap-2 mb-6">
+              <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+                {/* Header */}
+                <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-8 py-6 flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <h2 className="text-2xl font-bold text-white">
+                      {conditionsLanguage === 'fr' ? 'Conditions de Location' : 'شروط الإيجار'}
+                    </h2>
+                    {/* Sélecteur de langue */}
+                    <div className="flex gap-2 ml-8">
+                      <button
+                        onClick={() => setConditionsLanguage('fr')}
+                        className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+                          conditionsLanguage === 'fr'
+                            ? 'bg-white text-blue-600'
+                            : 'bg-blue-500 text-white hover:bg-blue-400'
+                        }`}
+                      >
+                        🇫🇷 Français
+                      </button>
+                      <button
+                        onClick={() => setConditionsLanguage('ar')}
+                        className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+                          conditionsLanguage === 'ar'
+                            ? 'bg-white text-blue-600'
+                            : 'bg-blue-500 text-white hover:bg-blue-400'
+                        }`}
+                      >
+                        🇸🇦 العربية
+                      </button>
+                    </div>
+                  </div>
                   <button
-                    onClick={() => setConditionsLanguage('ar')}
-                    className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all ${
-                      conditionsLanguage === 'ar'
-                        ? 'bg-blue-600 text-white shadow-md'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
+                    onClick={() => setShowConditionsModal(false)}
+                    className="text-white hover:bg-white hover:bg-opacity-20 p-2 rounded-lg transition-all"
                   >
-                    العربية
-                  </button>
-                  <button
-                    onClick={() => setConditionsLanguage('fr')}
-                    className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all ${
-                      conditionsLanguage === 'fr'
-                        ? 'bg-blue-600 text-white shadow-md'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    Français
+                    <X size={24} />
                   </button>
                 </div>
 
-                {/* Conditions Table - Streamlined */}
-                <div className="overflow-hidden rounded-lg border border-gray-200 mb-6">
-                  <div style={{ direction: conditionsLanguage === 'ar' ? 'rtl' : 'ltr', textAlign: conditionsLanguage === 'ar' ? 'right' : 'left' }}>
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-50 border-b border-gray-200">
-                        <tr>
-                          <th className="w-8 px-3 py-3 text-center font-semibold text-gray-700">#</th>
-                          <th className="w-1/4 px-4 py-3 text-left font-semibold text-gray-700">
-                            {conditionsLanguage === 'fr' ? 'Condition' : 'الشرط'}
-                          </th>
-                          <th className="flex-1 px-4 py-3 text-left font-semibold text-gray-700">
-                            {conditionsLanguage === 'fr' ? 'Description' : 'التفاصيل'}
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200">
-                        {(() => {
-                          const template = getConditionsTemplate(conditionsLanguage);
-                          return template.conditions.map((condition, index) => (
-                            <motion.tr
-                              key={index}
-                              initial={{ opacity: 0 }}
-                              animate={{ opacity: 1 }}
-                              transition={{ delay: index * 0.02 }}
-                              className="hover:bg-blue-50 transition"
-                            >
-                              <td className="px-3 py-3 text-center font-bold text-blue-600">{index + 1}</td>
-                              <td className="px-4 py-3 font-semibold text-gray-800">{condition.title}</td>
-                              <td className="px-4 py-3 text-gray-700 leading-relaxed">{condition.content}</td>
-                            </motion.tr>
-                          ));
-                        })()}
-                      </tbody>
-                    </table>
+                {/* Zone d'aperçu */}
+                <div className="flex-1 overflow-auto bg-gradient-to-b from-gray-50 to-white p-8">
+                  <div className="bg-white rounded-lg shadow-lg p-0 mx-auto" style={{ width: '210mm' }}>
+                    <iframe
+                      srcDoc={generateConditionsPrintHTML(conditionsLanguage, { reservation: conditionsReservation })}
+                      style={{ width: '100%', height: '600px', border: 'none', borderRadius: '0.5rem' }}
+                      title="Conditions Preview"
+                    />
                   </div>
                 </div>
 
-                {/* Signature Preview - Minimal */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                  {(() => {
-                    const template = getConditionsTemplate(conditionsLanguage);
-                    const dir = conditionsLanguage === 'ar' ? 'rtl' : 'ltr';
-                    return (
-                      <>
-                        <div className="flex flex-col" style={{ direction: dir }}>
-                          <div className="h-16 border-b-2 border-gray-400 mb-3"></div>
-                          <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                            {template.clientSignatureLabel}
-                          </p>
-                        </div>
-                        <div className="flex flex-col" style={{ direction: dir }}>
-                          <div className="h-16 border-b-2 border-gray-400 mb-3"></div>
-                          <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                            {template.agencySignatureLabel}
-                          </p>
-                        </div>
-                      </>
-                    );
-                  })()}
-                </div>
-
-                {/* Info Alert - Compact */}
-                <div className="bg-blue-50 border-l-4 border-blue-600 p-3 mb-6 rounded">
-                  <p className="text-blue-900 text-sm">
-                    <span className="font-semibold">ℹ️ Info:</span>{' '}
-                    {conditionsLanguage === 'fr' 
-                      ? 'Modèle standard optimisé pour impression A4 sur une seule page.' 
-                      : 'نموذج قياسي محسّن للطباعة على صفحة A4 واحدة.'}
-                  </p>
-                </div>
-
-                {/* Action Buttons - Compact and Modern */}
-                <div className="flex flex-wrap gap-3">
+                {/* Pied de page — actions */}
+                <div className="bg-gray-100 px-8 py-4 flex items-center justify-between border-t border-gray-200">
                   <button
                     onClick={() => setShowConditionsModal(false)}
-                    className="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold rounded-lg transition-all text-sm"
+                    className="px-6 py-2 bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold rounded-lg transition-all"
                   >
                     {conditionsLanguage === 'fr' ? 'Fermer' : 'إغلاق'}
                   </button>
                   <button
                     onClick={() => {
-                      // Rappel du client / véhicule / période quand une réservation est ouverte.
-                      const content = generateConditionsPrintHTML(conditionsLanguage, {
-                        reservation: selectedReservation,
-                      });
-                      const printWindow = window.open('', '', 'height=800,width=900');
+                      const content = generateConditionsPrintHTML(conditionsLanguage, { reservation: conditionsReservation });
+                      const printWindow = window.open('', '', 'height=600,width=800');
                       if (printWindow) {
                         printWindow.document.write(content);
                         printWindow.document.close();
-                        setTimeout(() => {
-                          printWindow.print();
-                          printWindow.close();
-                        }, 250);
+                        printWindow.focus();
+                        printWindow.print();
                       }
                     }}
-                    className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-all flex items-center gap-2 text-sm shadow-md hover:shadow-lg"
+                    className="px-6 py-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold rounded-lg transition-all flex items-center gap-2"
                   >
                     <Printer size={18} />
-                    <span>{conditionsLanguage === 'fr' ? 'Imprimer' : 'طباعة'}</span>
+                    {conditionsLanguage === 'fr' ? 'Imprimer' : 'طباعة'}
                   </button>
                 </div>
               </div>
             </motion.div>
-          </motion.div>
+          </>
         )}
       </AnimatePresence>
 
@@ -1757,26 +1631,6 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
         />
       )}
       
-      {/* Conditions Personalizer */}
-      <AnimatePresence>
-        {showConditionsPersonalizer && (
-          <ConditionsPersonalizer
-            lang={lang}
-            reservationId={showConditionsPersonalizer.id}
-            onClose={() => setShowConditionsPersonalizer(null)}
-            onSave={(conditions) => {
-              // Update reservation with new conditions
-              if (selectedReservation) {
-                setSelectedReservation({
-                  ...selectedReservation,
-                  conditions: conditions
-                });
-              }
-            }}
-          />
-        )}
-      </AnimatePresence>
-
       {/* Send Contract by Email Modal */}
       <AnimatePresence>
         {showSendContractModal && (

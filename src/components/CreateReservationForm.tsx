@@ -263,33 +263,32 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
     ...(initialData as unknown as Partial<ReservationWizardData> | undefined),
   }));
 
-  const totalSteps = 7;
+  const totalSteps = 6;
   const steps = [
     { id: 1, title: lang === 'fr' ? 'Dates & Lieux' : 'التواريخ والأماكن', icon: '📅' },
     { id: 2, title: lang === 'fr' ? 'Sélection Véhicule' : 'اختيار المركبة', icon: '🚗' },
     { id: 3, title: lang === 'fr' ? 'Inspection Départ' : 'فحص المغادرة', icon: '🔍' },
     { id: 4, title: lang === 'fr' ? 'Client' : 'العميل', icon: '👤' },
-    { id: 5, title: lang === 'fr' ? 'Assurance de Protection' : 'تأمين الحماية', icon: '🛡️' },
-    { id: 6, title: lang === 'fr' ? 'Services Supplémentaires' : 'الخدمات الإضافية', icon: '🛠️' },
-    { id: 7, title: lang === 'fr' ? 'Tarification Finale' : 'التسعير النهائي', icon: '💰' }
+    { id: 5, title: lang === 'fr' ? 'Services Supplémentaires' : 'الخدمات الإضافية', icon: '🛠️' },
+    { id: 6, title: lang === 'fr' ? 'Tarification Finale' : 'التسعير النهائي', icon: '💰' }
   ];
 
   const handleNext = () => {
     if (inspectionMode && currentStep === 3) {
-      // In inspection mode: step 3 (inspection) -> step 6 (services), skip client & assurance
-      setCurrentStep(6);
+      // In inspection mode: step 3 (inspection) -> step 5 (services), skip client
+      setCurrentStep(5);
     } else if (currentStep < totalSteps) {
       setCurrentStep(currentStep + 1);
     }
   };
 
   const handlePrevious = () => {
-    if (inspectionMode && currentStep === 6) {
+    if (inspectionMode && currentStep === 5) {
       // Go back to step 3 (inspection) when in inspection mode from services
       setCurrentStep(3);
-    } else if (inspectionMode && currentStep === 7) {
-      // Go back to step 6 (services) from pricing in inspection mode
-      setCurrentStep(6);
+    } else if (inspectionMode && currentStep === 6) {
+      // Go back to step 5 (services) from pricing in inspection mode
+      setCurrentStep(5);
     } else if (currentStep > 1) {
       setCurrentStep(currentStep - 1);
     }
@@ -671,7 +670,7 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
         <div className="w-full bg-slate-200 rounded-full h-2">
           <div
             className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-300"
-            style={{ width: `${inspectionMode ? (currentStep === 3 ? 33 : currentStep === 6 ? 66 : 100) : (currentStep / totalSteps) * 100}%` }}
+            style={{ width: `${inspectionMode ? (currentStep === 3 ? 33 : currentStep === 5 ? 66 : 100) : (currentStep / totalSteps) * 100}%` }}
           />
         </div>
       </div>
@@ -691,9 +690,8 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
             {currentStep === 2 && <Step2VehicleSelection lang={lang} formData={formData} setFormData={setFormData} />}
             {currentStep === 3 && <Step3DepartureInspection lang={lang} formData={formData} setFormData={setFormData} />}
             {currentStep === 4 && <Step4ClientSelection lang={lang} formData={formData} setFormData={setFormData} />}
-            {currentStep === 5 && <Step5ProtectionAssurance lang={lang} formData={formData} setFormData={setFormData} />}
-            {currentStep === 6 && <Step5AdditionalServices lang={lang} formData={formData} setFormData={setFormData} />}
-            {currentStep === 7 && <Step6FinalPricing lang={lang} formData={formData} setFormData={setFormData} inspectionMode={inspectionMode} initialData={initialData} agencies={agencies} />}
+            {currentStep === 5 && <Step5AdditionalServices lang={lang} formData={formData} setFormData={setFormData} />}
+            {currentStep === 6 && <Step6FinalPricing lang={lang} formData={formData} setFormData={setFormData} inspectionMode={inspectionMode} initialData={initialData} agencies={agencies} />}
           </div>
         </motion.div>
       </AnimatePresence>

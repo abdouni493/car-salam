@@ -680,21 +680,14 @@ export const WebsiteOrders: React.FC<WebsiteOrdersProps> = ({ lang, onOrdersChan
                         💰 {lang === 'fr' ? 'Tarification' : 'التسعير'}
                       </h3>
                       {(() => {
-                        const assuranceTotal = selectedOrder.assuranceTotal || 0;
                         const servicesTotal = selectedOrder.servicesTotal || 0;
-                        const carPortion = Math.max(0, selectedOrder.totalPrice - servicesTotal - assuranceTotal);
+                        const carPortion = Math.max(0, selectedOrder.totalPrice - servicesTotal);
                         return (
                           <div className="space-y-3">
                             <div className="flex justify-between">
                               <span className="font-bold">{lang === 'fr' ? 'Prix véhicule:' : 'سعر المركبة:'}</span>
                               <span>{carPortion.toLocaleString()} DA</span>
                             </div>
-                            {assuranceTotal > 0 && (
-                              <div className="flex justify-between">
-                                <span className="font-bold">🛡️ {lang === 'fr' ? 'Assurance:' : 'التأمين:'}</span>
-                                <span>{assuranceTotal.toLocaleString()} DA</span>
-                              </div>
-                            )}
                             {servicesTotal > 0 && (
                               <div className="flex justify-between">
                                 <span className="font-bold">{lang === 'fr' ? 'Services:' : 'الخدمات:'}</span>
@@ -709,41 +702,6 @@ export const WebsiteOrders: React.FC<WebsiteOrdersProps> = ({ lang, onOrdersChan
                         );
                       })()}
                     </div>
-
-                    {/* Assurance de protection */}
-                    {(selectedOrder.protectionAssurance || selectedOrder.protectionAssuranceName) && (
-                      <div className="bg-gradient-to-r from-red-50 to-rose-50 rounded-2xl p-6 border border-red-200">
-                        <h3 className="text-lg font-black text-red-900 mb-4">
-                          🛡️ {lang === 'fr' ? 'Assurance de Protection' : 'تأمين الحماية'}
-                        </h3>
-                        <div className="flex justify-between items-center mb-3">
-                          <span className="font-bold text-slate-900">
-                            {selectedOrder.protectionAssurance?.name || selectedOrder.protectionAssuranceName}
-                          </span>
-                          {selectedOrder.protectionAssurance && (
-                            <span className="text-red-700 font-bold">
-                              {selectedOrder.protectionAssurance.pricePerDay.toLocaleString()} DA/{lang === 'fr' ? 'j' : 'ي'}
-                            </span>
-                          )}
-                        </div>
-                        {selectedOrder.protectionAssurance && selectedOrder.protectionAssurance.items.length > 0 && (
-                          <div className="space-y-1.5">
-                            {selectedOrder.protectionAssurance.items.map((item) => (
-                              <div key={item.linkId || item.itemId} className="flex items-center gap-2 text-sm">
-                                <span className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${
-                                  item.status ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'
-                                }`}>
-                                  {item.status ? '✓' : '✕'}
-                                </span>
-                                <span className={item.status ? 'text-slate-700' : 'text-slate-400 line-through'}>
-                                  {item.name}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
 
                     {/* Services */}
                     {selectedOrder.step3.additionalServices.length > 0 && (

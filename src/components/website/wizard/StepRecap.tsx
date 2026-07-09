@@ -14,8 +14,8 @@ export const StepRecap: React.FC = () => {
   const {
     lang, car, range, departureTime, returnTime,
     agencies, departureAgency, returnAgency, differentReturnAgency,
-    personal, selectedServices, selectedAssurance, notes, setNotes,
-    days, promo, basePrice, discount, servicesTotal, assuranceTotal, total,
+    personal, selectedServices, notes, setNotes,
+    days, promo, basePrice, discount, servicesTotal, total,
     promoInput, setPromoInput, promoStatus, promoDiscountPct, promoDiscount, verifyPromo, clearPromo,
     goToStep, prev, isSubmitting, submitError, submit,
   } = useWizard();
@@ -78,22 +78,13 @@ export const StepRecap: React.FC = () => {
             ]
           )}
           {summaryBlock(
-            lang === 'fr' ? '🛡️ Assurance de protection' : '🛡️ تأمين الحماية', 3,
-            selectedAssurance
-              ? [
-                  { label: selectedAssurance.name, value: `${selectedAssurance.pricePerDay.toLocaleString()} ${lang === 'fr' ? 'DA/j' : 'د.ج/ي'}` },
-                  ...selectedAssurance.items.map(it => ({ label: `${it.status ? '✅' : '❌'} ${it.name}`, value: '' })),
-                ]
-              : [{ label: lang === 'fr' ? 'Aucune assurance sélectionnée' : 'لم يتم اختيار تأمين', value: '' }]
-          )}
-          {summaryBlock(
-            lang === 'fr' ? '🛎️ Services' : '🛎️ الخدمات', 4,
+            lang === 'fr' ? '🛎️ Services' : '🛎️ الخدمات', 3,
             selectedServices.length > 0
               ? selectedServices.map(s => ({ label: s.name, value: `${s.price.toLocaleString()} DA` }))
               : [{ label: lang === 'fr' ? 'Aucun service sélectionné' : 'لم يتم اختيار خدمات', value: '' }]
           )}
           {summaryBlock(
-            lang === 'fr' ? '👤 Client' : '👤 العميل', 5,
+            lang === 'fr' ? '👤 Client' : '👤 العميل', 4,
             [
               { label: lang === 'fr' ? 'Nom' : 'الاسم', value: `${personal.firstName} ${personal.lastName}` },
               { label: lang === 'fr' ? 'Téléphone' : 'الهاتف', value: personal.phone },
@@ -127,17 +118,6 @@ export const StepRecap: React.FC = () => {
               <span className="font-bold" style={{ color: '#DC2626' }}>
                 −{discount.toLocaleString()} {{ fr: 'DA', ar: 'د.ج' }[lang]}
               </span>
-            </div>
-          )}
-
-          {/* Assurance de protection (prix/jour × durée) */}
-          {selectedAssurance && assuranceTotal > 0 && (
-            <div className="flex justify-between items-center px-4 py-3 rounded-xl text-sm"
-              style={{ background: 'rgba(220,38,38,0.05)', border: '1px solid rgba(220,38,38,0.14)' }}>
-              <span className="text-vel-slate">
-                🛡️ {selectedAssurance.name} ({days} {{ fr: 'j ×', ar: 'يوم ×' }[lang]} {selectedAssurance.pricePerDay.toLocaleString()})
-              </span>
-              <span className="font-bold" style={{ color: C.accent }}>{assuranceTotal.toLocaleString()} {{ fr: 'DA', ar: 'د.ج' }[lang]}</span>
             </div>
           )}
 
