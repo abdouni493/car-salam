@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { LogOut, X } from 'lucide-react';
 import { SIDEBAR_ITEMS } from '../constants';
 import { Language } from '../types';
-import { DatabaseService } from '../services/DatabaseService';
+import { AGENCY_BRANDING_EVENT, DatabaseService, DEFAULT_AGENCY_NAME } from '../services/DatabaseService';
 
 interface SidebarProps {
   lang: Language;
@@ -21,31 +21,32 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const isRtl = lang === 'ar';
   const [agencyData, setAgencyData] = useState({
-    name: 'AutoFutur',
+    name: DEFAULT_AGENCY_NAME,
     logo: '',
   });
+  const [logoFailed, setLogoFailed] = useState(false);
 
-  // Load agency data from database
+  // Load agency data from database, et re-charge après chaque sauvegarde des
+  // réglages : sans cela le nouveau nom/logo n'apparaissait qu'au rechargement.
   useEffect(() => {
     const loadAgencyData = async () => {
       try {
-        const websiteSettings = await DatabaseService.getWebsiteSettings();
-        setAgencyData({
-          name: websiteSettings.name || 'AutoFutur',
-          logo: websiteSettings.logo || '',
-        });
+        const branding = await DatabaseService.getAgencyBranding();
+        setAgencyData({ name: branding.name, logo: branding.logo });
+        setLogoFailed(false);
       } catch (error) {
         console.error('Error loading agency data:', error);
-        // Fallback to default values
-        setAgencyData({
-          name: 'AutoFutur',
-          logo: '',
-        });
+        setAgencyData({ name: DEFAULT_AGENCY_NAME, logo: '' });
       }
     };
 
     loadAgencyData();
+    window.addEventListener(AGENCY_BRANDING_EVENT, loadAgencyData);
+    return () => window.removeEventListener(AGENCY_BRANDING_EVENT, loadAgencyData);
   }, []);
+
+  // Les trois premiers mots suffisent : le premier en noir, le reste accentué.
+  const [firstWord, ...restWords] = agencyData.name.trim().split(/\s+/).slice(0, 3);
 
   return (
     <AnimatePresence>
@@ -59,23 +60,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
           style={{ [isRtl ? 'right' : 'left']: 0 }}
         >
           <div className="p-8 flex items-center justify-between border-b border-saas-border">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-saas-border shadow-lg shadow-saas-primary-start/20 flex items-center justify-center flex-shrink-0">
-                {agencyData.logo ? (
+            <div className="flex items-center gap-3 min-w-0">
+              {/* `shrink-0` : sans lui, un nom d'agence long écrasait la pastille
+                  du logo jusqu'à la faire disparaître (`flex-shrink-0` n'existe
+                  plus en Tailwind v4). */}
+              <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-saas-border shadow-lg shadow-saas-primary-start/20 flex items-center justify-center shrink-0">
+                {agencyData.logo && !logoFailed ? (
                   <img
                     src={agencyData.logo}
                     alt="Agency Logo"
                     className="w-full h-full object-cover"
                     referrerPolicy="no-referrer"
+                    onError={() => setLogoFailed(true)}
                   />
                 ) : (
                   <span className="text-white font-black text-xl italic bg-linear-to-br from-saas-primary-start to-saas-primary-end w-full h-full flex items-center justify-center">
-                    A
+                    {firstWord?.charAt(0) || 'A'}
                   </span>
                 )}
               </div>
-              <span className="text-xl font-black tracking-tighter uppercase">
-                {agencyData.name.split(' ').slice(0, 3).join(' ').split(' ')[0]}<span className="text-saas-primary-via">{agencyData.name.split(' ').slice(0, 3).join(' ').split(' ').slice(1).join(' ')}</span>
+              <span className="text-xl font-black tracking-tighter uppercase truncate">
+                {firstWord}
+                {restWords.length > 0 && (
+                  <span className="text-saas-primary-via">&nbsp;{restWords.join(' ')}</span>
+                )}
               </span>
             </div>
             <button

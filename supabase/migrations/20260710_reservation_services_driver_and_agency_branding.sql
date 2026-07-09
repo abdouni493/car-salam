@@ -1,0 +1,187 @@
+-- ============================================================================
+-- 20260710_reservation_services_driver_and_agency_branding.sql
+-- ----------------------------------------------------------------------------
+-- 1) `reservation_services` : colonnes `driver_id` et `driver_caution`.
+--    Le formulaire de réservation permet d'attacher un chauffeur à un service
+--    et d'encaisser une caution, mais les colonnes n'existaient pas :
+--      « Could not find the 'driver_caution' column of 'reservation_services'
+--        in the schema cache »
+--
+-- 2) `website_settings` : la table est la SOURCE UNIQUE du nom et du logo de
+--    l'agence (barre latérale, contrats, factures, devis, reçus, rapports…).
+--    `updateWebsiteSettings()` faisait « delete all + insert » : deux appels
+--    concurrents pouvaient dupliquer la ligne, et un insert en échec après le
+--    delete effaçait tout. Résultat en base : 3 lignes, toutes vides.
+--    On fusionne les lignes en UNE ligne singleton, et un index unique
+--    empêche définitivement les doublons.
+--
+-- 3) `agency_settings` : lue par les documents (BillingPage, éditeur de
+--    modèles) mais JAMAIS écrite -> nom et logo vides sur ces impressions.
+--    Elle devient un miroir en lecture seule de `website_settings`
+--    (trigger de synchronisation). Sa colonne `document_templates` reste sa
+--    donnée propre.
+--
+-- Exécuter UNE FOIS dans le SQL Editor de Supabase. Idempotent : ré-exécutable.
+-- ============================================================================
+
+begin;
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- 1) CHAUFFEUR ET CAUTION SUR `reservation_services`
+--    `driver_id` référence un employé de type 'driver' (cf. DatabaseService
+--    .getDrivers()). `on delete set null` : supprimer un chauffeur ne doit pas
+--    supprimer la ligne de service d'une réservation déjà facturée.
+-- ─────────────────────────────────────────────────────────────────────────
+alter table public.reservation_services
+  add column if not exists driver_id      uuid references public.workers(id) on delete set null,
+  add column if not exists driver_caution numeric not null default 0;
+
+create index if not exists idx_reservation_services_driver
+  on public.reservation_services(driver_id);
+
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- 2) `website_settings` -> UNE SEULE LIGNE
+--    Fusion colonne par colonne : on garde, pour chaque champ, la valeur non
+--    vide la plus récente. Une ligne vide n'écrase donc jamais une vraie valeur.
+-- ─────────────────────────────────────────────────────────────────────────
+do $$
+declare
+  v_id constant uuid := '00000000-0000-0000-0000-000000000001';
+  v_merged record;
+begin
+  -- `(array_agg(col order by updated_at desc) filter (where col non vide))[1]`
+  -- = la valeur la plus récemment renseignée pour cette colonne.
+  select
+    coalesce((array_agg(name               order by updated_at desc) filter (where nullif(btrim(name), '')               is not null))[1], '') as name,
+    coalesce((array_agg(description        order by updated_at desc) filter (where nullif(btrim(description), '')        is not null))[1], '') as description,
+    coalesce((array_agg(logo               order by updated_at desc) filter (where nullif(btrim(logo), '')               is not null))[1], '') as logo,
+    coalesce((array_agg(phone_number_2     order by updated_at desc) filter (where nullif(btrim(phone_number_2), '')     is not null))[1], '') as phone_number_2,
+    coalesce((array_agg(bank_number        order by updated_at desc) filter (where nullif(btrim(bank_number), '')        is not null))[1], '') as bank_number,
+    coalesce((array_agg(address            order by updated_at desc) filter (where nullif(btrim(address), '')            is not null))[1], '') as address,
+    coalesce((array_agg(phone              order by updated_at desc) filter (where nullif(btrim(phone), '')              is not null))[1], '') as phone,
+    coalesce((array_agg(landing_background order by updated_at desc) filter (where nullif(btrim(landing_background), '') is not null))[1], '') as landing_background
+    into v_merged
+    from public.website_settings;
+
+  delete from public.website_settings;
+
+  insert into public.website_settings (
+    id, name, description, logo, phone_number_2,
+    bank_number, address, phone, landing_background, updated_at
+  ) values (
+    v_id,
+    coalesce(v_merged.name, ''),               coalesce(v_merged.description, ''),
+    coalesce(v_merged.logo, ''),               coalesce(v_merged.phone_number_2, ''),
+    coalesce(v_merged.bank_number, ''),        coalesce(v_merged.address, ''),
+    coalesce(v_merged.phone, ''),              coalesce(v_merged.landing_background, ''),
+    now()
+  );
+end $$;
+
+-- 2.1 Récupération du nom/adresse depuis `agencies` si le branding est vide
+--     (cas des bases où le « delete all + insert » a effacé les réglages).
+--     N'écrase jamais une valeur déjà renseignée.
+update public.website_settings ws
+   set name    = coalesce(nullif(btrim(ws.name), ''),    a.name),
+       address = coalesce(nullif(btrim(ws.address), ''), a.address)
+  from (select name, address from public.agencies order by created_at limit 1) a
+ where nullif(btrim(ws.name), '') is null;
+
+-- 2.2 Verrou : une seule ligne, pour toujours. Clé primaire sur `id` + `id`
+--     imposé => au plus une ligne. Un insert supplémentaire échoue bruyamment
+--     au lieu de dupliquer silencieusement les réglages.
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'website_settings_singleton'
+  ) then
+    alter table public.website_settings
+      add constraint website_settings_singleton
+      check (id = '00000000-0000-0000-0000-000000000001');
+  end if;
+end $$;
+
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- 3) `agency_settings` -> MIROIR DE `website_settings`
+--    Même traitement singleton, puis synchronisation automatique.
+-- ─────────────────────────────────────────────────────────────────────────
+do $$
+declare
+  v_id constant uuid := '00000000-0000-0000-0000-000000000001';
+  v_templates jsonb;
+begin
+  select coalesce((array_agg(document_templates order by updated_at desc)
+                   filter (where document_templates is not null
+                             and document_templates <> '{}'::jsonb))[1], '{}'::jsonb)
+    into v_templates
+    from public.agency_settings;
+
+  delete from public.agency_settings;
+
+  insert into public.agency_settings (
+    id, agency_name, slogan, address, phone, logo, document_templates, updated_at
+  )
+  select v_id, ws.name, ws.description, ws.address, ws.phone, ws.logo,
+         coalesce(v_templates, '{}'::jsonb), now()
+    from public.website_settings ws
+   limit 1;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'agency_settings_singleton'
+  ) then
+    alter table public.agency_settings
+      add constraint agency_settings_singleton
+      check (id = '00000000-0000-0000-0000-000000000001');
+  end if;
+end $$;
+
+-- 3.1 Trigger : toute écriture sur `website_settings` recopie le branding dans
+--     `agency_settings`. `document_templates` n'est jamais touché.
+create or replace function public.sync_agency_settings_branding()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  insert into public.agency_settings (
+    id, agency_name, slogan, address, phone, logo, updated_at
+  ) values (
+    '00000000-0000-0000-0000-000000000001',
+    new.name, new.description, new.address, new.phone, new.logo, now()
+  )
+  on conflict (id) do update
+     set agency_name = excluded.agency_name,
+         slogan      = excluded.slogan,
+         address     = excluded.address,
+         phone       = excluded.phone,
+         logo        = excluded.logo,
+         updated_at  = now();
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_website_settings_sync_agency on public.website_settings;
+create trigger trg_website_settings_sync_agency
+  after insert or update on public.website_settings
+  for each row execute function public.sync_agency_settings_branding();
+
+commit;
+
+-- Force PostgREST à relire le schéma : sans cela `driver_caution` reste
+-- introuvable dans le « schema cache » jusqu'au prochain redémarrage.
+notify pgrst, 'reload schema';
+
+-- ============================================================================
+-- Vérifications (optionnel)
+--   select column_name from information_schema.columns
+--    where table_name = 'reservation_services' and column_name like 'driver%';
+--
+--   select count(*) from public.website_settings;  -- doit valoir 1
+--   select name, logo from public.website_settings;
+--   select agency_name, logo from public.agency_settings;  -- identiques
+-- ============================================================================

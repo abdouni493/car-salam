@@ -534,8 +534,8 @@ const ReportsPage: React.FC<{ lang: Language }> = ({ lang }) => {
     if (!data) return;
     
     try {
-      const agencySettings = await DatabaseService.getWebsiteSettings();
-      
+      const agencySettings = await DatabaseService.getAgencyBranding();
+
       const html = generateReportHTML(
         null, // No specific car for general report
         data.reservations,

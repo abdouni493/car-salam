@@ -1,6 +1,13 @@
 import { supabase } from '../supabase';
 import { DocumentTemplates, DocumentTemplate, DocumentField, DocumentType, AgencySettings } from '../types';
 
+/**
+ * `agency_settings` ne contient qu'une seule ligne, à cet identifiant fixe.
+ * Ses colonnes de branding sont un miroir de `website_settings` (trigger côté
+ * base) ; seule `document_templates` lui appartient en propre.
+ */
+const AGENCY_SETTINGS_ID = '00000000-0000-0000-0000-000000000001';
+
 export interface SavedDocumentTemplate {
   id: string;
   agency_id: string;
@@ -15,11 +22,13 @@ export class DocumentTemplateService {
    * Get all document templates for the current agency
    */
   static async getDocumentTemplates(): Promise<DocumentTemplates> {
+    // `maybeSingle` : sur une base neuve `agency_settings` est vide, et `single`
+    // remontait alors une erreur PGRST116 à chaque ouverture d'un document.
     const { data, error } = await supabase
       .from('agency_settings')
       .select('document_templates')
       .limit(1)
-      .single();
+      .maybeSingle();
 
     if (error) {
       console.error('Error fetching document templates:', error);
@@ -247,10 +256,19 @@ export class DocumentTemplateService {
    * Update document templates for all document types
    */
   static async updateDocumentTemplates(templates: DocumentTemplates): Promise<DocumentTemplates> {
+    // `agency_settings` ne contient qu'une ligne (cf. migration 20260710).
+    // Un `update` seul ne créait rien tant que cette ligne n'existait pas :
+    // l'enregistrement des modèles échouait silencieusement sur base neuve.
     const { data, error } = await supabase
       .from('agency_settings')
-      .update({ document_templates: templates, updated_at: new Date().toISOString() })
-      .limit(1)
+      .upsert(
+        {
+          id: AGENCY_SETTINGS_ID,
+          document_templates: templates,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'id' }
+      )
       .select('document_templates')
       .single();
 
@@ -338,7 +356,7 @@ export class DocumentTemplateService {
       .from('agency_settings')
       .select('*')
       .limit(1)
-      .single();
+      .maybeSingle();
 
     if (error) {
       console.error('Error fetching agency settings:', error);

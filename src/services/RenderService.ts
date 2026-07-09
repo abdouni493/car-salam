@@ -147,8 +147,10 @@ export class RenderService {
       engagement_number: reservation?.id?.substring(0, 8).toUpperCase() || '',
       commitment_date: this.formatDate(new Date()),
       
-      // Agency info
-      agency_name: agencySettings?.agency_name || '',
+      // Agency info — accepte les deux orthographes : `getAgencyBranding()` les
+      // expose toutes, mais d'anciens appels passent la ligne `website_settings`
+      // brute, où le nom de l'agence s'appelle simplement `name`.
+      agency_name: agencySettings?.agency_name || agencySettings?.name || '',
       agency_phone: agencySettings?.phone ? this.ltrPhone(agencySettings.phone) : '',
       agency_address: agencySettings?.address || '',
       agency_logo: agencySettings?.logo || '',

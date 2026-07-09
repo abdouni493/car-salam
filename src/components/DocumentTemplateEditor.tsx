@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { DocumentType, DocumentTemplate, DocumentField } from '../types';
+import { AgencyBranding, DocumentType, DocumentTemplate, DocumentField } from '../types';
 import { DocumentTemplateService, SavedDocumentTemplate } from '../services/DocumentTemplateService';
+import { DatabaseService, DEFAULT_AGENCY_NAME } from '../services/DatabaseService';
 import { supabase } from '../supabase';
 import { motion, AnimatePresence } from 'motion/react';
 import { Edit2, Plus, Trash2, RotateCcw, Save, X } from 'lucide-react';
@@ -49,12 +50,7 @@ interface RealData {
     mileage: number;
     fuel_level: string;
   };
-  agencySettings?: {
-    agency_name: string;
-    logo: string;
-    phone: string;
-    address: string;
-  };
+  agencySettings?: AgencyBranding;
 }
 
 const DEFAULT_FIELD_NAMES: Record<DocumentType, string[]> = {
@@ -149,16 +145,8 @@ export const DocumentTemplateEditor: React.FC<DocumentTemplateEditorProps> = ({
     try {
       const data: RealData = {};
 
-      // Load agency settings
-      const { data: agencyData } = await supabase
-        .from('agency_settings')
-        .select('agency_name, logo, phone, address')
-        .limit(1)
-        .single();
-
-      if (agencyData) {
-        data.agencySettings = agencyData;
-      }
+      // Branding : source unique `website_settings` (cf. getAgencyBranding).
+      data.agencySettings = await DatabaseService.getAgencyBranding();
 
       // Load client info
       if (clientId) {
@@ -228,7 +216,7 @@ export const DocumentTemplateEditor: React.FC<DocumentTemplateEditorProps> = ({
       rental_dates: reservation ? `${reservation.departure_date} - ${reservation.return_date}` : 'Dates',
       price_total: reservation ? `${reservation.total_price.toLocaleString()} DA` : 'Price',
       signature_line: '_________________________________',
-      agenceName: agencySettings?.agency_name || 'Agency Name',
+      agenceName: agencySettings?.agency_name || DEFAULT_AGENCY_NAME,
       quote_number: `DEVIS-${Date.now().toString().slice(-6)}`,
       validity_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString('fr-FR'),
       invoice_number: `FAC-${Date.now().toString().slice(-6)}`,

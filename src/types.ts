@@ -307,6 +307,30 @@ export interface WebsiteSettings {
   landing_background?: string;
 }
 
+/**
+ * Identité de l'agence, normalisée depuis `website_settings` (source unique).
+ *
+ * Les gabarits d'impression ont été écrits à des époques différentes et lisent
+ * la même donnée sous trois orthographes (`name`, `agency_name`, `agencyName`).
+ * Plutôt que de réécrire tous les modèles — y compris ceux enregistrés en base
+ * par l'éditeur de documents — on expose chaque alias.
+ */
+export interface AgencyBranding {
+  name: string;
+  agency_name: string;
+  agencyName: string;
+  logo: string;
+  agency_logo: string;
+  address: string;
+  agency_address: string;
+  phone: string;
+  agency_phone: string;
+  phone_number_2: string;
+  bank_number: string;
+  description: string;
+  slogan: string;
+}
+
 // Code promo utilisable sur la réservation du site public
 export interface PromoCode {
   id: string;

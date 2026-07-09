@@ -49,16 +49,19 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ lang, user }) => {
       try {
         setLoading(true);
 
-        // Load website settings for general tab
+        // Load website settings for general tab.
+        // Aucune valeur de démonstration ici : le formulaire est réenvoyé tel
+        // quel à la sauvegarde, et ces exemples ("Luxdrive Premium", un logo
+        // picsum.photos…) finissaient enregistrés comme identité de l'agence.
         const websiteSettings = await DatabaseService.getWebsiteSettings();
         setGeneralData({
-          agencyName: websiteSettings.name || 'Luxdrive Premium',
-          slogan: websiteSettings.description || 'Votre partenaire de confiance en location de véhicules',
-          address: websiteSettings.address || 'Alger, Algeria',
-          phone: websiteSettings.phone || '+213 5 1234 5678',
+          agencyName: websiteSettings.name || '',
+          slogan: websiteSettings.description || '',
+          address: websiteSettings.address || '',
+          phone: websiteSettings.phone || '',
           phoneNumber2: websiteSettings.phone_number_2 || '',
           bankNumber: websiteSettings.bank_number || '',
-          logo: websiteSettings.logo || 'https://picsum.photos/seed/logo/200/200',
+          logo: websiteSettings.logo || '',
         });
 
         // Load worker data for profile and security
@@ -163,12 +166,10 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ lang, user }) => {
             logo: imageData,
           }));
 
-          // Save to website settings
-          await DatabaseService.updateWebsiteSettings({
-            name: generalData.agencyName,
-            description: generalData.slogan,
-            logo: imageData,
-          });
+          // Sauvegarde partielle : `updateWebsiteSettings` fusionne avec la
+          // ligne existante, inutile de renvoyer le nom et le slogan (qui
+          // peuvent avoir été modifiés sans être encore validés).
+          await DatabaseService.updateWebsiteSettings({ logo: imageData });
 
           setNotification({ type: 'success', message: lang === 'fr' ? 'Logo mis à jour avec succès!' : 'تم تحديث الشعار بنجاح!' });
           setTimeout(() => setNotification(null), 4000);
@@ -528,6 +529,7 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ lang, user }) => {
                     name="agencyName"
                     value={generalData.agencyName}
                     onChange={handleGeneralChange}
+                    placeholder={{fr: 'Ex : Car Salam', ar: 'مثال: كار سلام'}[lang]}
                     className="input-saas"
                   />
                 </div>
@@ -540,6 +542,7 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ lang, user }) => {
                     value={generalData.slogan}
                     onChange={handleGeneralChange}
                     rows={2}
+                    placeholder={{fr: 'Votre partenaire de confiance en location de véhicules', ar: 'شريكك الموثوق في تأجير السيارات'}[lang]}
                     className="input-saas resize-none"
                   />
                 </div>

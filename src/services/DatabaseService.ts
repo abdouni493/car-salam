@@ -1,5 +1,22 @@
 import { supabase } from '../supabase';
-import { Car, CarOwnerInfo, Client, Agency, Worker, WorkerAdvance, WorkerAbsence, WorkerPayment, StoreExpense, VehicleExpense, MaintenanceAlert, WebsiteOrder, ReservationDetails, SpecialOffer, ContactInfo, WebsiteSettings, PromoCode } from '../types';
+import { AgencyBranding, Car, CarOwnerInfo, Client, Agency, Worker, WorkerAdvance, WorkerAbsence, WorkerPayment, StoreExpense, VehicleExpense, MaintenanceAlert, WebsiteOrder, ReservationDetails, SpecialOffer, ContactInfo, WebsiteSettings, PromoCode } from '../types';
+
+/**
+ * `website_settings` ne contient qu'une seule ligne, à cet identifiant fixe
+ * (cf. migration 20260710). Écrire par upsert sur cette clé au lieu de
+ * « delete all + insert » : deux sauvegardes simultanées dupliquaient la ligne,
+ * et un insert en échec après le delete effaçait le nom et le logo de l'agence.
+ */
+export const WEBSITE_SETTINGS_ID = '00000000-0000-0000-0000-000000000001';
+
+/** Nom affiché quand l'agence n'a encore rien renseigné. */
+export const DEFAULT_AGENCY_NAME = 'AUTO LOCATION';
+
+/**
+ * Émis après chaque sauvegarde des réglages : la barre latérale et les écrans
+ * qui affichent le branding se rafraîchissent sans recharger la page.
+ */
+export const AGENCY_BRANDING_EVENT = 'agency-branding-updated';
 
 // Generic database service functions
 export class DatabaseService {
@@ -1539,26 +1556,37 @@ export class DatabaseService {
   }
 
   // Website Management - Settings
+
+  /**
+   * Ligne brute des réglages, ou `null` si la table est vide.
+   * Remonte les erreurs au lieu de les avaler : `updateWebsiteSettings` fusionne
+   * sur ce résultat, et fusionner sur des valeurs vides fabriquées à cause d'une
+   * lecture en échec écrasait le nom et le logo réels de l'agence.
+   */
+  private static async fetchWebsiteSettingsRow(): Promise<any | null> {
+    const { data, error } = await supabase
+      .from('website_settings')
+      .select('*')
+      .order('updated_at', { ascending: false })
+      .limit(1);
+
+    if (error) throw error;
+    return data?.[0] ?? null;
+  }
+
   static async getWebsiteSettings(): Promise<WebsiteSettings> {
     try {
-      const { data, error } = await supabase
-        .from('website_settings')
-        .select('*')
-        .order('updated_at', { ascending: false })
-        .limit(1);
-
-      if (error) throw error;
-
-      if (data && data.length > 0) {
+      const row = await this.fetchWebsiteSettingsRow();
+      if (row) {
         return {
-          name: data[0].name,
-          description: data[0].description,
-          logo: data[0].logo,
-          phone_number_2: data[0].phone_number_2,
-          bank_number: data[0].bank_number,
-          address: data[0].address,
-          phone: data[0].phone,
-          landing_background: data[0].landing_background,
+          name: row.name ?? '',
+          description: row.description ?? '',
+          logo: row.logo ?? '',
+          phone_number_2: row.phone_number_2 ?? '',
+          bank_number: row.bank_number ?? '',
+          address: row.address ?? '',
+          phone: row.phone ?? '',
+          landing_background: row.landing_background ?? '',
         };
       }
     } catch (e: any) {
@@ -1578,34 +1606,84 @@ export class DatabaseService {
     };
   }
 
-  static async updateWebsiteSettings(settings: WebsiteSettings): Promise<WebsiteSettings> {
+  /**
+   * Identité de l'agence pour la barre latérale et TOUS les documents imprimés.
+   *
+   * Source unique : `website_settings` (la table que renseigne la page Config).
+   * `agency_settings` n'est qu'un miroir maintenu par trigger — la lire
+   * directement affichait des valeurs vides, car rien ne l'écrivait jamais.
+   */
+  static async getAgencyBranding(): Promise<AgencyBranding> {
+    const settings = await this.getWebsiteSettings();
+
+    let name = (settings.name || '').trim();
+    let address = (settings.address || '').trim();
+    let phone = (settings.phone || '').trim();
+
+    // Filet de sécurité : une base dont les réglages n'ont jamais été remplis
+    // (ou ont été effacés par l'ancien « delete all + insert ») garde au moins
+    // le nom déclaré dans la fiche agence.
+    if (!name) {
+      try {
+        const { data } = await supabase
+          .from('agencies')
+          .select('name, address')
+          .order('created_at', { ascending: true })
+          .limit(1);
+
+        if (data?.[0]) {
+          name = (data[0].name || '').trim();
+          address = address || (data[0].address || '').trim();
+        }
+      } catch {
+        // La fiche agence est optionnelle : on retombe sur le nom par défaut.
+      }
+    }
+
+    name = name || DEFAULT_AGENCY_NAME;
+    const logo = (settings.logo || '').trim();
+    const description = (settings.description || '').trim();
+
+    return {
+      name,
+      agency_name: name,
+      agencyName: name,
+      logo,
+      agency_logo: logo,
+      address,
+      agency_address: address,
+      phone,
+      agency_phone: phone,
+      phone_number_2: (settings.phone_number_2 || '').trim(),
+      bank_number: (settings.bank_number || '').trim(),
+      description,
+      slogan: description,
+    };
+  }
+
+  static async updateWebsiteSettings(settings: Partial<WebsiteSettings>): Promise<WebsiteSettings> {
     // Les appels partiels (ConfigPage, upload de logo…) ne doivent pas effacer
     // les champs non fournis : on fusionne avec l'enregistrement existant.
-    const current = await this.getWebsiteSettings();
+    // Si la lecture échoue, on abandonne — écrire par-dessus serait destructeur.
+    const current = await this.fetchWebsiteSettingsRow();
     const merged = {
-      name: settings.name ?? current.name,
-      description: settings.description ?? current.description,
-      logo: settings.logo ?? current.logo,
-      phone_number_2: settings.phone_number_2 ?? current.phone_number_2,
-      bank_number: settings.bank_number ?? current.bank_number,
-      address: settings.address ?? current.address,
-      phone: settings.phone ?? current.phone,
-      landing_background: settings.landing_background ?? current.landing_background,
+      id: current?.id ?? WEBSITE_SETTINGS_ID,
+      name: settings.name ?? current?.name ?? '',
+      description: settings.description ?? current?.description ?? '',
+      logo: settings.logo ?? current?.logo ?? '',
+      phone_number_2: settings.phone_number_2 ?? current?.phone_number_2 ?? '',
+      bank_number: settings.bank_number ?? current?.bank_number ?? '',
+      address: settings.address ?? current?.address ?? '',
+      phone: settings.phone ?? current?.phone ?? '',
+      landing_background: settings.landing_background ?? current?.landing_background ?? '',
+      updated_at: new Date().toISOString(),
     };
 
-    // First, delete all existing records to ensure only one record exists
-    await supabase
-      .from('website_settings')
-      .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all records
-
-    // Then insert the new record
+    // Upsert sur la ligne unique : jamais de fenêtre pendant laquelle la table
+    // est vide, et deux sauvegardes concurrentes ne créent plus de doublon.
     let { data, error } = await supabase
       .from('website_settings')
-      .insert([{
-        ...merged,
-        updated_at: new Date().toISOString(),
-      }])
+      .upsert(merged, { onConflict: 'id' })
       .select()
       .single();
 
@@ -1615,15 +1693,17 @@ export class DatabaseService {
       const { landing_background: _lb, ...withoutBackground } = merged;
       ({ data, error } = await supabase
         .from('website_settings')
-        .insert([{
-          ...withoutBackground,
-          updated_at: new Date().toISOString(),
-        }])
+        .upsert(withoutBackground, { onConflict: 'id' })
         .select()
         .single());
     }
 
     if (error) throw error;
+
+    // Rafraîchit la barre latérale et les en-têtes de documents déjà montés.
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent(AGENCY_BRANDING_EVENT));
+    }
 
     return {
       name: data.name,

@@ -1,4 +1,4 @@
-import { supabase } from '../supabase';
+import { DatabaseService } from './DatabaseService';
 import { ReservationDetails } from '../types';
 import html2pdf from 'html2pdf.js';
 
@@ -61,14 +61,7 @@ export class EmailService {
   ): Promise<string> {
     try {
       // Fetch agency settings for logo and name
-      const { data: settingsData } = await supabase
-        .from('website_settings')
-        .select('*')
-        .order('updated_at', { ascending: false })
-        .limit(1);
-
-      const agencyName = settingsData?.[0]?.name || 'AUTO LOCATION';
-      const logoUrl = settingsData?.[0]?.logo || '';
+      const { name: agencyName, logo: logoUrl } = await this.loadAgency();
 
       const isRTL = templateLang === 'ar';
       const dirAttr = isRTL ? 'rtl' : 'ltr';
@@ -559,16 +552,12 @@ export class EmailService {
     templateLang: 'fr' | 'ar'
   ): Promise<string> {
     try {
-      const { data: settingsData } = await supabase
-        .from('website_settings')
-        .select('logo, name, address, phone, phone_number_2')
-        .limit(1)
-        .single();
-
-      const agencyName    = settingsData?.name  || 'AUTO LOCATION';
-      const logoUrl       = settingsData?.logo  || '';
-      const agencyAddress = settingsData?.address || '';
-      const agencyPhone   = settingsData?.phone   || '';
+      const {
+        name: agencyName,
+        logo: logoUrl,
+        address: agencyAddress,
+        phone: agencyPhone,
+      } = await this.loadAgency();
 
       const isFrench = templateLang === 'fr';
       const textDir  = isFrench ? 'ltr' : 'rtl';
@@ -791,19 +780,20 @@ export class EmailService {
   }
 
   // ─── SHARED AGENCY LOADER ────────────────────────────────────────────────────
+  /**
+   * Nom, logo et coordonnées de l'agence pour les en-têtes d'e-mails et de PDF.
+   * Passe par `getAgencyBranding()` : les lectures directes de `website_settings`
+   * ici ne triaient pas les lignes et pouvaient tomber sur un enregistrement vide.
+   */
   private static async loadAgency() {
-    const { data } = await supabase
-      .from('website_settings')
-      .select('logo, name, address, phone, phone_number_2, bank_number')
-      .limit(1)
-      .single();
+    const branding = await DatabaseService.getAgencyBranding();
     return {
-      name:    data?.name         || 'AUTO LOCATION',
-      logo:    data?.logo         || '',
-      address: data?.address      || '',
-      phone:   data?.phone        || '',
-      phone2:  data?.phone_number_2 || '',
-      bank:    data?.bank_number  || '',
+      name:    branding.name,
+      logo:    branding.logo,
+      address: branding.address,
+      phone:   branding.phone,
+      phone2:  branding.phone_number_2,
+      bank:    branding.bank_number,
     };
   }
 
@@ -1461,18 +1451,14 @@ export class EmailService {
    */
   private static async generateContractEmailHTMLForEmail(reservation: ReservationDetails, templateLang: string = 'ar'): Promise<string> {
     // Load agency settings for logo, name, contact info
-    const { data: settingsData } = await supabase
-      .from('website_settings')
-      .select('logo, name, address, phone, phone_number_2, bank_number')
-      .limit(1)
-      .single();
-
-    const agencyName    = settingsData?.name         || 'AUTO LOCATION';
-    const logoUrl       = settingsData?.logo          || '';
-    const agencyAddress = settingsData?.address       || '';
-    const agencyPhone   = settingsData?.phone         || '';
-    const agencyPhone2  = settingsData?.phone_number_2|| '';
-    const agencyBank    = settingsData?.bank_number   || '';
+    const {
+      name: agencyName,
+      logo: logoUrl,
+      address: agencyAddress,
+      phone: agencyPhone,
+      phone2: agencyPhone2,
+      bank: agencyBank,
+    } = await this.loadAgency();
 
     const isFrench = templateLang === 'fr';
     const textDir  = isFrench ? 'ltr' : 'rtl';
@@ -1833,17 +1819,13 @@ export class EmailService {
    */
   private static async generateReservationEmailHTML(reservation: ReservationDetails, templateLang: string = 'ar'): Promise<string> {
     // Load agency settings for logo, name, contact info
-    const { data: settingsData } = await supabase
-      .from('website_settings')
-      .select('logo, name, address, phone, phone_number_2, bank_number')
-      .limit(1)
-      .single();
-
-    const agencyName    = settingsData?.name          || 'AUTO LOCATION';
-    const logoUrl       = settingsData?.logo           || '';
-    const agencyAddress = settingsData?.address        || '';
-    const agencyPhone   = settingsData?.phone          || '';
-    const agencyPhone2  = settingsData?.phone_number_2 || '';
+    const {
+      name: agencyName,
+      logo: logoUrl,
+      address: agencyAddress,
+      phone: agencyPhone,
+      phone2: agencyPhone2,
+    } = await this.loadAgency();
 
     const isFrench = templateLang === 'fr';
     const textDir  = isFrench ? 'ltr' : 'rtl';

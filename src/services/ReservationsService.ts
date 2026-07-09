@@ -1119,6 +1119,7 @@ export class ReservationsService {
     description?: string;
     price: number;
     driverId?: string;
+    driverCaution?: number;
   }): Promise<{ id: string }> {
     const { data: service, error } = await supabase
       .from('reservation_services')
@@ -1129,6 +1130,7 @@ export class ReservationsService {
         description: data.description,
         price: data.price,
         driver_id: data.driverId,
+        driver_caution: data.driverCaution || 0,
       }])
       .select()
       .single();
@@ -1181,8 +1183,27 @@ export class ReservationsService {
         .from('reservation_services')
         .insert(servicesToInsert);
 
-      if (insertError) throw insertError;
+      if (insertError) throw this.describeMissingDriverColumns(insertError);
     }
+  }
+
+  /**
+   * `driver_id` / `driver_caution` sont ajoutées par la migration
+   * 20260710_reservation_services_driver_and_agency_branding.sql. Sans elle,
+   * PostgREST renvoie « Could not find the 'driver_caution' column … in the
+   * schema cache » : on le traduit en consigne actionnable plutôt que de laisser
+   * fuir le jargon, et surtout on n'écrit PAS la réservation sans sa caution.
+   */
+  private static describeMissingDriverColumns(error: any): Error {
+    const message = error?.message || '';
+    if (/driver_caution|driver_id/.test(message)) {
+      return new Error(
+        "La base de données n'est pas à jour : exécutez la migration " +
+        '20260710_reservation_services_driver_and_agency_branding.sql ' +
+        `dans le SQL Editor de Supabase. (${message})`
+      );
+    }
+    return error;
   }
 
   // ========== PAYMENTS ==========

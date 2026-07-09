@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { DocumentType, DocumentTemplate, Invoice, AgencySettings } from '../types';
+import { AgencyBranding, DocumentType, DocumentTemplate, Invoice } from '../types';
 import { DocumentTemplateService } from '../services/DocumentTemplateService';
+import { DatabaseService, DEFAULT_AGENCY_NAME } from '../services/DatabaseService';
 import { supabase } from '../supabase';
 import { Edit2, Printer, CheckCircle, AlertCircle } from 'lucide-react';
 
@@ -74,7 +75,7 @@ export const DocumentRenderer: React.FC<DocumentRendererProps> = ({
   lang = 'fr',
 }) => {
   const [template, setTemplate] = useState<DocumentTemplate | null>(null);
-  const [agencySettings, setAgencySettings] = useState<any>(null);
+  const [agencySettings, setAgencySettings] = useState<AgencyBranding | null>(null);
   const [loading, setLoading] = useState(true);
   const [dataLoaded, setDataLoaded] = useState(false);
   const [agencyId, setAgencyId] = useState<string | null>(null);
@@ -101,28 +102,15 @@ export const DocumentRenderer: React.FC<DocumentRendererProps> = ({
 
       // Load template with agency context
       const docTemplate = await DocumentTemplateService.getDocumentTemplate(documentType, currentAgencyId);
-      
-      // Load agency settings
-      const { data: agencyData, error: agencyError } = await supabase
-        .from('agency_settings')
-        .select('agency_name, logo, address, phone')
-        .limit(1)
-        .single();
 
-      if (agencyError) {
-        console.error('DocumentRenderer: Error fetching agency_settings:', agencyError);
-      }
+      // Branding : `website_settings` via getAgencyBranding(). L'ancienne lecture
+      // directe de `agency_settings` renvoyait toujours vide — rien n'écrit
+      // jamais cette table — d'où l'absence de logo et de nom sur les documents.
+      const branding = await DatabaseService.getAgencyBranding();
 
       setTemplate(docTemplate);
-      setAgencySettings(agencyData);
+      setAgencySettings(branding);
       setDataLoaded(true);
-
-      console.log('DocumentRenderer loaded data:', {
-        template: !!docTemplate,
-        agencySettings: agencyData,
-        agencyName: agencyData?.agency_name,
-        logoUrl: agencyData?.logo
-      });
     } catch (error) {
       console.error('DocumentRenderer: Error loading data:', error);
       console.error('DocumentRenderer: Detailed error:', {
@@ -195,9 +183,11 @@ export const DocumentRenderer: React.FC<DocumentRendererProps> = ({
           <div className="flex justify-between items-start mb-8 pb-6 border-b-4 border-blue-600">
             <div className="flex-1">
               <h1 className="text-3xl font-bold text-blue-900 mb-2">
-                {agencySettings?.agency_name || 'SARL OUKKAL LISAYARAT'}
+                {agencySettings?.agency_name || DEFAULT_AGENCY_NAME}
               </h1>
-              <p className="text-sm text-gray-600 mb-1 font-semibold">MHD-AUTO</p>
+              {agencySettings?.slogan && (
+                <p className="text-sm text-gray-600 mb-1 font-semibold">{agencySettings.slogan}</p>
+              )}
               {agencySettings?.address && (
                 <p className="text-sm text-gray-700 mb-1">
                   📍 {agencySettings.address}
@@ -333,7 +323,7 @@ export const DocumentRenderer: React.FC<DocumentRendererProps> = ({
             <div className="flex justify-between items-start">
               <div className="flex-1">
                 <h1 className="text-2xl font-bold text-gray-900 mb-2">
-                  {agencySettings?.agency_name || 'LuxDrive Premium Car Rental'}
+                  {agencySettings?.agency_name || DEFAULT_AGENCY_NAME}
                 </h1>
                 {agencySettings?.address && (
                   <p className="text-gray-700 mb-1">

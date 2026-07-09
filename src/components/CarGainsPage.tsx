@@ -190,7 +190,7 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
     if (!selectedCar) return;
 
     try {
-      const agencySettings = await DatabaseService.getWebsiteSettings();
+      const agencySettings = await DatabaseService.getAgencyBranding();
 
       const html = generateReportHTML(
         selectedCar,

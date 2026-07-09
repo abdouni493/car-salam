@@ -2504,14 +2504,7 @@ export const PersonalizationModal: React.FC<{
 
   const loadAgencySettings = async () => {
     try {
-      const { data: settings } = await supabase
-        .from('website_settings')
-        .select('logo, name, address, phone, phone_number_2, bank_number')
-        .limit(1)
-        .single();
-      if (settings) {
-        setAgencySettings(settings);
-      }
+      setAgencySettings(await DatabaseService.getAgencyBranding());
     } catch (error) {
       console.error('❌ Error loading agency settings:', error);
     }
