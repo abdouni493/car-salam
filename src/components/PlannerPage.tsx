@@ -10,6 +10,7 @@ import { formatAmount } from '../utils/format';
 import { ActivationModal, CompletionModal } from './ReservationDetailsView';
 import { ReservationTimelineView } from './ReservationTimelineView';
 import { SendContractModal } from './SendContractModal';
+import { ClientModal } from './ClientModal';
 import { WebsiteOrders } from './WebsiteOrders';
 import { ReservationsService } from '../services/ReservationsService';
 import { DatabaseService } from '../services/DatabaseService';
@@ -2370,6 +2371,7 @@ export const PersonalizationModal: React.FC<{
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [showSearchResults, setShowSearchResults] = useState(false);
+  const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   // Société (company client) state
   const [isSociete, setIsSociete] = useState(false);
   const [societeData, setSocieteData] = useState({
@@ -2490,6 +2492,14 @@ export const PersonalizationModal: React.FC<{
     setSearchQuery('');
     setSearchResults([]);
     setShowSearchResults(false);
+  };
+
+  // Création d'un client depuis le contrat : le nouveau client devient
+  // immédiatement le conducteur secondaire, sans passer par la recherche.
+  const handleCreateSecondConductor = async (clientData: Partial<Client>): Promise<void> => {
+    const created = await DatabaseService.createClient(clientData as Omit<Client, 'id' | 'createdAt'>);
+    selectSecondConductor(created);
+    setIsClientModalOpen(false);
   };
 
   const loadAgencySettings = async () => {
@@ -4533,44 +4543,53 @@ export const PersonalizationModal: React.FC<{
                   👥 {lang === 'fr' ? 'Ajouter un Conducteur Secondaire' : 'إضافة سائق ثانوي'}
                 </h3>
                 
-                {/* Search Input */}
-                <div className="relative mb-4">
-                  <input
-                    type="text"
-                    placeholder={lang === 'fr' 
-                      ? 'Tapez le nom, prénom ou numéro de téléphone...' 
-                      : 'اكتب الاسم أو رقم الهاتف...'}
-                    value={searchQuery}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      setSearchQuery(value);
-                      if (value.length > 0) {
-                        searchClients(value);
-                      } else {
-                        setSearchResults([]);
-                        setShowSearchResults(false);
-                      }
-                    }}
-                    onFocus={() => {
-                      if (searchQuery.length > 0) {
-                        setShowSearchResults(true);
-                      }
-                    }}
-                    className="w-full px-4 py-3 border-2 border-blue-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all text-base"
-                    autoComplete="off"
-                  />
-                  {searchQuery && (
-                    <button
-                      onClick={() => {
-                        setSearchQuery('');
-                        setSearchResults([]);
-                        setShowSearchResults(false);
+                {/* Search Input + Create Client */}
+                <div className="flex flex-col sm:flex-row gap-3 mb-4">
+                  <div className="relative flex-1">
+                    <input
+                      type="text"
+                      placeholder={lang === 'fr'
+                        ? 'Tapez le nom, prénom ou numéro de téléphone...'
+                        : 'اكتب الاسم أو رقم الهاتف...'}
+                      value={searchQuery}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setSearchQuery(value);
+                        if (value.length > 0) {
+                          searchClients(value);
+                        } else {
+                          setSearchResults([]);
+                          setShowSearchResults(false);
+                        }
                       }}
-                      className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
-                    >
-                      ✕
-                    </button>
-                  )}
+                      onFocus={() => {
+                        if (searchQuery.length > 0) {
+                          setShowSearchResults(true);
+                        }
+                      }}
+                      className="w-full px-4 py-3 border-2 border-blue-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all text-base"
+                      autoComplete="off"
+                    />
+                    {searchQuery && (
+                      <button
+                        onClick={() => {
+                          setSearchQuery('');
+                          setSearchResults([]);
+                          setShowSearchResults(false);
+                        }}
+                        className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setIsClientModalOpen(true)}
+                    className="flex items-center justify-center gap-2 px-5 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-lg transition-all whitespace-nowrap shadow-md"
+                  >
+                    <Plus size={18} />
+                    {lang === 'fr' ? 'Nouveau Client' : 'عميل جديد'}
+                  </button>
                 </div>
                 
                 {/* Selected Conductor Display */}
@@ -4673,6 +4692,14 @@ export const PersonalizationModal: React.FC<{
           </div>
         </div>
       </motion.div>
+
+      {/* Création client — même formulaire que Clients / Nouvelle Réservation */}
+      <ClientModal
+        isOpen={isClientModalOpen}
+        onClose={() => setIsClientModalOpen(false)}
+        onSave={handleCreateSecondConductor}
+        lang={lang}
+      />
     </>
   );
 };
