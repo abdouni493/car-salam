@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Language, ReservationDetails, Client, Car } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { Calendar, Users, Car as CarIcon, Plus, Search, Filter, Eye, Edit, Trash2, CheckCircle, XCircle, Clock, MapPin, Fuel, Camera, FileText, CreditCard, DollarSign, Printer, AlertTriangle, MoreVertical, Grid3x3, CalendarDays, X, Zap, Gauge, Heart } from 'lucide-react';
+import { Calendar, Users, Car as CarIcon, Plus, Search, Filter, Eye, Edit, Trash2, CheckCircle, XCircle, Clock, MapPin, Fuel, Camera, FileText, CreditCard, DollarSign, Printer, AlertTriangle, MoreVertical, Grid3x3, CalendarDays, List, X, Zap, Gauge, Heart } from 'lucide-react';
 import { ReservationDetailsView } from './ReservationDetailsView';
 import { CreateReservationForm } from './CreateReservationForm';
 import { EditReservationForm } from './EditReservationForm';
@@ -32,6 +32,18 @@ const ltrPhone = (value: any): string =>
  * Alias of {@link ltrPhone}; named separately for readability at call sites.
  */
 const ltr = ltrPhone;
+
+/**
+ * Seuls ces statuts vivent dans le planificateur.
+ * - 'website_reservation' : commande du site non encore acceptée → « Website commandes »
+ * - 'accepted' / 'cancelled' : hors du flux de travail du planificateur
+ * - 'completed' : uniquement révélé par la recherche
+ */
+const PLANNER_STATUSES = ['pending', 'confirmed', 'active'] as const;
+type PlannerStatus = typeof PLANNER_STATUSES[number];
+
+/** 'terminated' est un ancien libellé encore présent dans certaines lignes. */
+const isTerminatedStatus = (status: string) => status === 'completed' || status === 'terminated';
 
 interface PlannerPageProps {
   lang: Language;
@@ -435,24 +447,24 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
 
   const isSearching = searchQuery.trim().length > 0;
 
+  /** Le calendrier n'affiche que les réservations en cours de traitement. */
+  const plannerReservations = reservations.filter(
+    r => PLANNER_STATUSES.includes(r.status as PlannerStatus)
+  );
+
   const filteredReservations = reservations.filter(reservation => {
     if (!reservation.client || !reservation.car) return false;
 
-    // Les commandes du site public ne rejoignent le planificateur qu'une fois
-    // ACCEPTÉES par l'agence : on masque celles encore en attente d'acceptation
-    // (statut 'website_reservation') et celles annulées ('cancelled'), qui restent
-    // gérées dans l'interface « Website commandes ». Une fois acceptée, la commande
-    // passe au statut 'pending' et s'affiche ici avec le badge « 🌐 Site web ».
-    // Les réservations de l'agence ne sont pas concernées (affichées dès création).
-    if (reservation.source === 'website' &&
-        (reservation.status === 'website_reservation' || reservation.status === 'cancelled')) {
+    // Le planificateur ne montre que les réservations en cours de traitement.
+    // Sont donc exclues : 'website_reservation' (commande du site pas encore
+    // acceptée — gérée dans « Website commandes »), 'accepted' et 'cancelled'.
+    // Une commande du site acceptée passe à 'pending' et apparaît ici avec le
+    // badge « 🌐 Site web ». Les réservations terminées ne sont révélées que par
+    // la recherche (bannière violette).
+    if (!PLANNER_STATUSES.includes(reservation.status as PlannerStatus)
+        && !(isTerminatedStatus(reservation.status) && isSearching)) {
       return false;
     }
-
-    const isTerminated =
-      reservation.status === 'completed' || reservation.status === 'terminated';
-
-    if (isTerminated && !isSearching) return false;
 
     const q = searchQuery.toLowerCase();
     const matchesSearch =
@@ -493,9 +505,22 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
     }
   };
 
-      const terminatedCount = isSearching
-    ? filteredReservations.filter(r => r.status === 'completed' || r.status === 'terminated').length
+  const terminatedCount = isSearching
+    ? filteredReservations.filter(r => isTerminatedStatus(r.status)).length
     : 0;
+
+  // Compteurs des chips KPI — calculés sur les réservations effectivement visibles.
+  const kpiCounts = {
+    pending:   filteredReservations.filter(r => r.status === 'pending').length,
+    confirmed: filteredReservations.filter(r => r.status === 'confirmed').length,
+    active:    filteredReservations.filter(r => r.status === 'active').length,
+    debt:      filteredReservations.filter(r => {
+      const paid = (r.payments && r.payments.length > 0)
+        ? r.payments.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0)
+        : (Number(r.advancePayment) || 0);
+      return Math.max(0, (Number(r.totalPrice) || 0) - paid) > 0;
+    }).length,
+  };
 
 
   if (currentView === 'create') {
@@ -524,9 +549,9 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
   if (currentView === 'calendar' && displayMode === 'calendar') {
     return (
       <div className="space-y-8">
-        <ReservationTimelineView 
-          lang={lang} 
-          reservations={reservations}
+        <ReservationTimelineView
+          lang={lang}
+          reservations={plannerReservations}
           onSelectReservation={(res) => {
             setSelectedReservation(res);
             setCurrentView('details');
@@ -597,92 +622,155 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
 
   return (
     <div className="space-y-8">
-      {/* Header */}
-      <div className="flex flex-col gap-2">
-        <h2 className="text-3xl font-black text-saas-text-main uppercase tracking-tighter">
-          📅 {lang === 'fr' ? 'Planificateur' : 'المخطط'}
-        </h2>
-        <p className="text-saas-text-muted font-bold uppercase text-[10px] tracking-widest">
-          {lang === 'fr' ? 'Gestion des réservations' : 'إدارة الحجوزات'}
-        </p>
-      </div>
-
-      {/* Controls */}
-      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-        <div className="flex flex-col sm:flex-row gap-4 flex-1">
-          {/* Search */}
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
-            <input
-              type="text"
-              placeholder={lang === 'fr' ? 'Rechercher...' : 'البحث...'}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
-
-          {/* Filter */}
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="all">{lang === 'fr' ? 'Tous les statuts' : 'جميع الحالات'}</option>
-            <option value="pending">{lang === 'fr' ? 'En attente' : 'في الانتظار'}</option>
-            <option value="accepted">{lang === 'fr' ? 'Accepté' : 'مقبول'}</option>
-            <option value="confirmed">{lang === 'fr' ? 'Confirmé' : 'مؤكد'}</option>
-            <option value="active">{lang === 'fr' ? 'Actif' : 'نشط'}</option>
-            <option value="cancelled">{lang === 'fr' ? 'Annulé' : 'ملغي'}</option>
-          </select>
-
-          {/* Source Filter (site web / agence) */}
-          <select
-            value={filterSource}
-            onChange={(e) => setFilterSource(e.target.value as 'all' | 'website' | 'agency')}
-            className="px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            title={lang === 'fr' ? 'Filtrer par origine' : 'تصفية حسب المصدر'}
-          >
-            <option value="all">{lang === 'fr' ? 'Toutes origines' : 'كل المصادر'}</option>
-            <option value="website">{lang === 'fr' ? '🌐 Site web' : '🌐 الموقع'}</option>
-            <option value="agency">{lang === 'fr' ? '🏢 Agence' : '🏢 الوكالة'}</option>
-          </select>
-
-          {/* Debt Filter Toggle */}
-          <button
-            onClick={() => setFilterDebtOnly(v => !v)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-all ${
-              filterDebtOnly
-                ? 'bg-red-500 text-white'
-                : 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100'
-            }`}
-          >
-            💰 {lang === 'fr' ? (filterDebtOnly ? 'Voir tout' : 'Dettes uniquement') : (filterDebtOnly ? 'عرض الكل' : 'الديون فقط')}
-          </button>
+      {/* Rangée 1 — Titre + actions */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+        <div className="flex flex-col gap-2">
+          <h2 className="text-3xl font-black text-saas-text-main uppercase tracking-tighter">
+            📅 {lang === 'fr' ? 'Planificateur' : 'المخطط'}
+          </h2>
+          <p className="text-saas-text-muted font-bold uppercase text-[10px] tracking-widest">
+            {lang === 'fr' ? 'Gestion des réservations' : 'إدارة الحجوزات'}
+          </p>
         </div>
 
-        {/* View Toggle Button */}
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={() => {
-            setDisplayMode('calendar');
-            setCurrentView('calendar');
-          }}
-          className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-bold rounded-lg transition-all"
-          title={lang === 'fr' ? 'Voir le calendrier' : 'عرض التقويم'}
-        >
-          <CalendarDays className="w-4 h-4" />
-          {lang === 'fr' ? 'Calendrier' : 'التقويم'}
-        </motion.button>
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Bascule Liste / Calendrier */}
+          <div className="flex gap-1 p-1 bg-white border border-saas-border rounded-xl shadow-sm">
+            <button
+              onClick={() => {
+                setDisplayMode('grid');
+                setCurrentView('list');
+              }}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-all ${
+                displayMode === 'grid'
+                  ? 'bg-saas-bg text-saas-primary-via border border-saas-border'
+                  : 'text-saas-text-muted hover:text-saas-text-main'
+              }`}
+            >
+              <List className="w-4 h-4" />
+              {lang === 'fr' ? 'Liste' : 'قائمة'}
+            </button>
+            <button
+              onClick={() => {
+                setDisplayMode('calendar');
+                setCurrentView('calendar');
+              }}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-sm transition-all ${
+                displayMode === 'calendar'
+                  ? 'bg-saas-bg text-saas-primary-via border border-saas-border'
+                  : 'text-saas-text-muted hover:text-saas-text-main'
+              }`}
+            >
+              <CalendarDays className="w-4 h-4" />
+              {lang === 'fr' ? 'Calendrier' : 'التقويم'}
+            </button>
+          </div>
 
-        {/* Add New Reservation */}
+          <button onClick={() => setCurrentView('create')} className="btn-saas-primary">
+            <Plus className="w-4 h-4" />
+            {lang === 'fr' ? 'Nouvelle Réservation' : 'حجز جديد'}
+          </button>
+        </div>
+      </div>
+
+      {/* Rangée 2 — Chips KPI : raccourcis du filtre statut */}
+      <div className="flex flex-wrap gap-3">
+        {([
+          { key: 'pending',   dot: '🟡', label: lang === 'fr' ? 'En attente'  : 'في الانتظار', count: kpiCounts.pending,   cls: 'border-amber-200 bg-amber-50 text-amber-800',    active: 'border-amber-500 bg-amber-100' },
+          { key: 'confirmed', dot: '🟦', label: lang === 'fr' ? 'Confirmées'  : 'مؤكدة',       count: kpiCounts.confirmed, cls: 'border-blue-200 bg-blue-50 text-blue-800',       active: 'border-blue-500 bg-blue-100' },
+          { key: 'active',    dot: '🟢', label: lang === 'fr' ? 'Actives'     : 'نشطة',        count: kpiCounts.active,    cls: 'border-green-200 bg-green-50 text-green-800',    active: 'border-green-500 bg-green-100' },
+        ] as const).map(chip => (
+          <button
+            key={chip.key}
+            onClick={() => setFilterStatus(filterStatus === chip.key ? 'all' : chip.key)}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border font-bold text-sm transition-all ${chip.cls} ${
+              filterStatus === chip.key ? chip.active : 'hover:brightness-95'
+            }`}
+          >
+            <span>{chip.dot}</span>
+            {chip.label}
+            <span className="font-black">({chip.count})</span>
+          </button>
+        ))}
         <button
-          onClick={() => setCurrentView('create')}
-          className="btn-saas-primary"
+          onClick={() => setFilterDebtOnly(v => !v)}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border font-bold text-sm transition-all border-red-200 bg-red-50 text-red-800 ${
+            filterDebtOnly ? 'border-red-500 bg-red-100' : 'hover:brightness-95'
+          }`}
         >
-          <Plus className="w-4 h-4" />
-          {lang === 'fr' ? 'Nouvelle Réservation' : 'حجز جديد'}
+          <span>💰</span>
+          {lang === 'fr' ? 'Dettes' : 'الديون'}
+          <span className="font-black">({kpiCounts.debt})</span>
+        </button>
+      </div>
+
+      {/* Rangée 3 — Barre d'outils unique */}
+      <div className="bg-white rounded-2xl border border-saas-border shadow-sm p-3 flex flex-col sm:flex-row flex-wrap gap-3 sm:items-center">
+        {/* Recherche */}
+        <div className="flex-1 min-w-[220px]">
+          <div className="relative">
+            <Search className="absolute start-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none" />
+            <input
+              type="text"
+              placeholder={lang === 'fr' ? 'Nom, véhicule ou téléphone…' : 'الاسم أو المركبة أو الهاتف…'}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full ps-10 pe-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+          {!isSearching && (
+            <p className="text-[11px] text-slate-400 font-medium mt-1.5 ms-1">
+              {lang === 'fr'
+                ? '💡 La recherche affiche aussi les réservations terminées'
+                : '💡 يعرض البحث أيضًا الحجوزات المنتهية'}
+            </p>
+          )}
+        </div>
+
+        {/* Filtre Statut — pills segmentées */}
+        <div className="flex gap-1 p-1 bg-saas-bg border border-saas-border rounded-xl">
+          {([
+            { key: 'all',       label: lang === 'fr' ? 'Tous'      : 'الكل' },
+            { key: 'pending',   label: lang === 'fr' ? 'En attente': 'في الانتظار' },
+            { key: 'confirmed', label: lang === 'fr' ? 'Confirmée' : 'مؤكد' },
+            { key: 'active',    label: lang === 'fr' ? 'Active'    : 'نشط' },
+          ] as const).map(pill => (
+            <button
+              key={pill.key}
+              onClick={() => setFilterStatus(pill.key)}
+              className={`px-3.5 py-2 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${
+                filterStatus === pill.key
+                  ? 'bg-white text-saas-primary-via border border-saas-border shadow-sm'
+                  : 'text-saas-text-muted hover:text-saas-text-main'
+              }`}
+            >
+              {pill.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Filtre Origine */}
+        <select
+          value={filterSource}
+          onChange={(e) => setFilterSource(e.target.value as 'all' | 'website' | 'agency')}
+          className="px-3.5 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm font-bold"
+          title={lang === 'fr' ? 'Filtrer par origine' : 'تصفية حسب المصدر'}
+        >
+          <option value="all">{lang === 'fr' ? 'Toutes' : 'الكل'}</option>
+          <option value="website">{lang === 'fr' ? '🌐 Site web' : '🌐 الموقع'}</option>
+          <option value="agency">{lang === 'fr' ? '🏢 Agence' : '🏢 الوكالة'}</option>
+        </select>
+
+        {/* Dettes uniquement */}
+        <button
+          onClick={() => setFilterDebtOnly(v => !v)}
+          className={`ms-auto flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm whitespace-nowrap transition-all ${
+            filterDebtOnly
+              ? 'bg-red-500 text-white'
+              : 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100'
+          }`}
+        >
+          💰 {lang === 'fr' ? (filterDebtOnly ? 'Voir tout' : 'Dettes uniquement') : (filterDebtOnly ? 'عرض الكل' : 'الديون فقط')}
         </button>
       </div>
 
@@ -741,18 +829,6 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
         )}
       </AnimatePresence>
 
-      {/* Hint when not searching */}
-      {!isSearching && (
-        <p className="text-xs text-slate-400 font-medium -mt-4">
-          {lang === 'fr'
-            ? '💡 Recherchez un nom, véhicule ou téléphone pour afficher aussi les réservations terminées'
-            : '💡 ابحث باسم أو سيارة أو هاتف لعرض الحجوزات المنتهية أيضًا'}
-        </p>
-      )}
-
-
-
-      
       {/* Car Availability Filter */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
