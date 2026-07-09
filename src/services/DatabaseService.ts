@@ -1015,13 +1015,10 @@ export class DatabaseService {
             )
           )
         `)
-        // L'interface « Website commandes » n'affiche que les commandes en attente
-        // d'acceptation (statut dédié 'website_reservation') et celles annulées
-        // ('cancelled'). Dès qu'une commande est acceptée elle passe à 'pending'
-        // et quitte cette interface pour rejoindre le planificateur.
-        .in('status', ['website_reservation', 'cancelled'])
-        // seules les commandes provenant du site public (source='website') —
-        // pas les réservations créées par l'agence.
+        // Toutes les commandes issues du site public, quel que soit leur statut :
+        // l'interface « Website commandes » est leur historique complet. Filtrer
+        // sur 'website_reservation' + 'cancelled' faisait disparaître les commandes
+        // acceptées. Les réservations créées par l'agence sont exclues (source).
         .eq('source', 'website')
         .order('created_at', { ascending: false });
 

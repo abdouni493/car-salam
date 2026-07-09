@@ -480,6 +480,8 @@ export interface ReservationWizardStep1 {
   /** Champs hérités : id d'agence porté par une réservation déjà enregistrée. */
   departureAgency?: string;
   returnAgency?: string;
+  /** L'agence de retour diffère de celle du départ. */
+  differentReturnAgency?: boolean;
 }
 
 /** Étape « Tarification finale » (step6) du wizard. */
@@ -522,26 +524,40 @@ export interface WizardInspection extends Partial<VehicleInspection> {
 export interface ReservationWizardData {
   id?: string;
   step1: ReservationWizardStep1;
-  step2: { selectedCar: Car | null };
+  /** L'édition conserve aussi le snapshot client saisi à l'étape 2. */
+  step2: { selectedCar: Car | null } & Partial<ReservationStep2>;
   step3: { departureInspection: WizardInspection | null; selectedDriver?: Worker | null };
   step4: { selectedClient: Client | null };
   step5: { additionalServices: AdditionalService[] };
   step6: ReservationWizardPricing;
 
   // Champs à plat conservés depuis une réservation existante (mode édition/inspection).
+  clientId?: string;
+  carId?: string;
   car?: Car;
   client?: Client;
   status?: ReservationDetails['status'];
   deposit?: number;
+  totalDays?: number;
   totalPrice?: number;
+  discountAmount?: number;
+  discountType?: 'percentage' | 'fixed';
   additionalFees?: number;
   advancePayment?: number;
   remainingPayment?: number;
+  excessMileage?: number;
+  missingFuel?: number;
+  tvaApplied?: boolean;
   notes?: string;
   conditions?: string;
+  payments?: Payment[];
+  additionalServices?: AdditionalService[];
   protectionAssurance?: ProtectionAssurance | null;
   departureInspection?: VehicleInspection;
   returnInspection?: VehicleInspection;
+  createdAt?: string;
+  activatedAt?: string;
+  completedAt?: string;
 }
 
 export interface Invoice {

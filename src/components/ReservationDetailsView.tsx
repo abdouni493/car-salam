@@ -830,6 +830,23 @@ const FinancialTab: React.FC<{ lang: Language; reservation: ReservationDetails }
             <span>{formatAmount(Math.round((reservation.protectionAssurancePrice || 0) * (reservation.totalDays || 0)))} DA</span>
           </div>
         )}
+        {(reservation.deliveryFee || 0) > 0 && (
+          <div className={`flex justify-between items-center py-2 border-b border-slate-200 ${
+            reservation.deliveryFeePayer === 'owner' ? 'text-green-700' : ''
+          }`}>
+            <span>
+              🚚 {lang === 'fr' ? 'Frais de livraison' : 'رسوم التوصيل'}
+              <span className="text-slate-400 text-sm ml-1">
+                {reservation.deliveryFeePayer === 'owner'
+                  ? (lang === 'fr' ? '(à la charge du propriétaire — non facturés)' : '(على عاتق المالك — غير مفوترة)')
+                  : (lang === 'fr' ? '(à la charge du client)' : '(على عاتق العميل)')}
+              </span>
+            </span>
+            <span className={reservation.deliveryFeePayer === 'owner' ? 'line-through' : ''}>
+              {formatAmount(reservation.deliveryFee || 0)} DA
+            </span>
+          </div>
+        )}
         {reservation.excessMileage > 0 && (
           <div className="flex justify-between items-center py-2 border-b border-slate-200 text-red-600">
             <span>{lang === 'fr' ? 'Kilométrage excédentaire' : 'عداد الكيلومترات الزائد'}</span>
