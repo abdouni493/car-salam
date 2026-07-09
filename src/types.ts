@@ -386,6 +386,12 @@ export interface AdditionalService {
   description?: string;
   price: number;
   selected: boolean;
+  // Alias des colonnes `reservation_services` : un service peut provenir du
+  // catalogue (name/id) ou d'un snapshot déjà enregistré (service_name/service_id).
+  service_name?: string;
+  service_id?: string;
+  /** ID du service maître dont ce snapshot est issu. */
+  originalServiceId?: string;
 }
 
 // Un item d'un forfait d'assurance de protection (avec son statut vrai/faux).
@@ -452,6 +458,90 @@ export interface ReservationDetails {
   createdByName?: string;
   /** Origine de la réservation : 'website' (site public) ou 'agency' (admin). */
   source?: 'website' | 'agency';
+}
+
+// ─── Assistant de création / édition de réservation ──────────────────────────
+// `ReservationDetails` décrit une réservation *persistée*. Les formulaires, eux,
+// manipulent une structure par étapes qui n'a jamais correspondu à ce type — d'où
+// les centaines d'erreurs `tsc` sur `step2.selectedCar`, `step6.*`, etc.
+// `ReservationWizardData` décrit la forme réelle du state des deux wizards.
+
+export interface ReservationWizardStep1 {
+  departureDate: string;
+  departureTime: string;
+  returnDate: string;
+  returnTime: string;
+  /** Source de vérité pour résoudre l'agence (le libellé peut être édité/traduit). */
+  departureAgencyId?: string;
+  returnAgencyId?: string;
+  /** Libellés d'affichage uniquement — jamais utilisés pour retrouver l'agence. */
+  departureLocation?: string;
+  returnLocation?: string;
+  /** Champs hérités : id d'agence porté par une réservation déjà enregistrée. */
+  departureAgency?: string;
+  returnAgency?: string;
+}
+
+/** Étape « Tarification finale » (step6) du wizard. */
+export interface ReservationWizardPricing {
+  basePrice?: number;
+  totalPrice?: number;
+  isManualTotal?: boolean;
+  manualTotal?: number | string;
+  tvaApplied?: boolean;
+  tvaAmount?: number;
+  additionalFees?: number;
+  /** Frais de livraison (DA). Le payeur découle de la durée — cf. utils/deliveryFee. */
+  deliveryFee?: number;
+  advancePayment?: number;
+  remainingPayment?: number;
+  deposit?: number;
+  notes?: string;
+  paymentNotes?: string;
+  cautionEnabled?: boolean;
+  cautionCurrency?: 'DZD' | 'EUR';
+  euroAmount?: number | string;
+  euroRate?: number;
+  caution_amount_dzd?: number;
+  assuranceEnabled?: boolean;
+  assurancePercentage?: number | string;
+  assuranceAmount?: number;
+  finalTotal?: number;
+}
+
+/**
+ * Inspection telle que manipulée par le wizard : elle provient soit du
+ * formulaire (camelCase), soit d'une ligne DB déjà chargée (snake_case).
+ */
+export interface WizardInspection extends Partial<VehicleInspection> {
+  otherPhotos?: string[];
+  other_photos?: string[];
+  client_signature?: string;
+}
+
+export interface ReservationWizardData {
+  id?: string;
+  step1: ReservationWizardStep1;
+  step2: { selectedCar: Car | null };
+  step3: { departureInspection: WizardInspection | null; selectedDriver?: Worker | null };
+  step4: { selectedClient: Client | null };
+  step5: { additionalServices: AdditionalService[] };
+  step6: ReservationWizardPricing;
+
+  // Champs à plat conservés depuis une réservation existante (mode édition/inspection).
+  car?: Car;
+  client?: Client;
+  status?: ReservationDetails['status'];
+  deposit?: number;
+  totalPrice?: number;
+  additionalFees?: number;
+  advancePayment?: number;
+  remainingPayment?: number;
+  notes?: string;
+  conditions?: string;
+  protectionAssurance?: ProtectionAssurance | null;
+  departureInspection?: VehicleInspection;
+  returnInspection?: VehicleInspection;
 }
 
 export interface Invoice {
