@@ -26,6 +26,13 @@ const matchesTab = (status: string, tab: OrderTab): boolean => {
   }
 };
 
+/**
+ * Seules une commande jamais acceptée et une commande annulée peuvent être
+ * supprimées. Une fois acceptée, elle vit dans le planificateur : la supprimer
+ * ici effacerait la réservation, ses paiements et son contrat.
+ */
+const isDeletable = (status: string) => status === 'website_reservation' || status === 'cancelled';
+
 /** Pastille de statut (couleur + libellé bilingue) d'une commande du site. */
 const statusBadge = (status: string, lang: Language): { className: string; label: string } => {
   if (status === 'cancelled') {
@@ -142,6 +149,8 @@ export const WebsiteOrders: React.FC<WebsiteOrdersProps> = ({ lang, onOrdersChan
   };
 
   const handleDeleteOrder = (orderId: string) => {
+    const order = orders.find(o => o.id === orderId);
+    if (order && !isDeletable(order.status)) return;
     setShowDeleteConfirm(orderId);
   };
 
@@ -447,11 +456,15 @@ export const WebsiteOrders: React.FC<WebsiteOrdersProps> = ({ lang, onOrdersChan
                   )}
                 </button>
 
+                {/* Une commande acceptée ou terminée est une réservation à part entière :
+                    la supprimer d'ici effacerait son historique et sa comptabilité. */}
                 <button
                   onClick={() => handleDeleteOrder(order.id)}
-                  disabled={isProcessing === order.id}
-                  className="p-2.5 rounded-xl bg-saas-danger-start/5 hover:bg-saas-danger-start hover:text-white text-saas-danger-start transition-all hover:scale-105 flex flex-col items-center gap-1 border border-saas-danger-start/10 disabled:opacity-50 disabled:cursor-not-allowed"
-                  title={lang === 'fr' ? 'Supprimer' : 'حذف'}
+                  disabled={!isDeletable(order.status) || isProcessing === order.id}
+                  className="p-2.5 rounded-xl bg-saas-danger-start/5 hover:bg-saas-danger-start hover:text-white text-saas-danger-start transition-all hover:scale-105 flex flex-col items-center gap-1 border border-saas-danger-start/10 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-saas-danger-start/5 disabled:hover:text-saas-danger-start disabled:hover:scale-100"
+                  title={isDeletable(order.status)
+                    ? (lang === 'fr' ? 'Supprimer' : 'حذف')
+                    : (lang === 'fr' ? 'Impossible : la commande a été acceptée' : 'غير ممكن: تم قبول الطلب')}
                 >
                   <span className="text-lg">🗑️</span>
                 </button>
