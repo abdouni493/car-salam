@@ -57,6 +57,11 @@ export class ReservationsService {
     protectionAssuranceId?: string | null;
     protectionAssuranceName?: string | null;
     protectionAssurancePrice?: number | null;
+    /**
+     * Frais de livraison (DA). Le payeur (`delivery_fee_payer`) n'est PAS envoyé :
+     * un trigger DB le déduit de `total_days` (>= 10 jours → propriétaire).
+     */
+    deliveryFee?: number;
     createdBy?: string;
     createdByName?: string;
   }): Promise<{ id: string }> {
@@ -91,6 +96,7 @@ export class ReservationsService {
         protection_assurance_id: data.protectionAssuranceId || null,
         protection_assurance_name: data.protectionAssuranceName || null,
         protection_assurance_price: data.protectionAssurancePrice || 0,
+        delivery_fee: data.deliveryFee || 0,
         created_by: data.createdBy || null,
         created_by_name: data.createdByName || null,
         // Réservation créée manuellement depuis le planificateur (agence),
@@ -269,6 +275,8 @@ export class ReservationsService {
       remainingPayment: res.remaining_payment,
       tvaApplied: res.tva_applied || false,
       additionalFees: res.additional_fees || 0,
+      deliveryFee: Number(res.delivery_fee || 0),
+      deliveryFeePayer: res.delivery_fee_payer || undefined,
       status: res.status,
       notes: res.notes,
       conditions: res.conditions_text,
@@ -484,6 +492,8 @@ export class ReservationsService {
       excessMileage: data.excess_mileage,
       missingFuel: data.missing_fuel,
       additionalFees: data.additional_fees || 0,
+      deliveryFee: Number(data.delivery_fee || 0),
+      deliveryFeePayer: data.delivery_fee_payer || undefined,
       tvaApplied: data.tva_applied || false,
       deposit: data.deposit,
       totalDays: data.total_days,
@@ -596,6 +606,8 @@ export class ReservationsService {
     tvaApplied: boolean;
     tvaAmount: number;
     additionalFees: number;
+    /** Le payeur est recalculé par le trigger DB à chaque changement de durée. */
+    deliveryFee: number;
     totalPrice: number;
     deposit: number;
     activatedAt?: string;
@@ -632,6 +644,7 @@ export class ReservationsService {
     if (updates.tvaApplied !== undefined) updateData.tva_applied = updates.tvaApplied;
     if (updates.tvaAmount !== undefined) updateData.tva_amount = updates.tvaAmount;
     if (updates.additionalFees !== undefined) updateData.additional_fees = updates.additionalFees;
+    if (updates.deliveryFee !== undefined) updateData.delivery_fee = updates.deliveryFee;
     if (updates.totalPrice !== undefined) updateData.total_price = updates.totalPrice;
     if (updates.deposit !== undefined) updateData.deposit = updates.deposit;
     if (updates.activatedAt !== undefined) updateData.activated_at = updates.activatedAt;

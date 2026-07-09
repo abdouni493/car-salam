@@ -627,6 +627,17 @@ export default function App() {
     return <DashboardLayout />;
   };
 
+  /**
+   * Voitures transmises au site public.
+   *
+   * La protection principale est structurelle : `car_owners` n'a aucune policy
+   * pour le rôle `anon`. Ceci est la ceinture côté front — on retire tout champ
+   * propriétaire avant qu'il ne puisse atteindre un composant du site.
+   */
+  const publicCars = (cars.length > 0 ? cars : mockCars)
+    .filter(car => car.isHiddenFromSite !== true)
+    .map(({ ownerInfo, ...rest }) => ({ ...rest, ownerInfo: undefined }));
+
   return (
     <Routes>
       {/* Website route */}
@@ -635,7 +646,7 @@ export default function App() {
           lang={lang}
           onLangChange={setLang}
           // Le site public exclut les voitures masquées (isHiddenFromSite)
-          cars={(cars.length > 0 ? cars : mockCars).filter(car => car.isHiddenFromSite !== true)}
+          cars={publicCars}
           agencies={agencies.length > 0 ? agencies : mockAgencies}
           isLoadingAgencies={isLoadingAgenciesForWebsite}
           specialOffers={specialOffers}

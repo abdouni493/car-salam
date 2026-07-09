@@ -4,7 +4,8 @@ import { DashboardStats, MaintenanceAlert, Language, Car, ReservationDetails, Ve
 import { motion, AnimatePresence } from 'motion/react';
 import { AlertTriangle, TrendingUp, Users, Car as CarIcon, Calendar, DollarSign, Wrench, Shield, FileCheck, Loader2, AlertCircle } from 'lucide-react';
 import { DatabaseService } from '../services/DatabaseService';
-import { getCars } from '../services/carService';
+import { getCarsWithOwners } from '../services/carService';
+import { getMonthlyAgencyCommission } from '../services/consignmentService';
 import { getVehicleExpenses } from '../services/expenseService';
 import { getVidangeAlert, getAssuranceAlert, getControleAlert, getChaineAlert } from '../utils/vidangeAlerts';
 import { ReservationsService } from '../services/ReservationsService';
@@ -300,6 +301,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ lang, isAuthLoadin
     totalClients: 0,
     totalCars: 0,
     availableCars: 0,
+    personalCars: 0,
+    consignmentCars: 0,
     maintenanceAlerts: 0,
     overduePayments: 0,
     recentReservations: [],
@@ -308,6 +311,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ lang, isAuthLoadin
   });
   const [alerts, setAlerts] = useState<MaintenanceAlert[]>([]);
   const [cars, setCars] = useState<Car[]>([]);
+  /** Commissions encaissées sur les locations de conciergerie clôturées ce mois-ci. */
+  const [monthlyCommission, setMonthlyCommission] = useState(0);
   const [vehicleExpenses, setVehicleExpenses] = useState<VehicleExpense[]>([]);
   const [reservations, setReservations] = useState<ReservationDetails[]>([]);
   const [showOnlyReservationAlerts, setShowOnlyReservationAlerts] = useState(false);
@@ -327,13 +332,17 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ lang, isAuthLoadin
         setError(null);
 
         // Fetch real data from database in parallel
-        const [dbStats, dbAlerts, carsResult, expensesResult, reservationsResult] = await Promise.all([
+        // Page admin : getCarsWithOwners joint car_owners (réf interne, propriétaire, commission).
+        const [dbStats, dbAlerts, carsResult, expensesResult, reservationsResult, commissionThisMonth] = await Promise.all([
           DatabaseService.getDashboardStats(),
           DatabaseService.getMaintenanceAlerts(),
-          getCars(),
+          getCarsWithOwners(),
           getVehicleExpenses(),
-          ReservationsService.getReservations()
+          ReservationsService.getReservations(),
+          getMonthlyAgencyCommission()
         ]);
+
+        setMonthlyCommission(commissionThisMonth);
 
         // Set cars and expenses for vidange alerts
         if (carsResult.success && carsResult.cars) {
@@ -355,6 +364,18 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ lang, isAuthLoadin
             deposit: Math.round(Number(dbCar.deposit || dbCar.price_per_day * 2)),
             images: dbCar.image_url ? [dbCar.image_url] : ['https://picsum.photos/seed/car/400/300'],
             mileage: dbCar.mileage || 0,
+            status: dbCar.status === 'maintenance' ? 'maintenance' : 'disponible',
+            ownershipType: dbCar.ownership_type === 'consignment' ? 'consignment' : 'personal',
+            ownerInfo: dbCar.owner
+              ? {
+                  carId: dbCar.id || '',
+                  ownerName: dbCar.owner.owner_name,
+                  ownerPhone: dbCar.owner.owner_phone || undefined,
+                  internalRef: dbCar.owner.internal_ref || undefined,
+                  commissionType: dbCar.owner.commission_type === 'amount' ? 'amount' : 'percentage',
+                  commissionValue: Number(dbCar.owner.commission_value || 0),
+                }
+              : null,
           })));
         }
 
@@ -380,6 +401,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ lang, isAuthLoadin
           monthlyRevenue: dbStats.monthlyRevenue || 0,
           totalReservations: dbStats.totalReservations || 0,
           availableCars: dbStats.availableCars || 0,
+          personalCars: dbStats.personalCars || 0,
+          consignmentCars: dbStats.consignmentCars || 0,
           overduePayments: dbStats.overduePayments || 0,
           recentReservations: dbStats.recentReservations || [],
           revenueByMonth: dbStats.revenueByMonth || [],
@@ -481,6 +504,29 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ lang, isAuthLoadin
   } else if (alertFilter === 'reservations') {
     visibleAlerts = [];
   }
+
+  // ── Parc scindé : véhicules de l'agence / véhicules confiés (conciergerie) ──
+  const personalCarsList    = cars.filter(c => c.ownershipType !== 'consignment');
+  const consignmentCarsList = cars.filter(c => c.ownershipType === 'consignment');
+
+  /** Disponible = ni en maintenance, ni couvert aujourd'hui par une réservation en cours. */
+  const countAvailable = (list: Car[]) => {
+    const today = new Date().toISOString().substring(0, 10);
+    const busyCarIds = new Set(
+      reservations
+        .filter(r => ['pending', 'confirmed', 'active'].includes(r.status))
+        .filter(r => {
+          const dep = (r.step1?.departureDate || '').substring(0, 10);
+          const ret = (r.step1?.returnDate || '').substring(0, 10);
+          return dep <= today && today <= ret;
+        })
+        .map(r => r.carId || r.car?.id)
+    );
+    return list.filter(c => c.status !== 'maintenance' && !busyCarIds.has(c.id)).length;
+  };
+
+  const personalAvailableCount    = countAvailable(personalCarsList);
+  const consignmentAvailableCount = countAvailable(consignmentCarsList);
 
   const criticalAlerts = visibleAlerts.filter(a => a.severity === 'critical');
   const highAlerts = visibleAlerts.filter(a => a.severity === 'high');
@@ -1362,6 +1408,118 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ lang, isAuthLoadin
             >
               🔧
             </motion.div>
+          </div>
+        </motion.div>
+      </div>
+
+      {/* ── Parc : véhicules personnels vs véhicules en conciergerie ─────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* 🚗 Véhicules de l'agence */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.65 }}
+          className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xl flex flex-col gap-4"
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-black text-slate-800 tracking-tight">
+                {lang === 'fr' ? '🚗 Mes véhicules personnels' : '🚗 مركباتي الشخصية'}
+              </h3>
+              <p className="text-3xl font-black text-slate-900 mt-2">{stats.personalCars}</p>
+              <p className="text-xs font-bold text-slate-500 mt-1">
+                {personalAvailableCount}/{personalCarsList.length} {lang === 'fr' ? 'disponibles' : 'متاحة'}
+              </p>
+            </div>
+            <button
+              onClick={() => navigate('/vehicules', { state: { carsTab: 'personal' } })}
+              className="text-xs font-bold text-blue-600 hover:text-blue-800 underline underline-offset-4 whitespace-nowrap"
+            >
+              {lang === 'fr' ? 'Voir tout' : 'عرض الكل'}
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            {personalCarsList.slice(0, 5).map(car => (
+              <div key={car.id} className="flex items-center justify-between gap-3 px-3 py-2 rounded-xl bg-slate-50 border border-slate-100">
+                <span className="text-xs font-bold text-slate-700 truncate">{car.brand} {car.model}</span>
+                <span className={`text-[10px] font-black px-2 py-0.5 rounded-md ${
+                  car.status === 'maintenance' ? 'bg-gray-200 text-gray-700' : 'bg-green-100 text-green-700'
+                }`}>
+                  {car.status === 'maintenance'
+                    ? (lang === 'fr' ? 'Maintenance' : 'صيانة')
+                    : (lang === 'fr' ? 'Disponible' : 'متاح')}
+                </span>
+              </div>
+            ))}
+            {personalCarsList.length === 0 && (
+              <p className="text-xs text-slate-400 py-4 text-center">
+                {lang === 'fr' ? 'Aucun véhicule personnel.' : 'لا توجد مركبات شخصية.'}
+              </p>
+            )}
+          </div>
+        </motion.div>
+
+        {/* 🤝 Véhicules confiés — données propriétaire visibles par l'admin uniquement */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.7 }}
+          className="bg-white p-6 rounded-3xl border-2 border-amber-200 shadow-xl flex flex-col gap-4"
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-black text-amber-900 tracking-tight">
+                {lang === 'fr' ? '🤝 Véhicules en conciergerie' : '🤝 مركبات بالوكالة'}
+              </h3>
+              <p className="text-3xl font-black text-amber-950 mt-2">{stats.consignmentCars}</p>
+              <p className="text-xs font-bold text-amber-700 mt-1">
+                {consignmentAvailableCount}/{consignmentCarsList.length} {lang === 'fr' ? 'disponibles' : 'متاحة'}
+              </p>
+            </div>
+            <button
+              onClick={() => navigate('/vehicules', { state: { carsTab: 'consignment' } })}
+              className="text-xs font-bold text-amber-700 hover:text-amber-900 underline underline-offset-4 whitespace-nowrap"
+            >
+              {lang === 'fr' ? 'Voir tout' : 'عرض الكل'}
+            </button>
+          </div>
+
+          <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3">
+            <p className="text-[10px] font-black uppercase tracking-widest text-amber-700">
+              {lang === 'fr' ? 'Commission agence — ce mois' : 'عمولة الوكالة — هذا الشهر'}
+            </p>
+            <p className="text-2xl font-black text-amber-900 mt-1">
+              {Math.round(monthlyCommission).toLocaleString()} DA
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            {consignmentCarsList.slice(0, 5).map(car => (
+              <div key={car.id} className="flex items-center justify-between gap-3 px-3 py-2 rounded-xl bg-amber-50/60 border border-amber-100">
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-amber-900 truncate">
+                    {car.ownerInfo?.internalRef && (
+                      <span className="text-amber-700" dir="ltr">{car.ownerInfo.internalRef} · </span>
+                    )}
+                    {car.brand} {car.model}
+                  </p>
+                  {car.ownerInfo && (
+                    <p className="text-[10px] font-bold text-amber-700/80 truncate">👤 {car.ownerInfo.ownerName}</p>
+                  )}
+                </div>
+                {car.ownerInfo && (
+                  <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-amber-200/70 text-amber-900 whitespace-nowrap">
+                    {car.ownerInfo.commissionValue.toLocaleString()} {car.ownerInfo.commissionType === 'percentage' ? '%' : 'DA'}
+                  </span>
+                )}
+              </div>
+            ))}
+            {consignmentCarsList.length === 0 && (
+              <p className="text-xs text-amber-700/60 py-4 text-center">
+                {lang === 'fr' ? 'Aucun véhicule en conciergerie.' : 'لا توجد مركبات بالوكالة.'}
+              </p>
+            )}
           </div>
         </motion.div>
       </div>

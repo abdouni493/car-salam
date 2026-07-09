@@ -18,6 +18,31 @@ export interface SidebarItem {
   icon: string;
 }
 
+/** 'personal' = véhicule de l'agence · 'consignment' = véhicule confié par un tiers. */
+export type OwnershipType = 'personal' | 'consignment';
+/** 'amount' = commission fixe en DA · 'percentage' = pourcentage du total de la location. */
+export type CommissionType = 'amount' | 'percentage';
+
+/**
+ * Données PRIVÉES du propriétaire d'un véhicule en conciergerie.
+ * Vit dans la table `car_owners`, qui n'a AUCUNE policy pour le rôle `anon` :
+ * ces champs ne doivent jamais atteindre le site public.
+ */
+export interface CarOwnerInfo {
+  id?: string;
+  carId: string;
+  ownerName: string;          // 👤 privé
+  ownerPhone?: string;        // 📞 privé
+  internalRef?: string;       // 🚗 CS-001… (généré par la DB, lecture seule côté UI)
+  consignmentDate?: string;   // 📅 date de dépôt
+  commissionType: CommissionType; // 💰
+  commissionValue: number;
+  contractUrl?: string;       // 📄 contrat scanné
+  privateNotes?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface Car {
   id: string;
   brand: string;
@@ -42,6 +67,12 @@ export interface Car {
   status?: 'disponible' | 'reserve' | 'louer' | 'maintenance';
   // Masquée du site public (visible par défaut). Les vues admin l'affichent quand même.
   isHiddenFromSite?: boolean;
+  /** Défaut 'personal' côté DB. */
+  ownershipType?: OwnershipType;
+  /** Texte PUBLIC affiché sur le site. */
+  description?: string;
+  /** Chargé UNIQUEMENT par les pages admin (getCarsWithOwners). Jamais côté site public. */
+  ownerInfo?: CarOwnerInfo | null;
 }
 
 export type ExpenseType = 'vidange' | 'assurance' | 'controle' | 'chaine' | 'autre';
@@ -404,6 +435,13 @@ export interface ReservationDetails {
   excessMileage?: number;
   missingFuel?: number;
   additionalFees: number;
+  /** Frais de livraison du véhicule (DA). 0 = pas de livraison. */
+  deliveryFee?: number;
+  /**
+   * Qui paie la livraison. Fixé par un trigger DB à partir de `totalDays` :
+   * >= 10 jours → 'owner' (propriétaire), sinon 'client'. Null si `deliveryFee` = 0.
+   */
+  deliveryFeePayer?: 'client' | 'owner';
   tvaApplied: boolean;
   notes?: string;
   conditions?: string;
@@ -461,6 +499,10 @@ export interface DashboardStats {
   totalClients: number;
   totalCars: number;
   availableCars: number;
+  /** Véhicules appartenant à l'agence (ownershipType !== 'consignment'). */
+  personalCars: number;
+  /** Véhicules confiés par des propriétaires tiers (ownershipType === 'consignment'). */
+  consignmentCars: number;
   maintenanceAlerts: number;
   overduePayments: number;
   recentReservations: ReservationDetails[];

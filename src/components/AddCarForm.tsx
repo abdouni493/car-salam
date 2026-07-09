@@ -1,27 +1,42 @@
 import React, { useState } from 'react'
 import { addCar, AddCarData } from '../services/carService'
+import { CarOwnerInfo, Language, OwnershipType } from '../types'
+import { CarOwnerFields, OwnershipSelector, emptyOwnerInfo } from './CarOwnerFields'
 
 interface AddCarFormProps {
   onCarAdded?: () => void
   onClose?: () => void
+  lang?: Language
 }
 
-const AddCarForm: React.FC<AddCarFormProps> = ({ onCarAdded, onClose }) => {
-  const [formData, setFormData] = useState<AddCarData>({
-    brand: '',
-    model: '',
-    year: new Date().getFullYear(),
-    plate_number: '',
-    price_per_day: 0,
-    status: 'available'
-  })
+const blankForm = (): AddCarData => ({
+  brand: '',
+  model: '',
+  year: new Date().getFullYear(),
+  plate_number: '',
+  price_per_day: 0,
+  status: 'available',
+  ownership_type: 'personal',
+  description: '',
+})
+
+const AddCarForm: React.FC<AddCarFormProps> = ({ onCarAdded, onClose, lang = 'fr' }) => {
+  const [formData, setFormData] = useState<AddCarData>(blankForm())
+  const [ownerInfo, setOwnerInfo] = useState<CarOwnerInfo>(emptyOwnerInfo())
 
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const isConsignment = formData.ownership_type === 'consignment'
+
+  const handleOwnershipChange = (ownership_type: OwnershipType) => {
+    setError(null)
+    setFormData(prev => ({ ...prev, ownership_type }))
+  }
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
     setFormData(prev => ({
       ...prev,
@@ -44,25 +59,39 @@ const AddCarForm: React.FC<AddCarFormProps> = ({ onCarAdded, onClose }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (isConsignment && !ownerInfo.ownerName.trim()) {
+      setError(lang === 'fr'
+        ? 'Le nom du propriétaire est requis pour un véhicule en conciergerie.'
+        : 'اسم المالك مطلوب للمركبة بالوكالة.')
+      return
+    }
+
     setIsSubmitting(true)
     setError(null)
 
     try {
       const result = await addCar({
         ...formData,
-        image: imageFile || undefined
+        image: imageFile || undefined,
+        // `internal_ref` est omis : le trigger DB le génère (CS-001, CS-002…).
+        owner: isConsignment
+          ? {
+              owner_name: ownerInfo.ownerName.trim(),
+              owner_phone: ownerInfo.ownerPhone || undefined,
+              consignment_date: ownerInfo.consignmentDate || undefined,
+              commission_type: ownerInfo.commissionType,
+              commission_value: ownerInfo.commissionValue,
+              contract_url: ownerInfo.contractUrl || undefined,
+              private_notes: ownerInfo.privateNotes || undefined,
+            }
+          : undefined,
       })
 
       if (result.success) {
         // Reset form
-        setFormData({
-          brand: '',
-          model: '',
-          year: new Date().getFullYear(),
-          plate_number: '',
-          price_per_day: 0,
-          status: 'available'
-        })
+        setFormData(blankForm())
+        setOwnerInfo(emptyOwnerInfo())
         setImageFile(null)
         setImagePreview(null)
 
@@ -89,6 +118,16 @@ const AddCarForm: React.FC<AddCarFormProps> = ({ onCarAdded, onClose }) => {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
+        <OwnershipSelector
+          value={formData.ownership_type || 'personal'}
+          onChange={handleOwnershipChange}
+          lang={lang}
+        />
+
+        {isConsignment && (
+          <CarOwnerFields value={ownerInfo} onChange={setOwnerInfo} lang={lang} />
+        )}
+
         <div>
           <label htmlFor="brand" className="block text-sm font-medium text-gray-700 mb-1">
             Brand
@@ -148,9 +187,25 @@ const AddCarForm: React.FC<AddCarFormProps> = ({ onCarAdded, onClose }) => {
             name="plate_number"
             value={formData.plate_number}
             onChange={handleInputChange}
-            required
+            required={!isConsignment}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="e.g., ABC-123"
+            placeholder={isConsignment
+              ? (lang === 'fr' ? 'Optionnelle — visible uniquement par vous' : 'اختياري — مرئي لك فقط')
+              : 'e.g., ABC-123'}
+          />
+        </div>
+
+        <div>
+          <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
+            {lang === 'fr' ? 'Description (affichée sur le site public)' : 'الوصف (يُعرض على الموقع العام)'}
+          </label>
+          <textarea
+            id="description"
+            name="description"
+            rows={3}
+            value={formData.description || ''}
+            onChange={handleInputChange}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
 

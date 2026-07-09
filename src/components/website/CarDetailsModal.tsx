@@ -90,6 +90,17 @@ export const CarDetailsModal: React.FC<CarDetailsModalProps> = ({ lang, car, onC
         {/* Content */}
         <div className="p-8 space-y-8">
 
+          {/* Description publique du véhicule */}
+          {car.description && (
+            <div>
+              <h3 className="font-bold text-xs tracking-[0.2em] uppercase mb-4"
+                style={{ color: '#DC2626', fontFamily: 'var(--font-display)' }}>
+                {{ fr: 'Description', ar: 'الوصف' }[lang]}
+              </h3>
+              <p className="text-vel-muted text-sm leading-relaxed whitespace-pre-line">{car.description}</p>
+            </div>
+          )}
+
           {/* Specs Grid */}
           <div>
             <h3 className="font-bold text-xs tracking-[0.2em] uppercase mb-4"

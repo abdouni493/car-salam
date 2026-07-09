@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Car, Rental, Language, Expense, ReservationDetails } from '../types';
 import { CarCard } from './CarCard';
 import { CarModal } from './CarModal';
@@ -7,9 +8,10 @@ import { ExpenseModal } from './ExpenseModal';
 import { HistoryModal } from './HistoryModal';
 import { CarReportModal } from './CarReportModal';
 import { ConfirmModal } from './ConfirmModal';
+import { CommissionModal } from './CommissionModal';
 import { Plus, Search, Loader2, RefreshCw } from 'lucide-react';
 import { motion } from 'motion/react';
-import { getCars, addCar, updateCar, deleteCar, AddCarData } from '../services/carService';
+import { getCarsWithOwners, addCar, updateCar, deleteCar, AddCarData, CarOwnerInput } from '../services/carService';
 import { addVehicleExpense, getVehicleExpenses } from '../services/expenseService';
 import { ReservationsService } from '../services/ReservationsService';
 import { DatabaseService } from '../services/DatabaseService';
@@ -90,12 +92,23 @@ export const CarsPage: React.FC<CarsPageProps> = ({ lang, isAuthLoading = false,
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [reportExpenses, setReportExpenses] = useState<Expense[]>([]);
   const [reportReservations, setReportReservations] = useState<ReservationDetails[]>([]);
+  const [isCommissionModalOpen, setIsCommissionModalOpen] = useState(false);
+  const [commissionCar, setCommissionCar] = useState<Car | null>(null);
+  /**
+   * Section active : véhicules de l'agence ou véhicules confiés par des tiers.
+   * Le tableau de bord peut pré-sélectionner l'onglet via `location.state.carsTab`.
+   */
+  const location = useLocation();
+  const [activeTab, setActiveTab] = useState<'personal' | 'consignment'>(
+    (location.state as { carsTab?: 'personal' | 'consignment' } | null)?.carsTab || 'personal'
+  );
 
   const loadCarsData = async () => {
     try {
       setLoading(true);
       setError(null);
-      const result = await getCars();
+      // Page admin : on charge aussi les données propriétaire des véhicules en conciergerie.
+      const result = await getCarsWithOwners();
       if (result.success && result.cars) {
         const mappedCars: Car[] = result.cars.map(dbCar => ({
           id: dbCar.id || '',
@@ -119,8 +132,26 @@ export const CarsPage: React.FC<CarsPageProps> = ({ lang, isAuthLoading = false,
           status: dbCar.status === 'maintenance' ? 'maintenance' : 'disponible',
           fuelLevel: dbCar.fuel_level || 'full',
           isHiddenFromSite: dbCar.is_hidden_from_site === true,
+          ownershipType: dbCar.ownership_type === 'consignment' ? 'consignment' : 'personal',
+          description: dbCar.description || undefined,
+          ownerInfo: dbCar.owner
+            ? {
+                id: dbCar.owner.id,
+                carId: dbCar.owner.car_id || dbCar.id || '',
+                ownerName: dbCar.owner.owner_name,
+                ownerPhone: dbCar.owner.owner_phone || undefined,
+                internalRef: dbCar.owner.internal_ref || undefined,
+                consignmentDate: dbCar.owner.consignment_date || undefined,
+                commissionType: dbCar.owner.commission_type === 'amount' ? 'amount' : 'percentage',
+                commissionValue: Number(dbCar.owner.commission_value || 0),
+                contractUrl: dbCar.owner.contract_url || undefined,
+                privateNotes: dbCar.owner.private_notes || undefined,
+              }
+            : null,
         }));
         setCars(mappedCars);
+      } else if (result.error) {
+        setError(result.error);
       }
     } catch (err) {
       console.error('Error loading cars:', err);
@@ -163,19 +194,34 @@ export const CarsPage: React.FC<CarsPageProps> = ({ lang, isAuthLoading = false,
     [cars, reservations]
   );
 
-  const filteredCars = carsWithRealStatus.filter(car =>
+  const isConsignmentCar = (car: Car) => car.ownershipType === 'consignment';
+
+  // Les deux sections : véhicules de l'agence / véhicules confiés.
+  const personalCars    = useMemo(() => carsWithRealStatus.filter(c => !isConsignmentCar(c)), [carsWithRealStatus]);
+  const consignmentCars = useMemo(() => carsWithRealStatus.filter(isConsignmentCar),          [carsWithRealStatus]);
+
+  const sectionCars = activeTab === 'consignment' ? consignmentCars : personalCars;
+
+  // Recherche et compteurs de statut portent sur la section active uniquement.
+  const filteredCars = sectionCars.filter(car =>
     car.brand.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
     car.model.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-    car.registration.toLowerCase().includes(debouncedSearch.toLowerCase())
+    (car.registration || '').toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+    (car.ownerInfo?.internalRef || '').toLowerCase().includes(debouncedSearch.toLowerCase())
   );
 
   // Compteurs par statut réel
   const counters = useMemo(() => ({
-    disponible:  carsWithRealStatus.filter(c => c.status === 'disponible').length,
-    reserve:     carsWithRealStatus.filter(c => c.status === 'reserve').length,
-    louer:       carsWithRealStatus.filter(c => c.status === 'louer').length,
-    maintenance: carsWithRealStatus.filter(c => c.status === 'maintenance').length,
-  }), [carsWithRealStatus]);
+    disponible:  sectionCars.filter(c => c.status === 'disponible').length,
+    reserve:     sectionCars.filter(c => c.status === 'reserve').length,
+    louer:       sectionCars.filter(c => c.status === 'louer').length,
+    maintenance: sectionCars.filter(c => c.status === 'maintenance').length,
+  }), [sectionCars]);
+
+  const handleEditCommission = (car: Car) => {
+    setCommissionCar(car);
+    setIsCommissionModalOpen(true);
+  };
 
   const handleAddCar = () => {
     setSelectedCar(null);
@@ -187,14 +233,31 @@ export const CarsPage: React.FC<CarsPageProps> = ({ lang, isAuthLoading = false,
     setIsCarModalOpen(true);
   };
 
+  /** CarOwnerInfo (camelCase, UI) → colonnes `car_owners`. `internal_ref` reste géré par la DB. */
+  const toOwnerRow = (owner: Car['ownerInfo']): CarOwnerInput | undefined => {
+    if (!owner) return undefined;
+    return {
+      owner_name: owner.ownerName.trim(),
+      owner_phone: owner.ownerPhone || undefined,
+      consignment_date: owner.consignmentDate || undefined,
+      commission_type: owner.commissionType,
+      commission_value: owner.commissionValue,
+      contract_url: owner.contractUrl || undefined,
+      private_notes: owner.privateNotes || undefined,
+    };
+  };
+
   const handleSaveCar = async (carData: Partial<Car>) => {
     try {
+      const ownershipType = carData.ownershipType || 'personal';
+      const ownerRow = ownershipType === 'consignment' ? toOwnerRow(carData.ownerInfo) : undefined;
+
       if (selectedCar) {
         const updateData = {
           brand: carData.brand || selectedCar.brand,
           model: carData.model || selectedCar.model,
           year: carData.year || selectedCar.year,
-          plate_number: carData.registration || selectedCar.registration,
+          plate_number: carData.registration ?? selectedCar.registration,
           price_per_day: carData.priceDay || selectedCar.priceDay,
           status: carData.status || selectedCar.status || 'disponible',
           image_url: carData.images?.[0] || selectedCar.images[0],
@@ -209,10 +272,17 @@ export const CarsPage: React.FC<CarsPageProps> = ({ lang, isAuthLoading = false,
           deposit: carData.deposit || selectedCar.deposit,
           mileage: carData.mileage || selectedCar.mileage,
           fuel_level: carData.fuelLevel || selectedCar.fuelLevel || 'full',
+          ownership_type: ownershipType,
+          description: carData.description ?? selectedCar.description,
+          owner: ownerRow,
         };
         const result = await updateCar(selectedCar.id, updateData);
         if (result.success) {
-          setCars(prev => prev.map(c => c.id === selectedCar.id ? { ...c, ...carData } as Car : c));
+          // La référence interne peut venir d'être générée : on recharge depuis la DB.
+          await loadCarsData();
+        } else {
+          setError(result.error || 'Failed to save car');
+          return;
         }
       } else {
         const newCarData: AddCarData = {
@@ -233,29 +303,16 @@ export const CarsPage: React.FC<CarsPageProps> = ({ lang, isAuthLoading = false,
           price_month: carData.priceMonth || 0,
           deposit: carData.deposit || 0,
           mileage: carData.mileage || 0,
+          ownership_type: ownershipType,
+          description: carData.description || undefined,
+          owner: ownerRow,
         };
         const result = await addCar(newCarData);
         if (result.success && result.car) {
-          const newCar: Car = {
-            id: result.car.id || '',
-            brand: result.car.brand,
-            model: result.car.model,
-            registration: result.car.plate_number,
-            year: result.car.year,
-            color: result.car.color || 'Premium',
-            vin: result.car.vin || '',
-            energy: result.car.energy || 'Essence',
-            transmission: result.car.transmission || 'Automatique',
-            seats: result.car.seats || 5,
-            doors: result.car.doors || 4,
-            priceDay: Math.round(Number(result.car.price_per_day)),
-            priceWeek: Math.round(Number(result.car.price_week || result.car.price_per_day * 2)),
-            priceMonth: Math.round(Number(result.car.price_month || result.car.price_per_day * 4)),
-            deposit: Math.round(Number(result.car.deposit || result.car.price_per_day * 2)),
-            images: result.car.image_url ? [result.car.image_url] : ['https://picsum.photos/seed/car/400/300'],
-            mileage: result.car.mileage || 0,
-          };
-          setCars(prev => [...prev, newCar]);
+          await loadCarsData();
+        } else {
+          setError(result.error || 'Failed to save car');
+          return;
         }
       }
       setIsCarModalOpen(false);
@@ -426,7 +483,34 @@ export const CarsPage: React.FC<CarsPageProps> = ({ lang, isAuthLoading = false,
         </div>
       </div>
 
-      {/* ── Compteurs statuts réels ─────────────────────────────────────────── */}
+      {/* ── Sections : véhicules personnels / véhicules en conciergerie ──────── */}
+      {!loading && (
+        <div className="flex flex-col sm:flex-row gap-2 p-1.5 bg-white border border-saas-border rounded-2xl shadow-sm">
+          {([
+            { key: 'personal'    as const, label: lang === 'fr' ? '🚗 Mes véhicules personnels' : '🚗 مركباتي الشخصية', count: personalCars.length },
+            { key: 'consignment' as const, label: lang === 'fr' ? '🤝 Véhicules en conciergerie' : '🤝 مركبات بالوكالة',  count: consignmentCars.length },
+          ]).map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`flex-1 py-3.5 px-5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2.5 ${
+                activeTab === tab.key
+                  ? 'bg-saas-bg text-saas-primary-via border border-saas-border shadow-sm'
+                  : 'text-saas-text-muted hover:text-saas-text-main'
+              }`}
+            >
+              {tab.label}
+              <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black ${
+                activeTab === tab.key ? 'bg-saas-primary-via text-white' : 'bg-saas-bg text-saas-text-muted'
+              }`}>
+                {tab.count}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* ── Compteurs statuts réels (section active) ─────────────────────────── */}
       {!loading && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[
@@ -476,6 +560,7 @@ export const CarsPage: React.FC<CarsPageProps> = ({ lang, isAuthLoading = false,
                 onExpenses={handleExpenses}
                 onReports={handleReports}
                 onStatusChange={handleStatusChange}
+                onEditCommission={isConsignmentCar(car) ? handleEditCommission : undefined}
                 activeReservationInfo={getActiveReservationInfo(car.id)}
               />
             ))}
@@ -484,7 +569,9 @@ export const CarsPage: React.FC<CarsPageProps> = ({ lang, isAuthLoading = false,
           {filteredCars.length === 0 && (
             <div className="text-center py-20 bg-gray-50 rounded-3xl border-2 border-dashed border-gray-200">
               <p className="text-gray-400 font-medium">
-                {lang === 'fr' ? 'Aucun véhicule trouvé.' : 'لم يتم العثور على مركبات.'}
+                {activeTab === 'consignment'
+                  ? (lang === 'fr' ? 'Aucun véhicule en conciergerie.' : 'لا توجد مركبات بالوكالة.')
+                  : (lang === 'fr' ? 'Aucun véhicule trouvé.' : 'لم يتم العثور على مركبات.')}
               </p>
             </div>
           )}
@@ -497,6 +584,14 @@ export const CarsPage: React.FC<CarsPageProps> = ({ lang, isAuthLoading = false,
         onSave={handleSaveCar}
         onDelete={handleDeleteCar}
         car={selectedCar || undefined}
+        lang={lang}
+      />
+
+      <CommissionModal
+        isOpen={isCommissionModalOpen}
+        onClose={() => setIsCommissionModalOpen(false)}
+        onSaved={loadCarsData}
+        car={commissionCar}
         lang={lang}
       />
 
