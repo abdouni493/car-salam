@@ -1,6 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Language, ReservationDetails, ReservationWizardData, Client, Car, VehicleInspection, Payment, AdditionalService, ProtectionAssurance } from '../types';
 import { getDeliveryFeePayer } from '../utils/deliveryFee';
+import {
+  Currency, DEFAULT_EUR_RATE, carUnitPrices, formatMoney, fromDzd, toDzd,
+  roundIn, safeRate, currencySymbol, impliedEurRate,
+} from '../utils/currency';
 import { DeliveryFeeField } from './DeliveryFeeField';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, ArrowRight, Calendar, Clock, MapPin, Car as CarIcon, User, CreditCard, CheckCircle, Plus, Search, X, Camera, Fuel, AlertTriangle, Check, Upload, PenTool } from 'lucide-react';
@@ -287,23 +291,25 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
     { id: 6, title: lang === 'fr' ? 'Tarification Finale' : 'التسعير النهائي', icon: '💰' }
   ];
 
+  /**
+   * Le mode inspection n'est pas un assistant : c'est un écran unique.
+   *
+   * La réservation existe déjà (dates, véhicule, client, tarif ont été fixés à
+   * la création) ; seule la check-list de départ reste à saisir. Rejouer les
+   * étapes services/tarification n'apporterait rien et laisserait l'utilisateur
+   * réécrire des montants déjà encaissés. Les deux gardes ci-dessous verrouillent
+   * la navigation même si un bouton « Suivant » réapparaissait un jour.
+   */
   const handleNext = () => {
-    if (inspectionMode && currentStep === 3) {
-      // In inspection mode: step 3 (inspection) -> step 5 (services), skip client
-      setCurrentStep(5);
-    } else if (currentStep < totalSteps) {
+    if (inspectionMode) return;
+    if (currentStep < totalSteps) {
       setCurrentStep(currentStep + 1);
     }
   };
 
   const handlePrevious = () => {
-    if (inspectionMode && currentStep === 5) {
-      // Go back to step 3 (inspection) when in inspection mode from services
-      setCurrentStep(3);
-    } else if (inspectionMode && currentStep === 6) {
-      // Go back to step 5 (services) from pricing in inspection mode
-      setCurrentStep(5);
-    } else if (currentStep > 1) {
+    if (inspectionMode) return;
+    if (currentStep > 1) {
       setCurrentStep(currentStep - 1);
     }
   };
@@ -377,15 +383,14 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
       // Use appropriate function based on mode
       let reservationId: string;
       if (inspectionMode && initialData) {
-        // Update existing reservation in inspection mode. Le statut suit la check-list :
-        // confirmée seulement si l'inspection de départ a été réellement remplie.
+        // Écran d'inspection : la réservation est déjà tarifée. Comme les étapes
+        // services/tarification ne sont plus affichées, `formData.step6` garde ses
+        // valeurs par défaut (des zéros) — les persister remettrait à plat le prix,
+        // l'avance et la devise de règlement. On n'écrit donc que le statut, qui
+        // passe à 'confirmed' dès que la check-list de départ est remplie.
         reservationId = (initialData as any).id;
         await ReservationsService.updateReservation(reservationId, {
           status: resolvedStatus,
-          notes: formData.step6?.notes || '',
-          totalPrice: totalPrice,
-          advancePayment: advancePayment,
-          remainingPayment: remainingPayment,
         });
       } else {
         // Déclaré hors du `try` : le `catch` ci-dessous le référence pour le log.
@@ -451,7 +456,12 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
             // Caution and Assurance fields
             cautionAmountDzd: (formData.step6 as any)?.caution_amount_dzd || formData.step2?.selectedCar?.deposit || 0,
             cautionCurrency: (formData.step6 as any)?.cautionCurrency || 'DZD',
-            euroRate: (formData.step6 as any)?.euroRate || 145,
+            euroRate: (formData.step6 as any)?.euroRate || DEFAULT_EUR_RATE,
+            // Devise de règlement + montants dans cette devise (les colonnes DZD restent la référence).
+            paymentCurrency: (formData.step6 as any)?.paymentCurrency || 'DZD',
+            totalPriceEur: (formData.step6 as any)?.totalPriceEur ?? null,
+            advancePaymentEur: (formData.step6 as any)?.advancePaymentEur ?? null,
+            remainingPaymentEur: (formData.step6 as any)?.remainingPaymentEur ?? null,
             assuranceEnabled: (formData.step6 as any)?.assuranceEnabled || false,
             assurancePercentage: (formData.step6 as any)?.assuranceEnabled
               ? (formData.step6 as any)?.assurancePercentage !== ''
@@ -499,9 +509,11 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
         }
       }
 
-      // Save selected services
+      // Save selected services. En mode inspection, `step5` n'est qu'une recopie des
+      // services déjà rattachés à la réservation : les réécrire ne ferait que rejouer
+      // un delete/insert inutile.
       const selectedServices = formData.step5?.additionalServices || [];
-      if (selectedServices.length > 0) {
+      if (!inspectionMode && selectedServices.length > 0) {
         await ReservationsService.updateReservationServices(reservationId, selectedServices);
       }
 
@@ -661,42 +673,50 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
           </button>
           <div>
             <h2 className="text-3xl font-black text-white uppercase tracking-tighter">
-              ➕ {lang === 'fr' ? 'Nouvelle Réservation' : 'حجز جديد'}
+              {inspectionMode
+                ? `🔍 ${lang === 'fr' ? 'Inspection de Départ' : 'فحص المغادرة'}`
+                : `➕ ${lang === 'fr' ? 'Nouvelle Réservation' : 'حجز جديد'}`}
             </h2>
             <p className="text-white font-bold uppercase text-[10px] tracking-widest">
-              {`${lang === 'fr' ? 'Étape' : 'الخطوة'} ${currentStep} ${lang === 'fr' ? 'sur' : 'من'} 6`}
+              {inspectionMode
+                ? (lang === 'fr'
+                    ? 'Remplissez la check-list puis enregistrez pour confirmer'
+                    : 'املأ قائمة الفحص ثم احفظ للتأكيد')
+                : `${lang === 'fr' ? 'Étape' : 'الخطوة'} ${currentStep} ${lang === 'fr' ? 'sur' : 'من'} 6`}
             </p>
           </div>
         </div>
       </div>
 
-      {/* Progress Bar */}
-      <div className="bg-white rounded-2xl shadow-lg p-6 border border-slate-200">
-        <div className="flex items-center justify-between mb-4">
-          {steps.filter(step => !inspectionMode || [3, 5, 6].includes(step.id)).map((step) => (
-            <div key={step.id} className="flex flex-col items-center flex-1">
-              <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg mb-2 transition-colors ${
-                step.id < currentStep ? 'bg-green-500 text-white' :
-                step.id === currentStep ? 'bg-blue-500 text-white' :
-                'bg-slate-200 text-slate-500'
-              }`}>
-                {step.id < currentStep ? <CheckCircle className="w-6 h-6" /> : step.icon}
+      {/* Progress Bar — sans objet en mode inspection : il n'y a qu'un seul écran. */}
+      {!inspectionMode && (
+        <div className="bg-white rounded-2xl shadow-lg p-6 border border-slate-200">
+          <div className="flex items-center justify-between mb-4">
+            {steps.map((step) => (
+              <div key={step.id} className="flex flex-col items-center flex-1">
+                <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg mb-2 transition-colors ${
+                  step.id < currentStep ? 'bg-green-500 text-white' :
+                  step.id === currentStep ? 'bg-blue-500 text-white' :
+                  'bg-slate-200 text-slate-500'
+                }`}>
+                  {step.id < currentStep ? <CheckCircle className="w-6 h-6" /> : step.icon}
+                </div>
+                <p className={`text-xs font-bold text-center ${
+                  step.id <= currentStep ? 'text-slate-900' : 'text-slate-500'
+                }`}>
+                  {step.title}
+                </p>
               </div>
-              <p className={`text-xs font-bold text-center ${
-                step.id <= currentStep ? 'text-slate-900' : 'text-slate-500'
-              }`}>
-                {step.title}
-              </p>
-            </div>
-          ))}
+            ))}
+          </div>
+          <div className="w-full bg-slate-200 rounded-full h-2">
+            <div
+              className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-300"
+              style={{ width: `${(currentStep / totalSteps) * 100}%` }}
+            />
+          </div>
         </div>
-        <div className="w-full bg-slate-200 rounded-full h-2">
-          <div
-            className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-300"
-            style={{ width: `${inspectionMode ? (currentStep === 3 ? 33 : currentStep === 5 ? 66 : 100) : (currentStep / totalSteps) * 100}%` }}
-          />
-        </div>
-      </div>
+      )}
 
       {/* Step Content */}
       <AnimatePresence mode="wait">
@@ -720,7 +740,7 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
       </AnimatePresence>
 
       {/* Statut résultant — annoncé avant la soumission pour éviter la surprise. */}
-      {currentStep === totalSteps && (
+      {(inspectionMode || currentStep === totalSteps) && (
         <div
           className={`rounded-2xl p-5 border-2 ${
             resolvedStatus === 'confirmed'
@@ -739,44 +759,77 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
                   ? 'La check-list d\'inspection de départ a été remplie : la réservation sera enregistrée comme confirmée.'
                   : 'تم ملء قائمة فحص المغادرة: سيتم حفظ الحجز كمؤكد.')
               : (lang === 'fr'
-                  ? 'Aucun point de la check-list d\'inspection (étape 3) n\'est coché : la réservation restera en attente jusqu\'à l\'inspection.'
-                  : 'لم يتم تحديد أي عنصر في قائمة الفحص (الخطوة 3): سيبقى الحجز قيد الانتظار حتى إجراء الفحص.')}
+                  ? 'Cochez au moins un point de la check-list d\'inspection pour pouvoir enregistrer : la réservation restera en attente jusque-là.'
+                  : 'حدد عنصرًا واحدًا على الأقل من قائمة الفحص لتتمكن من الحفظ: سيبقى الحجز قيد الانتظار حتى ذلك الحين.')}
           </p>
         </div>
       )}
 
       {/* Navigation Buttons */}
-      <div className="flex justify-between">
-        <button
-          onClick={handlePrevious}
-          disabled={currentStep === 1}
-          className={`flex items-center gap-2 px-6 py-3 rounded-lg font-bold transition-colors ${
-            currentStep === 1
-              ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-              : 'bg-slate-600 hover:bg-slate-700 text-white'
-          }`}
-        >
-          <ArrowLeft className="w-4 h-4" />
-          {lang === 'fr' ? 'Précédent' : 'السابق'}
-        </button>
-
-        {currentStep < totalSteps ? (
+      {inspectionMode ? (
+        // Écran unique : pas de « Suivant ». Enregistrer fait passer la réservation
+        // en 'confirmed', d'où le verrou tant qu'aucun point n'est coché.
+        <div className="flex justify-between">
           <button
-            onClick={handleNext}
-            className="btn-saas-primary"
+            onClick={onBack}
+            className="flex items-center gap-2 px-6 py-3 rounded-lg font-bold bg-slate-600 hover:bg-slate-700 text-white transition-colors"
           >
-            {lang === 'fr' ? 'Suivant' : 'التالي'}
-            <ArrowRight className="w-4 h-4" />
+            <ArrowLeft className="w-4 h-4" />
+            {lang === 'fr' ? 'Annuler' : 'إلغاء'}
           </button>
-        ) : (
+
           <button
             onClick={handleSubmit}
-            className="btn-saas-primary flex items-center gap-2"
+            disabled={!isDepartureChecklistTouched}
+            title={
+              isDepartureChecklistTouched
+                ? undefined
+                : (lang === 'fr'
+                    ? 'Cochez au moins un point de la check-list pour enregistrer l\'inspection.'
+                    : 'حدد عنصرًا واحدًا على الأقل من قائمة الفحص لحفظ الفحص.')
+            }
+            className={`flex items-center gap-2 px-6 py-3 rounded-lg font-bold transition-colors ${
+              isDepartureChecklistTouched
+                ? 'bg-green-600 hover:bg-green-700 text-white'
+                : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+            }`}
           >
-            ✅ {lang === 'fr' ? 'Créer Réservation' : 'إنشاء الحجز'}
+            ✅ {lang === 'fr' ? 'Enregistrer et confirmer' : 'حفظ وتأكيد'}
           </button>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className="flex justify-between">
+          <button
+            onClick={handlePrevious}
+            disabled={currentStep === 1}
+            className={`flex items-center gap-2 px-6 py-3 rounded-lg font-bold transition-colors ${
+              currentStep === 1
+                ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                : 'bg-slate-600 hover:bg-slate-700 text-white'
+            }`}
+          >
+            <ArrowLeft className="w-4 h-4" />
+            {lang === 'fr' ? 'Précédent' : 'السابق'}
+          </button>
+
+          {currentStep < totalSteps ? (
+            <button
+              onClick={handleNext}
+              className="btn-saas-primary"
+            >
+              {lang === 'fr' ? 'Suivant' : 'التالي'}
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          ) : (
+            <button
+              onClick={handleSubmit}
+              className="btn-saas-primary flex items-center gap-2"
+            >
+              ✅ {lang === 'fr' ? 'Créer Réservation' : 'إنشاء الحجز'}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 };
@@ -1207,7 +1260,12 @@ export const Step2VehicleSelection: React.FC<{
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {filteredAvailable.map((car) => (
+                    {filteredAvailable.map((car) => {
+                      // Tarifs euros du véhicule ; à défaut, conversion au taux qu'il
+                      // implique, sinon au taux de repli. `≈` signale une conversion.
+                      const carRate = impliedEurRate(car) ?? DEFAULT_EUR_RATE;
+                      const eur = carUnitPrices(car, 'EUR', carRate);
+                      return (
                       <motion.div key={car.id}
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
@@ -1263,28 +1321,42 @@ export const Step2VehicleSelection: React.FC<{
                             </div>
                           </div>
                           <div className="space-y-2">
-                            <div className="flex justify-between items-center">
-                              <span className="text-sm text-slate-600">{lang === 'fr' ? 'Prix/Jour' : 'السعر/يوم'}</span>
-                              <span className="font-bold text-green-600">{car.priceDay.toLocaleString()} DA</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-sm text-slate-600">{lang === 'fr' ? 'Prix/Semaine' : 'السعر/أسبوع'}</span>
-                              <span className="font-bold text-blue-600">{car.priceWeek.toLocaleString()} DA</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-sm text-slate-600">{lang === 'fr' ? 'Prix/Mois' : 'السعر/شهر'}</span>
-                              <span className="font-bold text-purple-600">{car.priceMonth.toLocaleString()} DA</span>
-                            </div>
+                            {([
+                              { label: { fr: 'Prix/Jour', ar: 'السعر/يوم' }, dzd: car.priceDay, eur: eur.day, explicit: car.priceDayEur !== undefined, tone: 'text-green-600' },
+                              { label: { fr: 'Prix/Semaine', ar: 'السعر/أسبوع' }, dzd: car.priceWeek, eur: eur.week, explicit: car.priceWeekEur !== undefined, tone: 'text-blue-600' },
+                              { label: { fr: 'Prix/Mois', ar: 'السعر/شهر' }, dzd: car.priceMonth, eur: eur.month, explicit: car.priceMonthEur !== undefined, tone: 'text-purple-600' },
+                            ]).map((row) => (
+                              <div key={row.label.fr} className="flex justify-between items-baseline gap-2">
+                                <span className="text-sm text-slate-600">{row.label[lang]}</span>
+                                <span className="text-right">
+                                  <span className={`font-bold ${row.tone}`}>{formatMoney(row.dzd, 'DZD')}</span>
+                                  <span
+                                    className="block text-xs font-bold text-amber-700"
+                                    title={row.explicit
+                                      ? (lang === 'fr' ? 'Tarif en euros défini pour ce véhicule' : 'سعر باليورو محدد لهذه المركبة')
+                                      : (lang === 'fr' ? `Converti au taux de ${carRate} DA/€` : `محول بسعر ${carRate} د.ج/€`)}
+                                  >
+                                    {!row.explicit && '≈ '}{formatMoney(row.eur, 'EUR')}
+                                  </span>
+                                </span>
+                              </div>
+                            ))}
                           </div>
                           <div className="mt-4 pt-4 border-t border-slate-200">
-                            <div className="flex justify-between items-center text-sm">
+                            <div className="flex justify-between items-baseline gap-2 text-sm">
                               <span className="text-slate-600">{lang === 'fr' ? 'Caution' : 'الضمان'}</span>
-                              <span className="font-bold text-slate-900">{car.deposit.toLocaleString()} DA</span>
+                              <span className="text-right">
+                                <span className="font-bold text-slate-900">{formatMoney(car.deposit, 'DZD')}</span>
+                                <span className="block text-xs font-bold text-amber-700">
+                                  {car.depositEur === undefined && '≈ '}{formatMoney(eur.deposit, 'EUR')}
+                                </span>
+                              </span>
                             </div>
                           </div>
                         </div>
                       </motion.div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1314,7 +1386,21 @@ export const Step2VehicleSelection: React.FC<{
             <div>
               <p className="font-bold text-lg">{formData.step2.selectedCar.brand} {formData.step2.selectedCar.model}</p>
               <p className="text-slate-600">{formData.step2.selectedCar.registration} • {formData.step2.selectedCar.color}</p>
-              <p className="text-green-600 font-bold">{formData.step2.selectedCar.priceDay.toLocaleString()} DA/{lang === 'fr' ? 'jour' : 'يوم'}</p>
+              {(() => {
+                const car = formData.step2!.selectedCar!;
+                const carRate = impliedEurRate(car) ?? DEFAULT_EUR_RATE;
+                const eur = carUnitPrices(car, 'EUR', carRate);
+                const perDay = lang === 'fr' ? 'jour' : 'يوم';
+                return (
+                  <p className="font-bold">
+                    <span className="text-green-600">{formatMoney(car.priceDay, 'DZD')}/{perDay}</span>
+                    <span className="mx-2 text-slate-300">•</span>
+                    <span className="text-amber-700">
+                      {car.priceDayEur === undefined && '≈ '}{formatMoney(eur.day, 'EUR')}/{perDay}
+                    </span>
+                  </p>
+                );
+              })()}
             </div>
           </div>
         </motion.div>
@@ -2990,24 +3076,34 @@ export const Step6FinalPricing: React.FC<{
 }> = ({ lang, formData, setFormData, inspectionMode, initialData, agencies, hideClientInfo = false }) => {
   const [tvaEnabled, setTvaEnabled] = useState(false);
   const [tvaRate, setTvaRate] = useState(19); // Default TVA rate
-  const [advancePayment, setAdvancePayment] = useState(0);
   const [paymentNotes, setPaymentNotes] = useState('');
-  const [isManualTotal, setIsManualTotal] = useState(false);
+  // Total forcé par l'agence. '' ⇒ on suit le total calculé (pas de case à cocher).
   const [manualTotal, setManualTotal] = useState<number | ''>('');
   const [cautionEnabled, setCautionEnabled] = useState(true);
   const [editedDeposit, setEditedDeposit] = useState<number | ''>('');
-  
+
+  // Devise dans laquelle le client règle la location.
+  const [paymentCurrency, setPaymentCurrency] = useState<Currency>('DZD');
+  // Acompte saisi par l'agence, exprimé dans `paymentCurrency`.
+  // '' ⇒ pas encore touché : l'acompte suit le total (le client règle la totalité).
+  const [advanceInput, setAdvanceInput] = useState<number | ''>('');
+
   // Multi-currency caution states
   const [cautionCurrency, setCautionCurrency] = useState<'DZD' | 'EUR'>('DZD');
   const [euroAmount, setEuroAmount] = useState<number | ''>('');
   // Peut être vidé pendant la saisie, d'où le '' — la valeur est renormalisée à l'enregistrement.
-  const [euroRate, setEuroRate] = useState<number | ''>(145); // Default exchange rate
+  // Ce taux sert à la fois à la caution et à la conversion du total.
+  const [euroRate, setEuroRate] = useState<number | ''>(DEFAULT_EUR_RATE);
+  // Tant que l'agence n'a pas fixé son taux, on suit celui déduit du véhicule.
+  // Une saisie manuelle (ou un taux déjà enregistré) fige la valeur.
+  const [rateTouched, setRateTouched] = useState(false);
   const [deliveryFee, setDeliveryFee] = useState<number | ''>(formData.step6?.deliveryFee ?? 0);
-  
-  // Assurance Serenity states
+
+  // Assurance Serenity : l'éditeur a été retiré de l'étape paiement, mais la valeur
+  // enregistrée est conservée telle quelle pour les réservations existantes.
   const [assuranceEnabled, setAssuranceEnabled] = useState(false);
   const [assurancePercentage, setAssurancePercentage] = useState<number | ''>('');
-  
+
   const hasInitialized = React.useRef(false);
 
   // TVA rates options
@@ -3030,15 +3126,32 @@ export const Step6FinalPricing: React.FC<{
       hasInitialized.current = true;
       setTvaEnabled(formData.step6.tvaApplied || false);
       setTvaRate(19); // Default
-      setAdvancePayment(formData.step6.advancePayment || 0);
       setPaymentNotes(formData.step6.paymentNotes || '');
-      // Initialize manual total fields
-      setIsManualTotal(formData.step6.isManualTotal || false);
-      setManualTotal(formData.step6.totalPrice || '');
+
+      // Devise de règlement + total forcé (le total forcé est stocké en DZD).
+      const savedPaymentCurrency: Currency =
+        (formData.step6 as any).paymentCurrency === 'EUR' ? 'EUR' : 'DZD';
+      setPaymentCurrency(savedPaymentCurrency);
+
+      const savedRate = (formData.step6 as any).euroRate || DEFAULT_EUR_RATE;
+      if (formData.step6.isManualTotal && formData.step6.totalPrice) {
+        setManualTotal(fromDzd(Number(formData.step6.totalPrice), savedPaymentCurrency, savedRate));
+      } else {
+        setManualTotal('');
+      }
+
+      // L'acompte est stocké en DZD ; on le réaffiche dans la devise de règlement.
+      const savedAdvance = formData.step6.advancePayment;
+      setAdvanceInput(
+        savedAdvance === undefined || savedAdvance === null || savedAdvance === 0
+          ? ''
+          : fromDzd(Number(savedAdvance), savedPaymentCurrency, savedRate)
+      );
+
       // Initialize currency fields
       const savedCurrency = (formData.step6 as any).cautionCurrency || 'DZD';
       const savedEuroAmount = (formData.step6 as any).euroAmount || '';
-      const savedEuroRate = (formData.step6 as any).euroRate || 145;
+      const savedEuroRate = savedRate;
       const savedCautionDzd = (formData.step6 as any).caution_amount_dzd;
       
       console.log('💾 STEP6 INITIALIZATION:');
@@ -3052,6 +3165,8 @@ export const Step6FinalPricing: React.FC<{
       setCautionCurrency(savedCurrency);
       setEuroAmount(savedEuroAmount);
       setEuroRate(savedEuroRate);
+      // Un taux déjà négocié fait foi : il ne doit pas être écrasé par celui du véhicule.
+      if ((formData.step6 as any).euroRate) setRateTouched(true);
       
       // Initialize editedDeposit from saved caution_amount_dzd if it differs from default
       if (savedCautionDzd && savedCautionDzd !== deposit) {
@@ -3094,6 +3209,27 @@ export const Step6FinalPricing: React.FC<{
     ? Math.ceil((new Date(formData.step1.returnDate).getTime() - new Date(formData.step1.departureDate).getTime()) / (1000 * 60 * 60 * 24))
     : 0;
 
+  // ── Taux de change déduit du véhicule ───────────────────────────────────────
+  // Une agence qui annonce « 5 000 DA ou 35 € la journée » a implicitement convenu
+  // d'un taux. On l'applique tant que l'utilisateur n'a pas saisi le sien, sinon le
+  // total en euros contredirait les tarifs affichés sur la fiche du véhicule.
+  const suggestedRate = impliedEurRate(selectedCar);
+  useEffect(() => {
+    if (rateTouched || suggestedRate === null) return;
+    setEuroRate(suggestedRate);
+  }, [suggestedRate, rateTouched]);
+
+  // ── Tarifs unitaires du véhicule dans la devise de règlement ────────────────
+  // En EUR : tarifs euros du véhicule s'ils existent, sinon conversion au taux courant.
+  const rate = safeRate(euroRate);
+  const dzdUnit = carUnitPrices(selectedCar, 'DZD', rate);
+  const eurUnit = carUnitPrices(selectedCar, 'EUR', rate);
+  const unit = paymentCurrency === 'EUR' ? eurUnit : dzdUnit;
+  /** Formate un montant déjà exprimé dans la devise de règlement. */
+  const fmt = (amount: number) => formatMoney(amount, paymentCurrency);
+  /** Formate un montant stocké en DZD, converti vers la devise de règlement. */
+  const fmtDzd = (dzd: number) => fmt(fromDzd(dzd, paymentCurrency, rate));
+
   let calculatedBasePrice = 0;
   let weeklyPrice = 0;
   let monthlyPrice = 0;
@@ -3102,43 +3238,77 @@ export const Step6FinalPricing: React.FC<{
   let weeks = 0;
   let remainingDays = 0;
   if (days === 7) {
-    calculatedBasePrice = selectedCar?.priceWeek || (selectedCar?.priceDay || 0) * 7;
+    calculatedBasePrice = unit.week;
     weeklyPrice = calculatedBasePrice;
     weeks = 1;
     remainingDays = 0;
   } else if (days === 30) {
-    calculatedBasePrice = selectedCar?.priceMonth || (selectedCar?.priceDay || 0) * 30;
+    calculatedBasePrice = unit.month;
     monthlyPrice = calculatedBasePrice;
     weeks = 0;
     remainingDays = 0;
   } else {
     weeks = Math.floor(days / 7);
     remainingDays = days % 7;
-    weeklyPrice = (selectedCar?.priceWeek || (selectedCar?.priceDay || 0) * 7) * weeks;
-    remainingPrice = (selectedCar?.priceDay || 0) * remainingDays;
+    weeklyPrice = unit.week * weeks;
+    remainingPrice = unit.day * remainingDays;
     calculatedBasePrice = weeklyPrice + remainingPrice;
   }
+  calculatedBasePrice = roundIn(calculatedBasePrice, paymentCurrency);
 
-  const servicesTotal = formData.step5?.additionalServices?.reduce((sum, s) => sum + s.price, 0) || 0;
+  // Les extras sont saisis en dinars : on les convertit vers la devise de règlement.
+  const servicesTotalDzd = formData.step5?.additionalServices?.reduce((sum, s) => sum + s.price, 0) || 0;
+  const servicesTotal = fromDzd(servicesTotalDzd, paymentCurrency, rate);
   // Assurance de protection : prix/jour × nombre de jours
-  const protectionAssuranceCost = formData.protectionAssurance
+  const protectionAssuranceCostDzd = formData.protectionAssurance
     ? Math.round((formData.protectionAssurance.pricePerDay || 0) * days)
     : 0;
+  const protectionAssuranceCost = fromDzd(protectionAssuranceCostDzd, paymentCurrency, rate);
+
   const subtotal = calculatedBasePrice + servicesTotal + protectionAssuranceCost;
-  const tvaAmount = tvaEnabled ? (subtotal * tvaRate) / 100 : 0;
+  const tvaAmount = roundIn(tvaEnabled ? (subtotal * tvaRate) / 100 : 0, paymentCurrency);
   // Les frais de livraison ne sont facturés au client qu'en dessous du seuil de
   // 10 jours ; au-delà ils sont à la charge du propriétaire du véhicule.
-  const deliveryFeeAmount = deliveryFee === '' ? 0 : deliveryFee;
+  const deliveryFeeAmountDzd = deliveryFee === '' ? 0 : Number(deliveryFee);
+  const deliveryFeeAmount = fromDzd(deliveryFeeAmountDzd, paymentCurrency, rate);
   const clientDeliveryFee = getDeliveryFeePayer(days) === 'client' ? deliveryFeeAmount : 0;
-  const computedPrice = Math.max(0, Math.round(subtotal + tvaAmount + clientDeliveryFee));
+
+  /** Total calculé, dans la devise de règlement. */
+  const computedPrice = Math.max(0, roundIn(subtotal + tvaAmount + clientDeliveryFee, paymentCurrency));
+  /** `''` ⇒ l'agence n'a pas forcé le total : il suit le calcul. */
+  const isManualTotal = manualTotal !== '';
+  /** Total retenu, dans la devise de règlement. */
+  const totalPrice = isManualTotal ? Math.max(0, Number(manualTotal)) : computedPrice;
+  /** Le DZD reste la devise de référence en base. */
+  const totalPriceDzd = toDzd(totalPrice, paymentCurrency, rate);
+
   const deposit = editedDeposit !== '' ? Number(editedDeposit) : (selectedCar?.deposit || 0);
-  const totalPrice = isManualTotal && manualTotal !== '' ? Math.max(0, Math.round(Number(manualTotal))) : computedPrice;
-  
-  // Calculate assurance amount
-  const assuranceAmount = assuranceEnabled && assurancePercentage !== '' 
-    ? Math.round(totalPrice * (Number(assurancePercentage) / 100))
+
+  // ── Acompte / reste à payer, dans la devise de règlement ────────────────────
+  // Par défaut le client règle la totalité : l'acompte suit le total tant que
+  // l'agence n'a pas saisi de montant.
+  const advancePayment = advanceInput === '' ? totalPrice : Math.max(0, Number(advanceInput));
+  const remainingPayment = Math.max(0, roundIn(totalPrice - advancePayment, paymentCurrency));
+  const advancePaymentDzd = toDzd(advancePayment, paymentCurrency, rate);
+  const remainingPaymentDzd = Math.max(0, totalPriceDzd - advancePaymentDzd);
+
+  // Assurance Serenity : conservée pour les réservations déjà enregistrées.
+  const assuranceAmount = assuranceEnabled && assurancePercentage !== ''
+    ? Math.round(totalPriceDzd * (Number(assurancePercentage) / 100))
     : 0;
-  const finalTotal = totalPrice + assuranceAmount;
+  const finalTotal = totalPriceDzd + assuranceAmount;
+
+  /** Bascule de devise : les montants déjà saisis sont convertis, pas réinterprétés. */
+  const switchPaymentCurrency = (next: Currency) => {
+    if (next === paymentCurrency) return;
+    const convert = (v: number) => roundIn(
+      next === 'EUR' ? Number(v) / rate : Number(v) * rate,
+      next,
+    );
+    if (manualTotal !== '') setManualTotal(convert(Number(manualTotal)));
+    if (advanceInput !== '') setAdvanceInput(convert(Number(advanceInput)));
+    setPaymentCurrency(next);
+  };
 
   // Console logging for debugging
   React.useEffect(() => {
@@ -3155,17 +3325,23 @@ export const Step6FinalPricing: React.FC<{
       },
       step6: {
         ...prev.step6,
-        totalPrice: totalPrice,
+        // Le DZD reste la devise de référence stockée en base.
+        totalPrice: totalPriceDzd,
         isManualTotal: isManualTotal,
         manualTotal: manualTotal,
         tvaApplied: tvaEnabled,
-        tvaAmount: tvaAmount,
-        deliveryFee: deliveryFeeAmount,
+        tvaAmount: toDzd(tvaAmount, paymentCurrency, rate),
+        deliveryFee: deliveryFeeAmountDzd,
         additionalFees: prev.step6?.additionalFees ?? prev.additionalFees,
-        advancePayment: prev.step6?.advancePayment ?? prev.advancePayment,
-        remainingPayment: prev.step6?.remainingPayment ?? prev.remainingPayment,
-        paymentNotes: prev.step6?.paymentNotes ?? prev.notes,
+        advancePayment: advancePaymentDzd,
+        remainingPayment: remainingPaymentDzd,
+        paymentNotes: paymentNotes,
         cautionEnabled: cautionEnabled,
+        // Devise de règlement de la location + montants dans cette devise
+        paymentCurrency: paymentCurrency,
+        totalPriceEur: paymentCurrency === 'EUR' ? totalPrice : undefined,
+        advancePaymentEur: paymentCurrency === 'EUR' ? advancePayment : undefined,
+        remainingPaymentEur: paymentCurrency === 'EUR' ? remainingPayment : undefined,
         // Multi-currency caution fields
         cautionCurrency: cautionCurrency,
         euroAmount: euroAmount,
@@ -3177,20 +3353,119 @@ export const Step6FinalPricing: React.FC<{
         assuranceAmount: assuranceAmount,
         finalTotal: finalTotal,
         // Caution amount in DZD for database
-        caution_amount_dzd: cautionCurrency === 'EUR' && euroAmount && euroRate 
+        caution_amount_dzd: cautionCurrency === 'EUR' && euroAmount && euroRate
           ? Math.round(Number(euroAmount) * Number(euroRate))
           : (editedDeposit !== '' ? Number(editedDeposit) : deposit),
       },
       deposit: deposit,
-      totalPrice: totalPrice
+      totalPrice: totalPriceDzd
     }));
-  }, [totalPrice, isManualTotal, manualTotal, tvaEnabled, tvaAmount, deliveryFeeAmount, cautionEnabled, cautionCurrency, euroAmount, euroRate, assuranceEnabled, assurancePercentage, assuranceAmount, finalTotal, deposit, editedDeposit]);
+  }, [totalPriceDzd, isManualTotal, manualTotal, tvaEnabled, tvaAmount, deliveryFeeAmountDzd, cautionEnabled, cautionCurrency, euroAmount, euroRate, assuranceEnabled, assurancePercentage, assuranceAmount, finalTotal, deposit, editedDeposit, paymentCurrency, advancePaymentDzd, remainingPaymentDzd, paymentNotes]);
 
   return (
     <div className="space-y-8">
-      <h3 className="text-2xl font-black text-slate-900">
-        💰 {lang === 'fr' ? 'Récapitulatif de la Réservation' : 'ملخص الحجز'}
-      </h3>
+      {/* ── En-tête : titre + devise de règlement + total ─────────────────── */}
+      <div className="rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 text-white p-6 shadow-xl">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+          <div>
+            <h3 className="text-2xl font-black">
+              💰 {lang === 'fr' ? 'Récapitulatif de la Réservation' : 'ملخص الحجز'}
+            </h3>
+            <p className="text-slate-300 text-sm mt-1">
+              {lang === 'fr'
+                ? `${days} jour(s) · ${selectedCar ? `${selectedCar.brand} ${selectedCar.model}` : 'Aucun véhicule'}`
+                : `${days} يوم · ${selectedCar ? `${selectedCar.brand} ${selectedCar.model}` : 'لا توجد مركبة'}`}
+            </p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
+            {/* Sélecteur de devise */}
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2">
+                {lang === 'fr' ? 'Le client paie en' : 'يدفع العميل بـ'}
+              </p>
+              <div className="inline-flex rounded-xl bg-slate-700/60 p-1">
+                {(['DZD', 'EUR'] as Currency[]).map(cur => (
+                  <button
+                    key={cur}
+                    type="button"
+                    onClick={() => switchPaymentCurrency(cur)}
+                    className={`px-4 py-2 rounded-lg text-sm font-black transition-all ${
+                      paymentCurrency === cur
+                        ? 'bg-white text-slate-900 shadow'
+                        : 'text-slate-300 hover:text-white'
+                    }`}
+                  >
+                    {cur === 'DZD' ? 'DZD (DA)' : 'EUR (€)'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Total courant */}
+            <div className="sm:border-s sm:border-slate-700 sm:ps-4">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-1">
+                {lang === 'fr' ? 'Total location' : 'إجمالي التأجير'}
+              </p>
+              <p className="text-3xl font-black text-emerald-400 leading-none">{fmt(totalPrice)}</p>
+              {paymentCurrency === 'EUR' && (
+                <p className="text-[11px] text-slate-400 mt-1">
+                  ≈ {formatMoney(totalPriceDzd, 'DZD')} · {rate} DA/€
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Taux de change, visible seulement quand il sert */}
+        {paymentCurrency === 'EUR' && (
+          <div className="mt-5 pt-4 border-t border-slate-700 flex flex-wrap items-center gap-3">
+            <label className="text-sm font-bold text-slate-300">
+              {lang === 'fr' ? 'Taux de change' : 'سعر الصرف'}
+            </label>
+            <input
+              type="number"
+              inputMode="decimal"
+              min="1"
+              step="0.01"
+              value={euroRate === '' ? '' : euroRate}
+              onChange={(e) => {
+                setRateTouched(true);
+                const v = e.target.value.trim();
+                if (v === '') { setEuroRate(''); return; }
+                const n = parseFloat(v);
+                if (!isNaN(n) && n > 0) setEuroRate(n);
+              }}
+              className="w-28 p-2 rounded-lg bg-slate-700 border border-slate-600 text-white text-right font-bold focus:ring-2 focus:ring-emerald-400 focus:border-transparent"
+              placeholder={String(DEFAULT_EUR_RATE)}
+            />
+            <span className="text-sm font-bold text-slate-300">DA / €</span>
+
+            {/* Taux déduit des tarifs du véhicule : appliqué d'office, réarmable après édition. */}
+            {suggestedRate !== null && (
+              rateTouched && euroRate !== suggestedRate ? (
+                <button
+                  type="button"
+                  onClick={() => { setRateTouched(false); setEuroRate(suggestedRate); }}
+                  className="px-3 py-2 rounded-lg bg-slate-700 border border-slate-600 text-emerald-300 text-xs font-bold hover:bg-slate-600 transition-colors"
+                >
+                  ↺ {lang === 'fr' ? `Taux du véhicule (${suggestedRate})` : `سعر المركبة (${suggestedRate})`}
+                </button>
+              ) : (
+                <span className="px-2 py-1 rounded-md bg-emerald-500/15 text-emerald-300 text-[11px] font-bold">
+                  {lang === 'fr' ? 'Déduit des tarifs du véhicule' : 'مستنتج من أسعار المركبة'}
+                </span>
+              )
+            )}
+
+            <span className="text-xs text-slate-400 ms-auto">
+              {lang === 'fr'
+                ? "Sert aussi à convertir services, livraison et TVA saisis en dinars."
+                : 'يُستخدم أيضًا لتحويل الخدمات والتوصيل والضريبة المُدخلة بالدينار.'}
+            </span>
+          </div>
+        )}
+      </div>
 
       {/* CLIENT INFORMATION SECTION */}
       {!hideClientInfo && formData.step4?.selectedClient && (
@@ -3233,62 +3508,106 @@ export const Step6FinalPricing: React.FC<{
         </div>
       )}
 
-      {/* CAR INFORMATION SECTION */}
-      {formData.step2?.selectedCar && (
+      {/* CAR INFORMATION SECTION — `selectedCar` couvre aussi le mode inspection,
+          où le véhicule vient de la réservation et non de l'étape 2. */}
+      {selectedCar ? (
         <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-6 border-2 border-blue-200">
           <h4 className="text-lg font-black text-blue-900 mb-4">🚗 {lang === 'fr' ? 'Informations du Véhicule' : 'معلومات المركبة'}</h4>
           <div className="flex flex-col md:flex-row items-start gap-6">
             {/* Car Image */}
             <div className="flex-shrink-0">
               <img
-                src={formData.step2.selectedCar.images[0]}
-                alt={`${formData.step2.selectedCar.brand} ${formData.step2.selectedCar.model}`}
+                src={selectedCar.images?.[0] || 'https://picsum.photos/seed/car/400/300'}
+                alt={`${selectedCar.brand} ${selectedCar.model}`}
                 className="w-40 h-32 rounded-lg object-cover border-3 border-blue-300 shadow-lg"
+                referrerPolicy="no-referrer"
               />
             </div>
             {/* Car Details */}
             <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <p className="text-sm font-bold text-blue-700 mb-1">{lang === 'fr' ? 'Modèle' : 'الموديل'}</p>
-                <p className="text-lg font-bold text-blue-900">{formData.step2.selectedCar.brand} {formData.step2.selectedCar.model}</p>
+                <p className="text-lg font-bold text-blue-900">{selectedCar.brand} {selectedCar.model}</p>
               </div>
               <div>
                 <p className="text-sm font-bold text-blue-700 mb-1">{lang === 'fr' ? 'Immatriculation' : 'رقم التسجيل'}</p>
-                <p className="text-lg font-bold text-blue-900">{formData.step2.selectedCar.registration}</p>
+                <p className="text-lg font-bold text-blue-900">{selectedCar.registration}</p>
               </div>
               <div>
                 <p className="text-sm font-bold text-blue-700 mb-1">{lang === 'fr' ? 'Couleur' : 'اللون'}</p>
-                <p className="text-lg text-blue-900">{formData.step2.selectedCar.color}</p>
+                <p className="text-lg text-blue-900">{selectedCar.color}</p>
               </div>
               <div>
                 <p className="text-sm font-bold text-blue-700 mb-1">{lang === 'fr' ? 'Carburant' : 'الوقود'}</p>
-                <p className="text-lg text-blue-900">⛽ {formData.step2.selectedCar.energy || '-'}</p>
+                <p className="text-lg text-blue-900">⛽ {selectedCar.energy || '-'}</p>
               </div>
               <div>
                 <p className="text-sm font-bold text-blue-700 mb-1">{lang === 'fr' ? 'Caution' : 'الضمان'}</p>
-                <p className="text-lg font-bold text-blue-900">{formData.step2.selectedCar.deposit.toLocaleString()} DA</p>
+                <p className="text-lg font-bold text-blue-900">
+                  {formatMoney(dzdUnit.deposit, 'DZD')}
+                  <span className="ms-2 text-sm font-bold text-amber-700">
+                    {selectedCar.depositEur === undefined && '≈ '}
+                    {formatMoney(eurUnit.deposit, 'EUR')}
+                  </span>
+                </p>
               </div>
               <div>
                 <p className="text-sm font-bold text-blue-700 mb-1">{lang === 'fr' ? 'Transmission' : 'ناقل الحركة'}</p>
-                <p className="text-lg text-blue-900">{formData.step2.selectedCar.transmission || '-'}</p>
+                <p className="text-lg text-blue-900">{selectedCar.transmission || '-'}</p>
               </div>
             </div>
           </div>
-          {/* Pricing Grid */}
-          <div className="grid grid-cols-3 gap-4 mt-6 pt-6 border-t border-blue-200">
-            <div className="text-center">
-              <p className="text-sm text-blue-600 font-bold">{lang === 'fr' ? 'Prix/Jour' : 'السعر/يوم'}</p>
-              <p className="text-2xl font-black text-blue-900">{formData.step2.selectedCar.priceDay.toLocaleString()} DA</p>
+
+          {/* Tarifs de la fiche véhicule — DZD et EUR. La devise de règlement est mise en avant. */}
+          <div className="mt-6 pt-6 border-t border-blue-200">
+            <p className="text-xs font-bold uppercase tracking-widest text-blue-500 mb-3">
+              {lang === 'fr' ? 'Tarifs de la fiche véhicule' : 'أسعار بطاقة المركبة'}
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {([
+                { label: { fr: 'Prix/Jour', ar: 'السعر/يوم' }, dzd: dzdUnit.day, eur: eurUnit.day, explicit: selectedCar.priceDayEur !== undefined },
+                { label: { fr: 'Prix/Semaine', ar: 'السعر/أسبوع' }, dzd: dzdUnit.week, eur: eurUnit.week, explicit: selectedCar.priceWeekEur !== undefined },
+                { label: { fr: 'Prix/Mois', ar: 'السعر/شهر' }, dzd: dzdUnit.month, eur: eurUnit.month, explicit: selectedCar.priceMonthEur !== undefined },
+              ]).map((row, i) => (
+                <div
+                  key={i}
+                  className="text-center rounded-xl bg-white/70 border border-blue-200 p-3"
+                >
+                  <p className="text-sm text-blue-600 font-bold">{row.label[lang]}</p>
+                  <p className={`text-2xl font-black ${paymentCurrency === 'DZD' ? 'text-blue-900' : 'text-blue-400'}`}>
+                    {formatMoney(row.dzd, 'DZD')}
+                  </p>
+                  <p
+                    className={`text-base font-black mt-0.5 ${paymentCurrency === 'EUR' ? 'text-amber-700' : 'text-amber-500/70'}`}
+                    title={row.explicit
+                      ? (lang === 'fr' ? 'Tarif en euros défini pour ce véhicule' : 'سعر باليورو محدد لهذه المركبة')
+                      : (lang === 'fr' ? `Converti au taux de ${rate} DA/€` : `محول بسعر ${rate} د.ج/€`)}
+                  >
+                    {!row.explicit && '≈ '}{formatMoney(row.eur, 'EUR')}
+                  </p>
+                </div>
+              ))}
             </div>
-            <div className="text-center">
-              <p className="text-sm text-blue-600 font-bold">{lang === 'fr' ? 'Prix/Semaine' : 'السعر/أسبوع'}</p>
-              <p className="text-2xl font-black text-blue-900">{(formData.step2.selectedCar.priceWeek || formData.step2.selectedCar.priceDay * 7).toLocaleString()} DA</p>
-            </div>
-            <div className="text-center">
-              <p className="text-sm text-blue-600 font-bold">{lang === 'fr' ? 'Prix/Mois' : 'السعر/شهر'}</p>
-              <p className="text-2xl font-black text-blue-900">{(formData.step2.selectedCar.priceMonth || formData.step2.selectedCar.priceDay * 30).toLocaleString()} DA</p>
-            </div>
+            <p className="text-xs text-blue-600 mt-3">
+              {lang === 'fr'
+                ? '≈ signale un tarif converti au taux courant ; les autres sont ceux saisis sur la fiche du véhicule.'
+                : '≈ يشير إلى سعر محوَّل بالسعر الحالي؛ الباقي مأخوذ من بطاقة المركبة.'}
+            </p>
           </div>
+        </div>
+      ) : (
+        // Sans véhicule, tous les montants de cette étape valent zéro : on le dit
+        // plutôt que d'afficher un récapitulatif vide et trompeur.
+        <div className="rounded-2xl border-2 border-dashed border-amber-300 bg-amber-50 p-6 text-center">
+          <span className="text-4xl block mb-2">🚗</span>
+          <p className="font-black text-amber-900">
+            {lang === 'fr' ? 'Aucun véhicule sélectionné' : 'لم يتم اختيار مركبة'}
+          </p>
+          <p className="text-sm font-bold text-amber-700 mt-1">
+            {lang === 'fr'
+              ? "Revenez à l'étape 2 : sans véhicule, les tarifs et le total restent à zéro."
+              : 'ارجع إلى الخطوة 2: بدون مركبة، تبقى الأسعار والمجموع صفرًا.'}
+          </p>
         </div>
       )}
 
@@ -3415,31 +3734,31 @@ export const Step6FinalPricing: React.FC<{
                 <div className="space-y-2">
                   {days === 7 && (
                     <div className="flex justify-between items-center">
-                      <span>1 {lang === 'fr' ? 'semaine' : 'أسبوع'} × {(selectedCar?.priceWeek || (selectedCar?.priceDay || 0) * 7).toLocaleString()} DA</span>
-                      <span className="font-bold">{weeklyPrice.toLocaleString()} DA</span>
+                      <span>1 {lang === 'fr' ? 'semaine' : 'أسبوع'} × {fmt(unit.week)}</span>
+                      <span className="font-bold">{fmt(weeklyPrice)}</span>
                     </div>
                   )}
                   {days === 30 && (
                     <div className="flex justify-between items-center">
-                      <span>1 {lang === 'fr' ? 'mois' : 'شهر'} × {(selectedCar?.priceMonth || (selectedCar?.priceDay || 0) * 30).toLocaleString()} DA</span>
-                      <span className="font-bold">{monthlyPrice.toLocaleString()} DA</span>
+                      <span>1 {lang === 'fr' ? 'mois' : 'شهر'} × {fmt(unit.month)}</span>
+                      <span className="font-bold">{fmt(monthlyPrice)}</span>
                     </div>
                   )}
                   {days !== 7 && days !== 30 && weeklyPrice > 0 && (
                     <div className="flex justify-between items-center">
-                      <span>{Math.floor(days / 7)} {lang === 'fr' ? 'semaine(s)' : 'أسبوع'} × {(selectedCar?.priceWeek || (selectedCar?.priceDay || 0) * 7).toLocaleString()} DA</span>
-                      <span className="font-bold">{weeklyPrice.toLocaleString()} DA</span>
+                      <span>{Math.floor(days / 7)} {lang === 'fr' ? 'semaine(s)' : 'أسبوع'} × {fmt(unit.week)}</span>
+                      <span className="font-bold">{fmt(weeklyPrice)}</span>
                     </div>
                   )}
                   {days !== 7 && days !== 30 && remainingPrice > 0 && (
                     <div className="flex justify-between items-center">
-                      <span>{days % 7} {lang === 'fr' ? 'jour(s)' : 'يوم'} × {(selectedCar?.priceDay || 0).toLocaleString()} DA</span>
-                      <span className="font-bold">{remainingPrice.toLocaleString()} DA</span>
+                      <span>{days % 7} {lang === 'fr' ? 'jour(s)' : 'يوم'} × {fmt(unit.day)}</span>
+                      <span className="font-bold">{fmt(remainingPrice)}</span>
                     </div>
                   )}
                   <div className="flex justify-between items-center border-t border-slate-300 pt-2 text-lg font-bold">
                     <span>{lang === 'fr' ? 'Sous-total Véhicule' : 'المجموع الفرعي للمركبة'}</span>
-                    <span>{calculatedBasePrice.toLocaleString()} DA</span>
+                    <span>{fmt(calculatedBasePrice)}</span>
                   </div>
                 </div>
               </div>
@@ -3452,12 +3771,12 @@ export const Step6FinalPricing: React.FC<{
                 {formData.step5.additionalServices.map((service) => (
                   <div key={service.id} className="flex justify-between items-center">
                     <span>{service.name}</span>
-                    <span>{service.price.toLocaleString()} DA</span>
+                    <span>{fmtDzd(service.price)}</span>
                   </div>
                 ))}
                 <div className="flex justify-between items-center border-t border-blue-300 pt-2 font-bold">
                   <span>{lang === 'fr' ? 'Total Services' : 'إجمالي الخدمات'}</span>
-                  <span>{servicesTotal.toLocaleString()} DA</span>
+                  <span>{fmt(servicesTotal)}</span>
                 </div>
               </div>
             </div>
@@ -3472,7 +3791,7 @@ export const Step6FinalPricing: React.FC<{
               <div className="flex justify-between items-center mb-2">
                 <span className="font-bold">{formData.protectionAssurance.name}</span>
                 <span className="text-sm text-red-700">
-                  {(formData.protectionAssurance.pricePerDay || 0).toLocaleString()} DA/{lang === 'fr' ? 'j' : 'ي'} × {days}
+                  {fmtDzd(formData.protectionAssurance.pricePerDay || 0)}/{lang === 'fr' ? 'j' : 'ي'} × {days}
                 </span>
               </div>
               {formData.protectionAssurance.items && formData.protectionAssurance.items.length > 0 && (
@@ -3491,7 +3810,7 @@ export const Step6FinalPricing: React.FC<{
               )}
               <div className="flex justify-between items-center border-t border-red-300 pt-2 font-bold">
                 <span>{lang === 'fr' ? 'Total Assurance' : 'إجمالي التأمين'}</span>
-                <span>{protectionAssuranceCost.toLocaleString()} DA</span>
+                <span>{fmt(protectionAssuranceCost)}</span>
               </div>
             </div>
           )}
@@ -3532,59 +3851,78 @@ export const Step6FinalPricing: React.FC<{
                 </div>
                 <div className="flex justify-between items-center text-lg font-bold text-yellow-900">
                   <span>TVA ({tvaRate}%)</span>
-                  <span>{tvaAmount.toLocaleString()} DA</span>
+                  <span>{fmt(tvaAmount)}</span>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Final Total */}
-          <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-4 border-2 border-green-200">
-            <div className="flex justify-between items-center text-xl font-black text-green-900">
-              <span>{lang === 'fr' ? 'TOTAL LOCATION' : 'إجمالي التأجير'}</span>
-              {!isManualTotal ? (
-                <span>{totalPrice.toLocaleString()} DA</span>
-              ) : (
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  value={manualTotal === '' ? '' : manualTotal}
-                  onChange={(e) => {
-                    const value = e.target.value.trim();
-                    if (value === '') {
-                      setManualTotal('');
-                    } else {
-                      const numValue = parseInt(value, 10);
+          {/* Final Total — toujours éditable, pas de case à cocher */}
+          <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-5 border-2 border-green-200">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <p className="text-xl font-black text-green-900">
+                  {lang === 'fr' ? 'TOTAL LOCATION' : 'إجمالي التأجير'}
+                </p>
+                <p className="text-xs text-green-700 mt-1">
+                  {isManualTotal
+                    ? (lang === 'fr'
+                        ? `Montant forcé — calculé : ${fmt(computedPrice)}`
+                        : `مبلغ مُحدَّد يدويًا — المحسوب: ${fmt(computedPrice)}`)
+                    : (lang === 'fr'
+                        ? 'Calculé automatiquement — modifiable directement'
+                        : 'محسوب تلقائيًا — قابل للتعديل مباشرة')}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step={paymentCurrency === 'EUR' ? '0.01' : '1'}
+                    value={manualTotal === '' ? computedPrice : manualTotal}
+                    onChange={(e) => {
+                      const value = e.target.value.trim();
+                      if (value === '') { setManualTotal(''); return; }
+                      const numValue = parseFloat(value);
                       if (!isNaN(numValue) && numValue >= 0) {
-                        setManualTotal(numValue);
+                        setManualTotal(roundIn(numValue, paymentCurrency));
                       }
-                    }
-                  }}
-                  className="w-32 p-1 border border-green-300 rounded text-right font-bold"
-                />
+                    }}
+                    className={`w-44 ps-3 pe-10 py-3 rounded-xl text-right text-2xl font-black focus:ring-2 focus:ring-green-500 focus:border-transparent ${
+                      isManualTotal
+                        ? 'border-2 border-amber-400 bg-amber-50 text-amber-900'
+                        : 'border-2 border-green-300 bg-white text-green-900'
+                    }`}
+                  />
+                  <span className="absolute end-3 top-1/2 -translate-y-1/2 text-lg font-black text-green-700 pointer-events-none">
+                    {currencySymbol(paymentCurrency)}
+                  </span>
+                </div>
+
+                {isManualTotal && (
+                  <button
+                    type="button"
+                    onClick={() => setManualTotal('')}
+                    title={lang === 'fr' ? 'Revenir au total calculé' : 'العودة إلى المجموع المحسوب'}
+                    className="px-3 py-3 rounded-xl bg-white border-2 border-green-300 text-green-800 font-black hover:bg-green-50 transition-colors"
+                  >
+                    ↺
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-3 pt-3 border-t border-green-200 flex flex-wrap gap-x-6 gap-y-1 text-sm text-green-700">
+              {paymentCurrency === 'EUR' && (
+                <span>{lang === 'fr' ? 'Équivalent :' : 'المعادل:'} <span className="font-bold">{formatMoney(totalPriceDzd, 'DZD')}</span></span>
+              )}
+              {tvaEnabled && (
+                <span>{lang === 'fr' ? 'Dont TVA :' : 'تشمل TVA:'} <span className="font-bold">{fmt(tvaAmount)}</span> ({tvaRate}%)</span>
               )}
             </div>
-            <div className="flex items-center gap-2 mt-2">
-              <input
-                type="checkbox"
-                id="manual-price-toggle"
-                checked={isManualTotal}
-                onChange={(e) => {
-                  setIsManualTotal(e.target.checked);
-                  if (!e.target.checked) {
-                    setManualTotal('');
-                  }
-                }}
-              />
-              <label htmlFor="manual-price-toggle" className="text-green-900 text-sm font-bold">
-                {lang === 'fr' ? 'Modifier manuellement' : 'Edit price manually'}
-              </label>
-            </div>
-            {tvaEnabled && (
-              <p className="text-sm text-green-700 mt-1">
-                {lang === 'fr' ? 'Dont TVA:' : 'تشمل TVA:'} {tvaAmount.toLocaleString()} DA ({tvaRate}%)
-              </p>
-            )}
           </div>
 
           {/* Deposit with toggle and manual edit, only display if activated */}
@@ -3679,6 +4017,7 @@ export const Step6FinalPricing: React.FC<{
                         inputMode="decimal"
                         value={euroRate === '' ? '' : euroRate}
                         onChange={(e) => {
+                          setRateTouched(true);
                           const value = e.target.value.trim();
                           if (value === '') {
                             setEuroRate('');
@@ -3722,13 +4061,13 @@ export const Step6FinalPricing: React.FC<{
             
             <div className="flex justify-between text-sm">
               <span className="text-indigo-700">{lang === 'fr' ? 'Prix Base:' : 'السعر الأساسي:'}</span>
-              <span className="font-bold text-indigo-900">{calculatedBasePrice.toLocaleString()} DA</span>
+              <span className="font-bold text-indigo-900">{fmt(calculatedBasePrice)}</span>
             </div>
-            
+
             {servicesTotal > 0 && (
               <div className="flex justify-between text-sm">
                 <span className="text-indigo-700">{lang === 'fr' ? 'Services:' : 'الخدمات:'}</span>
-                <span className="font-bold text-indigo-900">{servicesTotal.toLocaleString()} DA</span>
+                <span className="font-bold text-indigo-900">{fmt(servicesTotal)}</span>
               </div>
             )}
             
@@ -3744,7 +4083,7 @@ export const Step6FinalPricing: React.FC<{
                   :
                 </span>
                 <span className={`font-bold ${clientDeliveryFee === 0 ? 'text-green-700 line-through' : 'text-indigo-900'}`}>
-                  {deliveryFeeAmount.toLocaleString()} DA
+                  {fmt(deliveryFeeAmount)}
                 </span>
               </div>
             )}
@@ -3752,77 +4091,33 @@ export const Step6FinalPricing: React.FC<{
             {tvaEnabled && tvaAmount > 0 && (
               <div className="flex justify-between text-sm">
                 <span className="text-indigo-700">{lang === 'fr' ? 'TVA (' + tvaRate + '%):' : 'TVA (' + tvaRate + '%):'}</span>
-                <span className="font-bold text-indigo-900">{tvaAmount.toLocaleString()} DA</span>
+                <span className="font-bold text-indigo-900">{fmt(tvaAmount)}</span>
               </div>
             )}
 
             <div className="border-t border-indigo-200 pt-2 flex justify-between text-base font-bold">
               <span className="text-indigo-900">{lang === 'fr' ? 'TOTAL:' : 'المجموع:'}</span>
-              <span className="text-lg text-indigo-600">{totalPrice.toLocaleString()} DA</span>
+              <span className="text-lg text-indigo-600">{fmt(totalPrice)}</span>
             </div>
+
+            {paymentCurrency === 'EUR' && (
+              <div className="flex justify-between text-xs">
+                <span className="text-indigo-500">{lang === 'fr' ? 'Équivalent DZD:' : 'المعادل بالدينار:'}</span>
+                <span className="font-bold text-indigo-500">{formatMoney(totalPriceDzd, 'DZD')}</span>
+              </div>
+            )}
 
             <div className="flex justify-between text-sm pt-2">
               <span className="text-indigo-700">{lang === 'fr' ? 'Caution:' : 'الضمان:'}</span>
-              <span className="font-bold text-indigo-900">{deposit.toLocaleString()} DA</span>
-            </div>
-
-            {/* Assurance Serenity Section */}
-            <div className="border-t border-indigo-200 pt-3 mt-3">
-              <label className="flex items-center gap-2 mb-2">
-                <input
-                  type="checkbox"
-                  checked={assuranceEnabled}
-                  onChange={(e) => {
-                    setAssuranceEnabled(e.target.checked);
-                    if (!e.target.checked) {
-                      setAssurancePercentage('');
-                    }
-                  }}
-                  className="w-4 h-4 text-purple-600 border-purple-300 rounded focus:ring-purple-500"
-                />
-                <span className="font-bold text-purple-700">
-                  {lang === 'fr' ? '🛡️ Assurance Serenity' : '🛡️ تأمين Serenity'}
+              <span className="text-right">
+                <span className="font-bold text-indigo-900">{formatMoney(deposit, 'DZD')}</span>
+                {/* Saisie en euros ⇒ c'est ce montant qui fait foi, pas sa conversion. */}
+                <span className="block text-xs font-bold text-amber-700">
+                  {cautionCurrency === 'EUR' && euroAmount !== ''
+                    ? formatMoney(Number(euroAmount), 'EUR')
+                    : `≈ ${formatMoney(fromDzd(deposit, 'EUR', rate), 'EUR')}`}
                 </span>
-              </label>
-              {assuranceEnabled && (
-                <div className="ml-6 space-y-2">
-                  <div className="flex gap-2 items-center">
-                    <label className="text-sm font-bold text-purple-700 w-24">
-                      {lang === 'fr' ? 'Pourcentage:' : 'النسبة:'}
-                    </label>
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      value={assurancePercentage === '' ? '' : assurancePercentage}
-                      onChange={(e) => {
-                        const value = e.target.value.trim();
-                        if (value === '') {
-                          setAssurancePercentage('');
-                        } else {
-                          const numValue = parseFloat(value);
-                          if (!isNaN(numValue) && numValue >= 0) {
-                            setAssurancePercentage(numValue);
-                          }
-                        }
-                      }}
-                      className="w-20 p-1 border border-purple-300 rounded text-right font-bold"
-                      placeholder="0"
-                      min="0"
-                      max="100"
-                      step="0.01"
-                    />
-                    <span className="text-purple-700 font-bold">%</span>
-                  </div>
-                  {assuranceAmount > 0 && (
-                    <div className="p-2 bg-purple-50 rounded border border-purple-200">
-                      <p className="text-sm text-purple-700">
-                        {lang === 'fr' ? 'Montant Assurance:' : 'مبلغ التأمين:'} 
-                        <span className="font-bold ml-2">{assuranceAmount.toLocaleString()} DA</span>
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
+              </span>
             </div>
           </div>
 
@@ -3848,11 +4143,11 @@ export const Step6FinalPricing: React.FC<{
             <div className="border-t border-indigo-200 pt-2">
               <div className="flex justify-between text-sm mb-2">
                 <span className="text-indigo-700">{lang === 'fr' ? 'Acompte:' : 'الدفعة الأولى:'}</span>
-                <span className="font-bold text-indigo-900">{advancePayment.toLocaleString()} DA</span>
+                <span className="font-bold text-indigo-900">{fmt(advancePayment)}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-indigo-700">{lang === 'fr' ? 'Reste à payer:' : 'المتبقي:'}</span>
-                <span className="font-bold text-indigo-900">{(totalPrice - advancePayment).toLocaleString()} DA</span>
+                <span className="font-bold text-indigo-900">{fmt(remainingPayment)}</span>
               </div>
             </div>
           </div>
@@ -3864,68 +4159,129 @@ export const Step6FinalPricing: React.FC<{
             <span className="font-bold">💾 {lang === 'fr' ? 'Cette étape sauvegarde:' : 'هذه الخطوة تحفظ:'}</span>
           </p>
           <ul className="text-xs text-indigo-800 space-y-1 ml-4">
-            <li>✓ {lang === 'fr' ? 'Prix Total: ' : 'السعر الكلي: '}<span className="font-bold">{totalPrice.toLocaleString()} DA</span></li>
-            <li>✓ {lang === 'fr' ? 'Caution: ' : 'الضمان: '}<span className="font-bold">{deposit.toLocaleString()} DA</span></li>
-            {assuranceEnabled && assuranceAmount > 0 && (
-              <li>✓ {lang === 'fr' ? 'Assurance Serenity: ' : 'تأمين Serenity: '}<span className="font-bold">{assuranceAmount.toLocaleString()} DA ({assurancePercentage}%)</span></li>
-            )}
-            <li>✓ {lang === 'fr' ? 'Total avec Assurance: ' : 'المجموع مع التأمين: '}<span className="font-bold">{finalTotal.toLocaleString()} DA</span></li>
+            <li>✓ {lang === 'fr' ? 'Devise de règlement: ' : 'عملة الدفع: '}<span className="font-bold">{paymentCurrency === 'EUR' ? `EUR (${rate} DA/€)` : 'DZD'}</span></li>
+            <li>✓ {lang === 'fr' ? 'Prix Total: ' : 'السعر الكلي: '}<span className="font-bold">{fmt(totalPrice)}</span>{paymentCurrency === 'EUR' && <span className="opacity-70"> · {formatMoney(totalPriceDzd, 'DZD')}</span>}</li>
+            <li>✓ {lang === 'fr' ? 'Acompte: ' : 'الدفعة الأولى: '}<span className="font-bold">{fmt(advancePayment)}</span></li>
+            <li>✓ {lang === 'fr' ? 'Reste à payer: ' : 'المتبقي: '}<span className="font-bold">{fmt(remainingPayment)}</span></li>
+            <li>✓ {lang === 'fr' ? 'Caution: ' : 'الضمان: '}<span className="font-bold">{formatMoney(deposit, 'DZD')}</span></li>
             <li>✓ {lang === 'fr' ? 'Durée: ' : 'المدة: '}<span className="font-bold">{days} {lang === 'fr' ? 'jours' : 'أيام'}</span></li>
             <li>✓ {lang === 'fr' ? 'TVA Appliquée: ' : 'تطبيق TVA: '}<span className="font-bold">{tvaEnabled ? (lang === 'fr' ? 'Oui (' + tvaRate + '%)' : 'نعم (' + tvaRate + '%)') : (lang === 'fr' ? 'Non' : 'لا')}</span></li>
           </ul>
         </div>
       </div>
 
-      {/* Payment Terms */}
-      <div className="bg-purple-50 rounded-2xl p-6 border border-purple-200">
-        <h4 className="text-lg font-black text-purple-900 mb-4">
-          💳 {lang === 'fr' ? 'Modalités de Paiement' : 'شروط الدفع'}
-        </h4>
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block font-bold text-purple-900 mb-2">
-                💰 {lang === 'fr' ? 'Acompte à la Réservation' : 'الدفعة الأولى عند الحجز'}
-              </label>
-              <input
-                type="number"
-                value={advancePayment || ''}
-                onChange={(e) => {
-                  const value = Number(e.target.value);
-                  setAdvancePayment(value);
-                  setFormData(prev => ({
-                    ...prev,
-                    step6: {
-                      ...prev.step6,
-                      advancePayment: value,
-                      remainingPayment: Math.max(0, totalPrice - value)
-                    }
-                  }));
-                }}
-                placeholder="0"
-                className="w-full p-3 border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+      {/* ── Modalités de paiement ─────────────────────────────────────────── */}
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 bg-slate-50 border-b border-slate-200">
+          <h4 className="text-lg font-black text-slate-900">
+            💳 {lang === 'fr' ? 'Modalités de Paiement' : 'شروط الدفع'}
+          </h4>
+          <span className="text-xs font-bold uppercase tracking-widest text-slate-500">
+            {lang === 'fr' ? 'Réglé en' : 'الدفع بـ'} {paymentCurrency === 'EUR' ? 'EUR (€)' : 'DZD (DA)'}
+          </span>
+        </div>
+
+        <div className="p-6 space-y-6">
+          {/* Barre de répartition acompte / reste */}
+          <div>
+            <div className="flex justify-between text-xs font-bold text-slate-500 mb-2">
+              <span>{lang === 'fr' ? 'Payé à la réservation' : 'مدفوع عند الحجز'}</span>
+              <span>{lang === 'fr' ? 'Reste à payer' : 'المبلغ المتبقي'}</span>
+            </div>
+            <div className="h-3 w-full rounded-full bg-slate-200 overflow-hidden flex">
+              <div
+                className="bg-emerald-500 transition-all duration-300"
+                style={{ width: `${totalPrice > 0 ? Math.min(100, (advancePayment / totalPrice) * 100) : 0}%` }}
               />
             </div>
-            <div>
-              <label className="block font-bold text-purple-900 mb-2">
-                📊 {lang === 'fr' ? 'Reste à Payer' : 'المبلغ المتبقي'}
-              </label>
-              <input
-                type="number"
-                value={Math.max(0, totalPrice - advancePayment)}
-                readOnly
-                className="w-full p-3 bg-purple-100 border border-purple-200 rounded-lg text-purple-900 font-bold"
-              />
+            <div className="flex justify-between text-sm font-black mt-2">
+              <span className="text-emerald-700">{fmt(advancePayment)}</span>
+              <span className={remainingPayment > 0 ? 'text-amber-700' : 'text-slate-400'}>{fmt(remainingPayment)}</span>
             </div>
           </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {/* Acompte : pré-rempli au total (le client règle tout), éditable */}
+            <div className="rounded-xl border-2 border-emerald-200 bg-emerald-50/60 p-4">
+              <label className="block font-bold text-emerald-900 mb-1">
+                💰 {lang === 'fr' ? 'Acompte à la Réservation' : 'الدفعة الأولى عند الحجز'}
+              </label>
+              <p className="text-xs text-emerald-700 mb-3">
+                {advanceInput === ''
+                  ? (lang === 'fr' ? 'Par défaut : le client règle la totalité.' : 'افتراضيًا: يدفع العميل المبلغ كاملًا.')
+                  : (lang === 'fr' ? 'Montant personnalisé.' : 'مبلغ مخصص.')}
+              </p>
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    max={totalPrice}
+                    step={paymentCurrency === 'EUR' ? '0.01' : '1'}
+                    value={advanceInput === '' ? totalPrice : advanceInput}
+                    onChange={(e) => {
+                      const value = e.target.value.trim();
+                      if (value === '') { setAdvanceInput(''); return; }
+                      const n = parseFloat(value);
+                      if (!isNaN(n) && n >= 0) {
+                        setAdvanceInput(roundIn(Math.min(n, totalPrice), paymentCurrency));
+                      }
+                    }}
+                    className="w-full ps-3 pe-10 py-3 rounded-lg border-2 border-emerald-300 bg-white text-right text-lg font-black text-emerald-900 focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  />
+                  <span className="absolute end-3 top-1/2 -translate-y-1/2 font-black text-emerald-700 pointer-events-none">
+                    {currencySymbol(paymentCurrency)}
+                  </span>
+                </div>
+                {advanceInput !== '' && (
+                  <button
+                    type="button"
+                    onClick={() => setAdvanceInput('')}
+                    title={lang === 'fr' ? 'Remettre au total' : 'إعادة إلى المجموع'}
+                    className="px-3 py-3 rounded-lg bg-white border-2 border-emerald-300 text-emerald-800 font-black hover:bg-emerald-50 transition-colors"
+                  >
+                    ↺
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Reste : toujours calculé */}
+            <div className="rounded-xl border-2 border-slate-200 bg-slate-50 p-4">
+              <label className="block font-bold text-slate-900 mb-1">
+                📊 {lang === 'fr' ? 'Reste à Payer' : 'المبلغ المتبقي'}
+              </label>
+              <p className="text-xs text-slate-500 mb-3">
+                {lang === 'fr' ? 'Calculé automatiquement : total − acompte.' : 'محسوب تلقائيًا: المجموع − الدفعة الأولى.'}
+              </p>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={fmt(remainingPayment)}
+                  readOnly
+                  tabIndex={-1}
+                  className={`w-full px-3 py-3 rounded-lg border-2 border-slate-200 text-right text-lg font-black cursor-default ${
+                    remainingPayment > 0 ? 'bg-amber-50 text-amber-900' : 'bg-white text-slate-400'
+                  }`}
+                />
+              </div>
+              {remainingPayment === 0 && (
+                <p className="text-xs font-bold text-emerald-700 mt-2">
+                  ✓ {lang === 'fr' ? 'Réservation intégralement réglée.' : 'تم دفع الحجز بالكامل.'}
+                </p>
+              )}
+            </div>
+          </div>
+
           <div>
-            <label className="block font-bold text-purple-900 mb-2">
+            <label className="block font-bold text-slate-900 mb-2">
               📝 {lang === 'fr' ? 'Notes de Paiement' : 'ملاحظات الدفع'}
             </label>
             <textarea
               value={paymentNotes}
               onChange={(e) => setPaymentNotes(e.target.value)}
-              className="w-full p-3 border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-slate-400 focus:border-transparent"
               rows={3}
               placeholder={lang === 'fr' ? 'Conditions spéciales de paiement...' : 'شروط دفع خاصة...'}
             />

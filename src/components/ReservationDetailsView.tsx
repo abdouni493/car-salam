@@ -6,6 +6,7 @@ import { ReservationsService } from '../services/ReservationsService';
 import { DatabaseService } from '../services/DatabaseService';
 import { supabase } from '../supabase';
 import { formatAmount } from '../utils/format';
+import { DEFAULT_EUR_RATE, dzdToEur, formatMoney } from '../utils/currency';
 
 interface ReservationDetailsViewProps {
   lang: Language;
@@ -128,11 +129,21 @@ export const ReservationDetailsView: React.FC<ReservationDetailsViewProps> = ({ 
                reservation.status === 'completed' ? '🏁 Terminé' :
                '⏳ En attente'}
             </span>
-            <div className="text-sm text-saas-text-muted">
-              <p>💰 {lang === 'fr' ? 'Total:' : 'المجموع:'} {formatAmount(reservation.totalPrice)} {lang === 'fr' ? 'DA' : 'د.ج'}</p>
-              <p>💳 {lang === 'fr' ? 'Payé:' : 'مدفوع:'} {formatAmount(reservation.advancePayment)} {lang === 'fr' ? 'DA' : 'د.ج'}</p>
-              <p>⚠️ {lang === 'fr' ? 'Reste:' : 'متبقي:'} {formatAmount(reservation.remainingPayment)} {lang === 'fr' ? 'DA' : 'د.ج'}</p>
-            </div>
+            {/* Montants dans la devise réglée par le client (détail complet
+                dans l'onglet Paiements). */}
+            {(() => {
+              const inEur = reservation.paymentCurrency === 'EUR';
+              const r = reservation.euroRate || DEFAULT_EUR_RATE;
+              const show = (dzd: number, eur?: number | null) =>
+                inEur ? formatMoney(eur ?? dzdToEur(dzd, r), 'EUR') : formatMoney(dzd, 'DZD');
+              return (
+                <div className="text-sm text-saas-text-muted">
+                  <p>💰 {lang === 'fr' ? 'Total:' : 'المجموع:'} {show(reservation.totalPrice, reservation.totalPriceEur)}</p>
+                  <p>💳 {lang === 'fr' ? 'Payé:' : 'مدفوع:'} {show(reservation.advancePayment, reservation.advancePaymentEur)}</p>
+                  <p>⚠️ {lang === 'fr' ? 'Reste:' : 'متبقي:'} {show(reservation.remainingPayment, reservation.remainingPaymentEur)}</p>
+                </div>
+              );
+            })()}
           </div>
 
           <div className="flex gap-2">
@@ -641,48 +652,79 @@ const PaymentsTab: React.FC<{ lang: Language; reservation: ReservationDetails; o
     }
   };
 
+  // Devise réglée par le client. Le dinar reste la référence : chaque montant est
+  // affiché dans la devise de règlement, avec sa contre-valeur dans l'autre.
+  const payInEur = reservation.paymentCurrency === 'EUR';
+  const rate = reservation.euroRate || DEFAULT_EUR_RATE;
+  // Les montants euros négociés font foi ; à défaut on reconvertit le dinar au taux.
+  const totalEur = reservation.totalPriceEur ?? dzdToEur(reservation.totalPrice, rate);
+  const paidEur = reservation.advancePaymentEur ?? dzdToEur(reservation.advancePayment, rate);
+  const remainingEur = reservation.remainingPaymentEur ?? dzdToEur(reservation.remainingPayment, rate);
+  const cautionDzd = reservation.cautionAmountDzd || reservation.deposit;
+
+  /** Montant principal dans la devise de règlement + contre-valeur en second. */
+  const MoneyPair: React.FC<{ dzd: number; eur: number; className?: string }> = ({ dzd, eur, className = '' }) => (
+    <>
+      <p className={`text-2xl font-black ${className}`}>
+        {payInEur ? formatMoney(eur, 'EUR') : formatMoney(dzd, 'DZD')}
+      </p>
+      <p className="text-xs text-saas-text-muted mt-1">
+        ≈ {payInEur ? formatMoney(dzd, 'DZD') : formatMoney(eur, 'EUR')}
+      </p>
+    </>
+  );
+
   return (
   <div className="space-y-6">
     {/* Payment Summary */}
     <div className="glass-card p-6 border border-saas-border">
-      <h3 className="text-xl font-black text-saas-text-main mb-4">
-        💰 {lang === 'fr' ? 'Détails Financiers' : 'التفاصيل المالية'}
-      </h3>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <h3 className="text-xl font-black text-saas-text-main">
+          💰 {lang === 'fr' ? 'Détails Financiers' : 'التفاصيل المالية'}
+        </h3>
+        {/* Devise de règlement + taux appliqué */}
+        <div className="flex items-center gap-2">
+          <span className={`px-3 py-1 rounded-full text-sm font-black border ${
+            payInEur ? 'bg-blue-100 text-blue-800 border-blue-300'
+                     : 'bg-emerald-100 text-emerald-800 border-emerald-300'}`}>
+            {payInEur
+              ? `💶 ${lang === 'fr' ? 'Paiement en euros' : 'الدفع بالأورو'}`
+              : `💵 ${lang === 'fr' ? 'Paiement en dinars' : 'الدفع بالدينار'}`}
+          </span>
+          <span className="px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200">
+            {rate.toLocaleString('fr-FR')} DA / €
+          </span>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white rounded-lg p-4 text-center border border-saas-border">
           <p className="text-sm text-saas-text-muted">{lang === 'fr' ? 'Montant Total' : 'المبلغ الإجمالي'}</p>
-          <p className="text-2xl font-black text-saas-text-main">{formatAmount(reservation.totalPrice)} DA</p>
+          <MoneyPair dzd={reservation.totalPrice} eur={totalEur} className="text-saas-text-main" />
         </div>
         <div className="bg-green-50 rounded-lg p-4 text-center border border-green-200">
           <p className="text-sm text-green-700">{lang === 'fr' ? 'Montant Payé' : 'المبلغ المدفوع'}</p>
-          <p className="text-2xl font-black text-green-700">{formatAmount(reservation.advancePayment)} DA</p>
+          <MoneyPair dzd={reservation.advancePayment} eur={paidEur} className="text-green-700" />
         </div>
         <div className="bg-orange-50 rounded-lg p-4 text-center border border-orange-200">
           <p className="text-sm text-orange-700">{lang === 'fr' ? 'Reste à Payer' : 'المبلغ المتبقي'}</p>
-          <p className="text-2xl font-black text-orange-700">{formatAmount(reservation.remainingPayment)} DA</p>
+          <MoneyPair dzd={reservation.remainingPayment} eur={remainingEur} className="text-orange-700" />
         </div>
         <div className="bg-blue-50 rounded-lg p-4 text-center border border-blue-200">
           {typeof reservation.cautionEnabled === 'undefined' || reservation.cautionEnabled ? (
             <>
               <p className="text-sm text-blue-700">{lang === 'fr' ? 'Caution' : 'الضمان'}</p>
-              {/* Display caution in DZD */}
+              {/* La caution a sa propre devise, indépendante de celle du règlement. */}
               <p className="text-2xl font-black text-blue-700">
-                {formatAmount((reservation as any).cautionAmountDzd || reservation.deposit)} DA
+                {reservation.cautionCurrency === 'EUR'
+                  ? formatMoney(dzdToEur(cautionDzd, rate), 'EUR')
+                  : formatMoney(cautionDzd, 'DZD')}
               </p>
-              {/* Display caution in EUR if currency is EUR */}
-              {(reservation as any).cautionCurrency === 'EUR' && (reservation as any).euroRate && (
-                <div className="mt-2 pt-2 border-t border-blue-200">
-                  <p className="text-xs text-blue-600 mb-1">
-                    {lang === 'fr' ? '= ' : '= '} 
-                    <span className="font-bold">
-                      {(Math.round(((reservation as any).cautionAmountDzd || reservation.deposit) / (reservation as any).euroRate * 100) / 100).toFixed(2)}
-                    </span> EUR
-                  </p>
-                  <p className="text-xs text-blue-500">
-                    ({lang === 'fr' ? 'Taux' : 'السعر'}: {(reservation as any).euroRate} DA/€)
-                  </p>
-                </div>
-              )}
+              <p className="text-xs text-blue-600 mt-1">
+                ≈ {reservation.cautionCurrency === 'EUR'
+                  ? formatMoney(cautionDzd, 'DZD')
+                  : formatMoney(dzdToEur(cautionDzd, rate), 'EUR')}
+              </p>
             </>
           ) : null}
         </div>
@@ -724,7 +766,14 @@ const PaymentsTab: React.FC<{ lang: Language; reservation: ReservationDetails; o
                     <DollarSign className="w-5 h-5 text-green-600" />
                   </div>
                   <div>
-                    <p className="font-bold text-saas-text-main">{formatAmount(payment.amount)} DA</p>
+                    <p className="font-bold text-saas-text-main">
+                      {payInEur
+                        ? formatMoney(dzdToEur(payment.amount, rate), 'EUR')
+                        : formatMoney(payment.amount, 'DZD')}
+                      <span className="font-normal text-xs text-saas-text-muted ml-2">
+                        ≈ {payInEur ? formatMoney(payment.amount, 'DZD') : formatMoney(dzdToEur(payment.amount, rate), 'EUR')}
+                      </span>
+                    </p>
                     <p className="text-sm text-saas-text-muted">{payment.date} • {payment.method === 'cash' ? (lang === 'fr' ? 'Espèces' : 'نقدي') : payment.method === 'card' ? (lang === 'fr' ? 'Carte' : 'بطاقة') : (lang === 'fr' ? 'Virement' : 'تحويل')}</p>
                     {payment.note && <p className="text-xs text-saas-text-muted">{payment.note}</p>}
                   </div>

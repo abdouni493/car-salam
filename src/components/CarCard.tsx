@@ -2,6 +2,7 @@ import React from 'react';
 import { Car, Language } from '../types';
 import { motion } from 'motion/react';
 import { Eye, EyeOff } from 'lucide-react';
+import { carUnitPrices, formatMoney, DEFAULT_EUR_RATE } from '../utils/currency';
 
 interface CarCardProps {
   car: Car;
@@ -190,9 +191,19 @@ export const CarCard: React.FC<CarCardProps> = ({
           </div>
         )}
 
-        <div className="pt-3 border-t border-saas-border flex items-center justify-between">
-          <div className="text-saas-primary-via font-black text-lg tracking-tighter">
-            {car.priceDay.toLocaleString()} <span className="text-[9px] text-saas-text-muted uppercase">DZD / JOUR</span>
+        <div className="pt-3 border-t border-saas-border flex items-end justify-between">
+          <div>
+            <div className="text-saas-primary-via font-black text-lg tracking-tighter">
+              {car.priceDay.toLocaleString()} <span className="text-[9px] text-saas-text-muted uppercase">DZD / JOUR</span>
+            </div>
+            <div
+              className="text-amber-700 font-black text-xs tracking-tight mt-0.5"
+              title={car.priceDayEur === undefined ? `Converti au taux de ${DEFAULT_EUR_RATE} DA/€` : 'Tarif en euros défini pour ce véhicule'}
+            >
+              {car.priceDayEur === undefined && '≈ '}
+              {formatMoney(carUnitPrices(car, 'EUR', DEFAULT_EUR_RATE).day, 'EUR')}
+              <span className="text-[9px] text-saas-text-muted uppercase ms-1">/ JOUR</span>
+            </div>
           </div>
           <div className="text-[9px] text-saas-text-muted font-bold uppercase tracking-widest">
             {car.mileage.toLocaleString()} KM

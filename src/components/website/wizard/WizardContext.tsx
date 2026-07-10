@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from '
 import { Language, Car, Agency, SpecialOffer, ReservationStep2, AdditionalService, ProtectionAssurance } from '../../../types';
 import { DatabaseService } from '../../../services/DatabaseService';
 import { getCurrentSpecialOfferForCar } from '../../../utils/specialOffers';
+import { Currency, carEurRate, dzdToEur, formatMoney } from '../../../utils/currency';
 import { fromYmd } from './wizardUi';
 
 // ═══ Modèle d'état du wizard de réservation (source unique de vérité) ═══
@@ -113,6 +114,7 @@ interface WizardContextValue {
   clearPromo: () => void;
 
   // Tarification (remise d'offre spéciale appliquée si présente)
+  // Tous ces montants sont en DINARS : le dinar est la devise de référence.
   days: number;
   promo: SpecialOffer | undefined;
   basePrice: number;
@@ -121,6 +123,16 @@ interface WizardContextValue {
   assuranceTotal: number;
   promoDiscount: number;        // remise en DA du code promo
   total: number;
+
+  // Devise de règlement choisie par le client à l'étape finale
+  paymentCurrency: Currency;
+  setPaymentCurrency: (c: Currency) => void;
+  /** Taux DA/€ retenu pour cette voiture (implicite de ses tarifs, sinon repli). */
+  eurRate: number;
+  /** Total converti en euros, quelle que soit la devise choisie. */
+  totalEur: number;
+  /** Formate un montant en DINARS vers la devise choisie par le client. */
+  money: (amountDzd: number) => string;
 
   // Soumission
   isSubmitting: boolean;
@@ -195,6 +207,9 @@ export const ReservationWizardProvider: React.FC<ProviderProps> = ({
 
   // Étape 6
   const [notes, setNotes] = useState('');
+
+  // Devise de règlement — le dinar reste la référence, l'euro est une option client
+  const [paymentCurrency, setPaymentCurrency] = useState<Currency>('DZD');
 
   // Code promo
   const [promoInput, setPromoInput] = useState('');
@@ -355,6 +370,16 @@ export const ReservationWizardProvider: React.FC<ProviderProps> = ({
     : 0;
   const total = Math.max(0, subtotal - promoDiscount);
 
+  // ─── Devise de règlement ────────────────────────────────────────────────────
+  // Le taux vient des tarifs de la voiture : afficher un total euro calculé à un
+  // autre taux que celui annoncé sur sa fiche serait incohérent pour le client.
+  const eurRate = carEurRate(car);
+  const totalEur = dzdToEur(total, eurRate);
+  const money = (amountDzd: number) =>
+    paymentCurrency === 'EUR'
+      ? formatMoney(dzdToEur(amountDzd, eurRate), 'EUR')
+      : formatMoney(amountDzd, 'DZD');
+
   // ─── Code promo : vérification serveur (RPC, sans exposer la table) ─────────
   const verifyPromo = async () => {
     const code = promoInput.trim();
@@ -429,6 +454,11 @@ export const ReservationWizardProvider: React.FC<ProviderProps> = ({
         discount_amount: discount + promoDiscount,
         discount_type: 'fixed',
         notes,
+        // Devise réglée par le client. `total_price` reste le montant en dinars ;
+        // `total_price_eur` n'est renseigné que si le client paie en euros.
+        payment_currency: paymentCurrency,
+        euro_rate: eurRate,
+        total_price_eur: paymentCurrency === 'EUR' ? totalEur : null,
         // Assurance de protection sélectionnée (snapshot nom + prix/jour)
         protection_assurance_id: selectedAssurance?.id || '',
         protection_assurance_name: selectedAssurance?.name || '',
@@ -476,6 +506,7 @@ export const ReservationWizardProvider: React.FC<ProviderProps> = ({
     notes, setNotes,
     promoInput, setPromoInput, promoStatus, promoDiscountPct, verifyPromo, clearPromo,
     days, promo, basePrice, discount, servicesTotal, assuranceTotal, promoDiscount, total,
+    paymentCurrency, setPaymentCurrency, eurRate, totalEur, money,
     isSubmitting, submitError, submitted, submit,
   };
 

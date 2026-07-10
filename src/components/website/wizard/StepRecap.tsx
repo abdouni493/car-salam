@@ -1,8 +1,9 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { ChevronLeft, Loader2, Pencil, RefreshCcw, Ticket, CheckCircle2, XCircle, X } from 'lucide-react';
+import { ChevronLeft, Coins, Loader2, Pencil, RefreshCcw, Ticket, CheckCircle2, XCircle, X } from 'lucide-react';
 import { useWizard } from './WizardContext';
 import { SectionCard, SectionTitle, FieldLabel, inputClass, inputStyle, focusInput, blurInput, C, fromYmd } from './wizardUi';
+import { Currency, formatMoney } from '../../../utils/currency';
 
 /**
  * Étape 5 — Récapitulatif + confirmation.
@@ -16,6 +17,7 @@ export const StepRecap: React.FC = () => {
     agencies, departureAgency, returnAgency, differentReturnAgency,
     personal, selectedServices, notes, setNotes,
     days, promo, basePrice, discount, servicesTotal, total,
+    paymentCurrency, setPaymentCurrency, eurRate, money,
     promoInput, setPromoInput, promoStatus, promoDiscountPct, promoDiscount, verifyPromo, clearPromo,
     goToStep, prev, isSubmitting, submitError, submit,
   } = useWizard();
@@ -31,7 +33,7 @@ export const StepRecap: React.FC = () => {
       onClick={() => goToStep(step)}
       className="flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-lg transition-colors text-vel-muted"
       style={{ border: '1px solid rgba(15,23,42,0.1)' }}
-      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = C.accent; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(220,38,38,0.25)'; }}
+      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = C.accent; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(180,83,9,0.25)'; }}
       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = ''; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(15,23,42,0.1)'; }}
     >
       <Pencil size={11} />
@@ -80,7 +82,7 @@ export const StepRecap: React.FC = () => {
           {summaryBlock(
             lang === 'fr' ? '🛎️ Services' : '🛎️ الخدمات', 3,
             selectedServices.length > 0
-              ? selectedServices.map(s => ({ label: s.name, value: `${s.price.toLocaleString()} DA` }))
+              ? selectedServices.map(s => ({ label: s.name, value: money(s.price) }))
               : [{ label: lang === 'fr' ? 'Aucun service sélectionné' : 'لم يتم اختيار خدمات', value: '' }]
           )}
           {summaryBlock(
@@ -98,25 +100,69 @@ export const StepRecap: React.FC = () => {
       {/* Ventilation du prix */}
       <SectionCard>
         <SectionTitle>💰 {{ fr: 'Tarification', ar: 'التسعير' }[lang]}</SectionTitle>
+
+        {/* Devise de règlement — pilote tous les montants affichés ci-dessous */}
+        <div className="px-4 py-4 rounded-xl space-y-3"
+          style={{ background: 'rgba(15,23,42,0.03)', border: '1px solid rgba(180,83,9,0.15)' }}>
+          <p className="flex items-center gap-2 text-xs font-bold text-vel-muted uppercase tracking-wider"
+            style={{ fontFamily: 'var(--font-display)' }}>
+            <Coins size={14} style={{ color: C.accent }} />
+            {{ fr: 'Devise de règlement', ar: 'عملة الدفع' }[lang]}
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            {(['DZD', 'EUR'] as Currency[]).map(cur => {
+              const active = paymentCurrency === cur;
+              return (
+                <button
+                  key={cur}
+                  type="button"
+                  onClick={() => setPaymentCurrency(cur)}
+                  disabled={isSubmitting}
+                  aria-pressed={active}
+                  className="px-4 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                  style={{
+                    background: active ? 'rgba(180,83,9,0.1)' : '#FFFFFF',
+                    border: active ? '2px solid #B45309' : '1px solid rgba(15,23,42,0.1)',
+                    color: active ? C.accent : '#64748B',
+                    fontFamily: 'var(--font-display)',
+                  }}
+                >
+                  <span className="text-lg">{cur === 'EUR' ? '💶' : '💵'}</span>
+                  {cur === 'EUR'
+                    ? { fr: 'Euro (€)', ar: 'أورو (€)' }[lang]
+                    : { fr: 'Dinar (DA)', ar: 'دينار (د.ج)' }[lang]}
+                </button>
+              );
+            })}
+          </div>
+          {paymentCurrency === 'EUR' && (
+            <p className="text-xs text-vel-muted">
+              {{ fr: 'Taux appliqué', ar: 'السعر المطبق' }[lang]} : <span className="font-bold">{eurRate.toLocaleString('fr-FR')} DA / €</span>
+              {' · '}
+              {{ fr: 'contre-valeur', ar: 'ما يعادل' }[lang]} {formatMoney(total, 'DZD')}
+            </p>
+          )}
+        </div>
+
         <div className="space-y-3">
           <div className="flex justify-between items-center px-4 py-3 rounded-xl text-sm"
             style={{ background: 'rgba(15,23,42,0.03)' }}>
             <span className="text-vel-slate">
-              {days} {{ fr: 'j ×', ar: 'يوم ×' }[lang]} {car.priceDay.toLocaleString()} {{ fr: 'DA', ar: 'د.ج' }[lang]}
+              {days} {{ fr: 'j ×', ar: 'يوم ×' }[lang]} {money(car.priceDay)}
             </span>
-            <span className="font-bold text-vel-ink">{basePrice.toLocaleString()} {{ fr: 'DA', ar: 'د.ج' }[lang]}</span>
+            <span className="font-bold text-vel-ink">{money(basePrice)}</span>
           </div>
 
           {/* Remise offre spéciale */}
           {promo && discount > 0 && (
             <div className="flex justify-between items-center px-4 py-3 rounded-xl text-sm"
-              style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)' }}>
+              style={{ background: 'rgba(180,83,9,0.06)', border: '1px solid rgba(180,83,9,0.2)' }}>
               <span className="text-vel-slate">
                 🏷️ {promo.label || (lang === 'fr' ? 'Offre spéciale' : 'عرض خاص')}
-                {' '}({promo.newPrice.toLocaleString()} {{ fr: 'DA/j', ar: 'د.ج/ي' }[lang]})
+                {' '}({money(promo.newPrice)}{{ fr: '/j', ar: '/ي' }[lang]})
               </span>
-              <span className="font-bold" style={{ color: '#DC2626' }}>
-                −{discount.toLocaleString()} {{ fr: 'DA', ar: 'د.ج' }[lang]}
+              <span className="font-bold" style={{ color: '#B45309' }}>
+                −{money(discount)}
               </span>
             </div>
           )}
@@ -125,13 +171,13 @@ export const StepRecap: React.FC = () => {
             <div key={s.id} className="flex justify-between items-center px-4 py-3 rounded-xl text-sm"
               style={{ background: 'rgba(217,119,6,0.05)', border: '1px solid rgba(217,119,6,0.1)' }}>
               <span className="text-vel-slate">{s.name}</span>
-              <span className="font-bold" style={{ color: C.amber }}>{s.price.toLocaleString()} {{ fr: 'DA', ar: 'د.ج' }[lang]}</span>
+              <span className="font-bold" style={{ color: C.amber }}>{money(s.price)}</span>
             </div>
           ))}
 
           {/* ── Code promo : saisie + vérification serveur + remise appliquée ── */}
           <div className="px-4 py-4 rounded-xl space-y-3"
-            style={{ background: 'rgba(15,23,42,0.03)', border: '1px dashed rgba(220,38,38,0.25)' }}>
+            style={{ background: 'rgba(15,23,42,0.03)', border: '1px dashed rgba(180,83,9,0.25)' }}>
             <p className="flex items-center gap-2 text-xs font-bold text-vel-muted uppercase tracking-wider"
               style={{ fontFamily: 'var(--font-display)' }}>
               <Ticket size={14} style={{ color: C.accent }} />
@@ -174,8 +220,8 @@ export const StepRecap: React.FC = () => {
                     disabled={!promoInput.trim() || promoStatus === 'checking'}
                     className="px-5 rounded-xl font-bold text-sm transition-all flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
                     style={{
-                      background: 'rgba(220,38,38,0.08)',
-                      border: '1px solid rgba(220,38,38,0.3)',
+                      background: 'rgba(180,83,9,0.08)',
+                      border: '1px solid rgba(180,83,9,0.3)',
                       color: C.accent,
                       fontFamily: 'var(--font-display)',
                     }}
@@ -190,7 +236,7 @@ export const StepRecap: React.FC = () => {
                     initial={{ opacity: 0, y: -4 }}
                     animate={{ opacity: 1, y: 0 }}
                     className="flex items-center gap-1.5 text-xs font-bold"
-                    style={{ color: '#DC2626' }}
+                    style={{ color: '#B45309' }}
                   >
                     <XCircle size={13} />
                     {{ fr: 'Code invalide, déjà utilisé ou désactivé.', ar: 'رمز غير صالح أو مستخدم أو معطل.' }[lang]}
@@ -208,19 +254,25 @@ export const StepRecap: React.FC = () => {
                 🎟️ {{ fr: 'Code promo', ar: 'رمز الخصم' }[lang]} {promoInput.trim().toUpperCase()} (−{promoDiscountPct}%)
               </span>
               <span className="font-bold" style={{ color: '#16A34A' }}>
-                −{promoDiscount.toLocaleString()} {{ fr: 'DA', ar: 'د.ج' }[lang]}
+                −{money(promoDiscount)}
               </span>
             </div>
           )}
 
           <div className="flex justify-between items-center px-4 py-4 rounded-2xl"
-            style={{ background: 'rgba(220,38,38,0.06)', border: '1px solid rgba(220,38,38,0.2)' }}>
-            <span className="font-black text-vel-ink" style={{ fontFamily: 'var(--font-display)' }}>
-              {{ fr: 'TOTAL', ar: 'المجموع' }[lang]}
-            </span>
-            <span className="font-black text-3xl" style={{ color: C.accent, fontFamily: 'var(--font-display)', textShadow: '0 0 20px rgba(220,38,38,0.2)' }}>
-              {total.toLocaleString()}
-              <span className="text-base ml-1" style={{ color: 'rgba(220,38,38,0.75)' }}>{{ fr: 'DA', ar: 'د.ج' }[lang]}</span>
+            style={{ background: 'rgba(180,83,9,0.06)', border: '1px solid rgba(180,83,9,0.2)' }}>
+            <div>
+              <span className="font-black text-vel-ink block" style={{ fontFamily: 'var(--font-display)' }}>
+                {{ fr: 'TOTAL À PAYER', ar: 'المجموع المستحق' }[lang]}
+              </span>
+              <span className="text-xs text-vel-muted">
+                {paymentCurrency === 'EUR'
+                  ? { fr: 'réglé en euros', ar: 'يُدفع بالأورو' }[lang]
+                  : { fr: 'réglé en dinars', ar: 'يُدفع بالدينار' }[lang]}
+              </span>
+            </div>
+            <span className="font-black text-3xl text-right" style={{ color: C.accent, fontFamily: 'var(--font-display)', textShadow: '0 0 20px rgba(180,83,9,0.2)' }}>
+              {money(total)}
             </span>
           </div>
         </div>
@@ -241,17 +293,17 @@ export const StepRecap: React.FC = () => {
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
           className="rounded-2xl p-5 flex items-start gap-3"
-          style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)' }}
+          style={{ background: 'rgba(180,83,9,0.08)', border: '1px solid rgba(180,83,9,0.3)' }}
         >
           <span className="text-xl">⚠️</span>
           <div className="flex-1">
-            <p className="text-sm font-bold" style={{ color: '#DC2626' }}>{submitError}</p>
+            <p className="text-sm font-bold" style={{ color: '#B45309' }}>{submitError}</p>
           </div>
         </motion.div>
       )}
 
       {/* Bandeau confirmation */}
-      <div className="rounded-2xl p-6" style={{ background: 'rgba(220,38,38,0.05)', border: '1px solid rgba(220,38,38,0.16)' }}>
+      <div className="rounded-2xl p-6" style={{ background: 'rgba(180,83,9,0.05)', border: '1px solid rgba(180,83,9,0.16)' }}>
         <h3 className="font-black text-vel-ink text-lg mb-2" style={{ fontFamily: 'var(--font-display)' }}>
           ✅ {{ fr: 'Prêt à confirmer ?', ar: 'جاهز للتأكيد؟' }[lang]}
         </h3>

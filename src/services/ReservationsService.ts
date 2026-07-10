@@ -1,5 +1,6 @@
 import { supabase } from '../supabase';
 import { ReservationDetails, VehicleInspection, Payment, ProtectionAssurance } from '../types';
+import { eurOrUndefined } from '../utils/currency';
 
 // Mappe un forfait d'assurance de protection embarqué (avec ses items + statut).
 function mapProtectionAssurance(pa: any): ProtectionAssurance | undefined {
@@ -52,6 +53,11 @@ export class ReservationsService {
     cautionAmountDzd?: number;
     cautionCurrency?: 'DZD' | 'EUR';
     euroRate?: number;
+    /** Devise dans laquelle le client règle la location. Les colonnes DZD restent la référence. */
+    paymentCurrency?: 'DZD' | 'EUR';
+    totalPriceEur?: number | null;
+    advancePaymentEur?: number | null;
+    remainingPaymentEur?: number | null;
     assuranceEnabled?: boolean;
     assurancePercentage?: number;
     protectionAssuranceId?: string | null;
@@ -91,6 +97,10 @@ export class ReservationsService {
         caution_amount_dzd: data.cautionAmountDzd || data.deposit,
         caution_currency: data.cautionCurrency || 'DZD',
         euro_rate: data.euroRate || 145,
+        payment_currency: data.paymentCurrency || 'DZD',
+        total_price_eur: data.totalPriceEur ?? null,
+        advance_payment_eur: data.advancePaymentEur ?? null,
+        remaining_payment_eur: data.remainingPaymentEur ?? null,
         assurance_enabled: data.assuranceEnabled || false,
         assurance_percentage: data.assurancePercentage || null,
         protection_assurance_id: data.protectionAssuranceId || null,
@@ -231,6 +241,12 @@ export class ReservationsService {
         priceWeek: res.car.price_week,
         priceMonth: res.car.price_month,
         deposit: res.car.deposit,
+        // Tarifs euros de la fiche véhicule : `undefined` quand la colonne est vide,
+        // ce qui laisse l'application convertir depuis le dinar.
+        priceDayEur: eurOrUndefined(res.car.price_day_eur),
+        priceWeekEur: eurOrUndefined(res.car.price_week_eur),
+        priceMonthEur: eurOrUndefined(res.car.price_month_eur),
+        depositEur: eurOrUndefined(res.car.deposit_eur),
         images: res.car.image_url ? [res.car.image_url] : [],
         mileage: res.car.mileage,
         vin: res.car.vin,
@@ -288,6 +304,10 @@ export class ReservationsService {
       cautionAmountDzd: res.caution_amount_dzd || res.deposit,
       cautionCurrency: res.caution_currency || 'DZD',
       euroRate: res.euro_rate || 145,
+      paymentCurrency: res.payment_currency === 'EUR' ? 'EUR' : 'DZD',
+      totalPriceEur: res.total_price_eur ?? null,
+      advancePaymentEur: res.advance_payment_eur ?? null,
+      remainingPaymentEur: res.remaining_payment_eur ?? null,
       assuranceEnabled: res.assurance_enabled || false,
       assurancePercentage: res.assurance_percentage,
       // Forfait d'assurance de protection sélectionné
@@ -453,6 +473,12 @@ export class ReservationsService {
         priceWeek: data.car.price_week,
         priceMonth: data.car.price_month,
         deposit: data.car.deposit,
+        // Tarifs euros de la fiche véhicule : `undefined` quand la colonne est vide,
+        // ce qui laisse l'application convertir depuis le dinar.
+        priceDayEur: eurOrUndefined(data.car.price_day_eur),
+        priceWeekEur: eurOrUndefined(data.car.price_week_eur),
+        priceMonthEur: eurOrUndefined(data.car.price_month_eur),
+        depositEur: eurOrUndefined(data.car.deposit_eur),
         images: data.car.image_url ? [data.car.image_url] : [],
         mileage: data.car.mileage,
         vin: data.car.vin,
@@ -620,6 +646,10 @@ export class ReservationsService {
     cautionAmountDzd: number;
     cautionCurrency: 'DZD' | 'EUR';
     euroRate: number;
+    paymentCurrency: 'DZD' | 'EUR';
+    totalPriceEur: number | null;
+    advancePaymentEur: number | null;
+    remainingPaymentEur: number | null;
     assuranceEnabled: boolean;
     assurancePercentage: number;
     protectionAssuranceId: string | null;
@@ -657,6 +687,10 @@ export class ReservationsService {
     if (updates.cautionAmountDzd !== undefined) updateData.caution_amount_dzd = updates.cautionAmountDzd;
     if (updates.cautionCurrency !== undefined) updateData.caution_currency = updates.cautionCurrency;
     if (updates.euroRate !== undefined) updateData.euro_rate = updates.euroRate;
+    if (updates.paymentCurrency !== undefined) updateData.payment_currency = updates.paymentCurrency;
+    if (updates.totalPriceEur !== undefined) updateData.total_price_eur = updates.totalPriceEur;
+    if (updates.advancePaymentEur !== undefined) updateData.advance_payment_eur = updates.advancePaymentEur;
+    if (updates.remainingPaymentEur !== undefined) updateData.remaining_payment_eur = updates.remainingPaymentEur;
     if (updates.assuranceEnabled !== undefined) updateData.assurance_enabled = updates.assuranceEnabled;
     if (updates.assurancePercentage !== undefined) updateData.assurance_percentage = updates.assurancePercentage;
     if (updates.protectionAssuranceId !== undefined) updateData.protection_assurance_id = updates.protectionAssuranceId;

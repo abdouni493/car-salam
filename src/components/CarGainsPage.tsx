@@ -12,6 +12,7 @@ import { getVehicleExpenses } from '../services/expenseService';
 import { getCarsWithOwners } from '../services/carService';
 import { computeConsignmentSummary, reservationCommission, ownerDeliveryFee } from '../utils/consignmentMath';
 import { generateReportHTML } from './ReportPrintTemplate';
+import { eurOrUndefined } from '../utils/currency';
 
 interface CarGainsPageProps {
   lang: Language;
@@ -93,6 +94,10 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
             priceWeek: Math.round(Number(dbCar.price_week || dbCar.price_per_day * 2)),
             priceMonth: Math.round(Number(dbCar.price_month || dbCar.price_per_day * 4)),
             deposit: Math.round(Number(dbCar.deposit || dbCar.price_per_day * 2)),
+            priceDayEur: eurOrUndefined(dbCar.price_day_eur),
+            priceWeekEur: eurOrUndefined(dbCar.price_week_eur),
+            priceMonthEur: eurOrUndefined(dbCar.price_month_eur),
+            depositEur: eurOrUndefined(dbCar.deposit_eur),
             images: dbCar.image_url ? [dbCar.image_url] : ['https://picsum.photos/seed/car/400/300'],
             mileage: dbCar.mileage || 0,
             status: dbCar.status === 'maintenance' ? 'maintenance' : 'disponible',

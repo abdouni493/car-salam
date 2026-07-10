@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Calendar, Users, Car as CarIcon, Plus, Search, Filter, Eye, Edit, Trash2, CheckCircle, XCircle, Clock, MapPin, Fuel, Camera, FileText, CreditCard, DollarSign, AlertTriangle, Phone, Mail, User, Loader } from 'lucide-react';
 import { DatabaseService } from '../services/DatabaseService';
 import { ReservationsService } from '../services/ReservationsService';
+import { DEFAULT_EUR_RATE, dzdToEur, formatMoney } from '../utils/currency';
 
 interface WebsiteOrdersProps {
   lang: Language;
@@ -390,15 +391,28 @@ export const WebsiteOrders: React.FC<WebsiteOrdersProps> = ({ lang, onOrdersChan
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="text-xs text-slate-500">{lang === 'fr' ? 'Total Réservation' : 'الإجمالي'}</div>
-                      <div className="text-xl font-black text-slate-900">
-                        {order.totalPrice.toLocaleString()} {lang === 'fr' ? 'DA' : 'د.ج'}
-                      </div>
+                      {order.paymentCurrency === 'EUR' ? (
+                        <>
+                          <div className="text-xl font-black text-slate-900">
+                            {formatMoney(order.totalPriceEur ?? dzdToEur(order.totalPrice, order.euroRate || DEFAULT_EUR_RATE), 'EUR')}
+                          </div>
+                          <div className="text-xs text-slate-500">≈ {formatMoney(order.totalPrice, 'DZD')}</div>
+                        </>
+                      ) : (
+                        <div className="text-xl font-black text-slate-900">{formatMoney(order.totalPrice, 'DZD')}</div>
+                      )}
                     </div>
-                    <div className="text-right">
+                    <div className="text-right space-y-1">
                       <div className="text-xs text-slate-500">{lang === 'fr' ? 'Statut' : 'الحالة'}</div>
                       <span className={`px-2 py-1 rounded-full text-xs font-bold ${statusBadge(order.status, lang).className}`}>
                         {statusBadge(order.status, lang).label}
                       </span>
+                      <div>
+                        <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          order.paymentCurrency === 'EUR' ? 'bg-blue-100 text-blue-800' : 'bg-emerald-100 text-emerald-800'}`}>
+                          {order.paymentCurrency === 'EUR' ? '💶 EUR' : '💵 DZD'}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -677,27 +691,65 @@ export const WebsiteOrders: React.FC<WebsiteOrdersProps> = ({ lang, onOrdersChan
 
                     <div className="bg-gradient-to-r from-orange-50 to-yellow-50 rounded-2xl p-6 border border-orange-200">
                       <h3 className="text-lg font-black text-orange-900 mb-4">
-                        💰 {lang === 'fr' ? 'Tarification' : 'التسعير'}
+                        💰 {lang === 'fr' ? 'Tarification & Paiement' : 'التسعير والدفع'}
                       </h3>
                       {(() => {
                         const servicesTotal = selectedOrder.servicesTotal || 0;
                         const carPortion = Math.max(0, selectedOrder.totalPrice - servicesTotal);
+                        const payInEur = selectedOrder.paymentCurrency === 'EUR';
+                        const rate = selectedOrder.euroRate || DEFAULT_EUR_RATE;
+                        // Le total euro convenu fait foi ; à défaut on reconvertit le total DZD.
+                        const totalEur = selectedOrder.totalPriceEur ?? dzdToEur(selectedOrder.totalPrice, rate);
                         return (
                           <div className="space-y-3">
+                            {/* Devise réglée par le client */}
+                            <div className="flex justify-between items-center pb-3 border-b border-orange-300">
+                              <span className="font-bold">{lang === 'fr' ? 'Devise de paiement:' : 'عملة الدفع:'}</span>
+                              <span className={`px-3 py-1 rounded-full text-sm font-black ${
+                                payInEur ? 'bg-blue-100 text-blue-800 border border-blue-300'
+                                         : 'bg-emerald-100 text-emerald-800 border border-emerald-300'}`}>
+                                {payInEur ? '💶 EUR (€)' : '💵 DZD (DA)'}
+                              </span>
+                            </div>
+
                             <div className="flex justify-between">
                               <span className="font-bold">{lang === 'fr' ? 'Prix véhicule:' : 'سعر المركبة:'}</span>
-                              <span>{carPortion.toLocaleString()} DA</span>
+                              <span>
+                                {formatMoney(carPortion, 'DZD')}
+                                {payInEur && <span className="text-slate-500 ml-2">≈ {formatMoney(dzdToEur(carPortion, rate), 'EUR')}</span>}
+                              </span>
                             </div>
                             {servicesTotal > 0 && (
                               <div className="flex justify-between">
                                 <span className="font-bold">{lang === 'fr' ? 'Services:' : 'الخدمات:'}</span>
-                                <span>{servicesTotal.toLocaleString()} DA</span>
+                                <span>
+                                  {formatMoney(servicesTotal, 'DZD')}
+                                  {payInEur && <span className="text-slate-500 ml-2">≈ {formatMoney(dzdToEur(servicesTotal, rate), 'EUR')}</span>}
+                                </span>
                               </div>
                             )}
-                            <div className="border-t border-orange-300 pt-2 flex justify-between font-black text-lg">
-                              <span>{lang === 'fr' ? 'Total:' : 'الإجمالي:'}</span>
-                              <span className="text-orange-600">{selectedOrder.totalPrice.toLocaleString()} DA</span>
+
+                            <div className="border-t border-orange-300 pt-3 flex justify-between font-black text-lg">
+                              <span>{lang === 'fr' ? 'Total à payer:' : 'المبلغ المستحق:'}</span>
+                              <span className="text-orange-600">
+                                {payInEur ? formatMoney(totalEur, 'EUR') : formatMoney(selectedOrder.totalPrice, 'DZD')}
+                              </span>
                             </div>
+
+                            {/* Contre-valeur + taux : l'agence encaisse en euros mais
+                                comptabilise en dinars. */}
+                            {payInEur && (
+                              <div className="bg-white/70 rounded-xl p-3 border border-orange-200 space-y-1 text-sm">
+                                <div className="flex justify-between">
+                                  <span className="text-slate-600">{lang === 'fr' ? 'Contre-valeur en dinars:' : 'ما يعادل بالدينار:'}</span>
+                                  <span className="font-bold text-slate-800">{formatMoney(selectedOrder.totalPrice, 'DZD')}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-slate-600">{lang === 'fr' ? 'Taux appliqué:' : 'السعر المطبق:'}</span>
+                                  <span className="font-bold text-slate-800">{rate.toLocaleString('fr-FR')} DA / €</span>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         );
                       })()}

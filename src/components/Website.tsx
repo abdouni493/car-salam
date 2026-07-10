@@ -77,7 +77,7 @@ export const Website: React.FC<WebsiteProps> = ({
               onClick={() => setCurrentPage('home')}
             >
               <div className="w-11 h-11 rounded-xl overflow-hidden ring-2 transition-all duration-300"
-                style={{ borderColor: 'rgba(220,38,38,0.25)', boxShadow: '0 0 16px rgba(220,38,38,0.2)' }}>
+                style={{ borderColor: 'rgba(180,83,9,0.25)', boxShadow: '0 0 16px rgba(180,83,9,0.2)' }}>
                 {websiteSettings?.logo ? (
                   <img
                     src={websiteSettings.logo}
@@ -87,7 +87,7 @@ export const Website: React.FC<WebsiteProps> = ({
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-vel-void text-xl font-black"
-                    style={{ background: 'linear-gradient(135deg, #DC2626, #B91C1C)', fontFamily: 'var(--font-display)' }}>
+                    style={{ background: 'linear-gradient(135deg, #B45309, #92400E)', fontFamily: 'var(--font-display)' }}>
                     A
                   </div>
                 )}
@@ -98,7 +98,7 @@ export const Website: React.FC<WebsiteProps> = ({
                   {shortName(websiteSettings?.name)}
                 </h1>
                 <p className="text-[10px] font-bold tracking-[0.2em] uppercase"
-                  style={{ color: '#DC2626', fontFamily: 'var(--font-display)' }}>
+                  style={{ color: '#B45309', fontFamily: 'var(--font-display)' }}>
                   {{ fr: 'Location de Voitures', ar: 'تأجير السيارات' }[lang]}
                 </p>
               </div>
@@ -119,7 +119,7 @@ export const Website: React.FC<WebsiteProps> = ({
                       : 'text-vel-muted hover:text-vel-slate'
                   }`}
                   style={{
-                    ...(currentPage === item.id ? { color: '#DC2626' } : {}),
+                    ...(currentPage === item.id ? { color: '#B45309' } : {}),
                     fontFamily: 'var(--font-display)'
                   }}
                 >
@@ -128,7 +128,7 @@ export const Website: React.FC<WebsiteProps> = ({
                     <motion.div
                       layoutId="nav-underline"
                       className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4 h-0.5 rounded-full"
-                      style={{ background: '#DC2626', boxShadow: '0 0 8px rgba(220,38,38,0.3)' }}
+                      style={{ background: '#B45309', boxShadow: '0 0 8px rgba(180,83,9,0.3)' }}
                     />
                   )}
                 </motion.button>
@@ -145,9 +145,9 @@ export const Website: React.FC<WebsiteProps> = ({
                   className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-200"
                   style={{
                     fontFamily: 'var(--font-display)',
-                    color: '#DC2626',
-                    border: '1px solid rgba(220,38,38,0.25)',
-                    background: 'rgba(220,38,38,0.06)',
+                    color: '#B45309',
+                    border: '1px solid rgba(180,83,9,0.25)',
+                    background: 'rgba(180,83,9,0.06)',
                   }}
                 >
                   {lang === 'fr' ? 'عربي' : 'FR'}
@@ -157,7 +157,7 @@ export const Website: React.FC<WebsiteProps> = ({
                 whileTap={{ scale: 0.95 }}
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
                 className="md:hidden p-2 rounded-lg text-vel-slate transition-all"
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#DC2626'; }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#B45309'; }}
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = ''; }}
                 style={{ background: isMobileMenuOpen ? 'rgba(15,23,42,0.04)' : 'transparent' }}
               >
@@ -182,7 +182,7 @@ export const Website: React.FC<WebsiteProps> = ({
                     currentPage === item.id ? '' : 'text-vel-muted hover:text-vel-slate'
                   }`}
                   style={{
-                    ...(currentPage === item.id ? { color: '#DC2626' } : {}),
+                    ...(currentPage === item.id ? { color: '#B45309' } : {}),
                     fontFamily: 'var(--font-display)'
                   }}
                 >
@@ -251,13 +251,13 @@ export const Website: React.FC<WebsiteProps> = ({
                 style={{ fontFamily: 'var(--font-display)' }}>
                 {shortName(websiteSettings?.name)}
               </h3>
-              <div className="w-12 h-0.5 mb-4" style={{ background: '#DC2626', boxShadow: '0 0 8px rgba(220,38,38,0.35)' }} />
+              <div className="w-12 h-0.5 mb-4" style={{ background: '#B45309', boxShadow: '0 0 8px rgba(180,83,9,0.35)' }} />
               <p className="text-vel-muted text-sm leading-relaxed">{websiteSettings?.description}</p>
             </div>
 
             {/* Nav links */}
             <div>
-              <h4 className="font-bold text-xs tracking-[0.2em] uppercase mb-5" style={{ color: '#DC2626', fontFamily: 'var(--font-display)' }}>
+              <h4 className="font-bold text-xs tracking-[0.2em] uppercase mb-5" style={{ color: '#B45309', fontFamily: 'var(--font-display)' }}>
                 {{ fr: 'Navigation', ar: 'الملاحة' }[lang]}
               </h4>
               <ul className="space-y-3">
@@ -266,7 +266,7 @@ export const Website: React.FC<WebsiteProps> = ({
                     <button
                       onClick={() => setCurrentPage(item.id as any)}
                       className="text-vel-muted text-sm transition-colors font-medium"
-                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#DC2626'; }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#B45309'; }}
                       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = ''; }}
                     >
                       {item.label[lang]}
@@ -278,23 +278,23 @@ export const Website: React.FC<WebsiteProps> = ({
 
             {/* Contact */}
             <div>
-              <h4 className="font-bold text-xs tracking-[0.2em] uppercase mb-5" style={{ color: '#DC2626', fontFamily: 'var(--font-display)' }}>
+              <h4 className="font-bold text-xs tracking-[0.2em] uppercase mb-5" style={{ color: '#B45309', fontFamily: 'var(--font-display)' }}>
                 {{ fr: 'Contact', ar: 'اتصل' }[lang]}
               </h4>
               <ul className="space-y-3 text-vel-muted text-sm">
                 {contactInfo?.phone && (
                   <li className="flex items-center gap-2">
-                    <span style={{ color: '#DC2626' }}>→</span> {contactInfo.phone}
+                    <span style={{ color: '#B45309' }}>→</span> {contactInfo.phone}
                   </li>
                 )}
                 {contactInfo?.email && (
                   <li className="flex items-center gap-2">
-                    <span style={{ color: '#DC2626' }}>→</span> {contactInfo.email}
+                    <span style={{ color: '#B45309' }}>→</span> {contactInfo.email}
                   </li>
                 )}
                 {contactInfo?.address && (
                   <li className="flex items-center gap-2">
-                    <span style={{ color: '#DC2626' }}>→</span> {contactInfo.address}
+                    <span style={{ color: '#B45309' }}>→</span> {contactInfo.address}
                   </li>
                 )}
               </ul>
@@ -302,14 +302,14 @@ export const Website: React.FC<WebsiteProps> = ({
 
             {/* Social */}
             <div>
-              <h4 className="font-bold text-xs tracking-[0.2em] uppercase mb-5" style={{ color: '#DC2626', fontFamily: 'var(--font-display)' }}>
+              <h4 className="font-bold text-xs tracking-[0.2em] uppercase mb-5" style={{ color: '#B45309', fontFamily: 'var(--font-display)' }}>
                 {{ fr: 'Suivez-nous', ar: 'تابعنا' }[lang]}
               </h4>
               <div className="flex flex-wrap gap-3">
                 {contactInfo?.facebook && (
                   <a href={contactInfo.facebook} target="_blank" rel="noopener noreferrer"
                     className="w-10 h-10 vel-glass rounded-lg flex items-center justify-center text-vel-muted transition-all text-sm font-bold"
-                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#DC2626'; }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#B45309'; }}
                     onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = ''; }}>
                     f
                   </a>
@@ -343,7 +343,7 @@ export const Website: React.FC<WebsiteProps> = ({
               <span className="text-vel-muted">{{ fr: 'Tous droits réservés.', ar: 'جميع الحقوق محفوظة.' }[lang]}</span>
             </p>
             <div className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: '#DC2626' }} />
+              <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: '#B45309' }} />
               <span className="text-vel-dim text-xs tracking-wider" style={{ fontFamily: 'var(--font-display)' }}>
                 POWERED BY AUTO LOCATION
               </span>

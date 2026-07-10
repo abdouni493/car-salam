@@ -1,5 +1,6 @@
 import { supabase } from '../supabase';
 import { AgencyBranding, Car, CarOwnerInfo, Client, Agency, Worker, WorkerAdvance, WorkerAbsence, WorkerPayment, StoreExpense, VehicleExpense, MaintenanceAlert, WebsiteOrder, ReservationDetails, SpecialOffer, ContactInfo, WebsiteSettings, PromoCode } from '../types';
+import { eurOrUndefined, DEFAULT_EUR_RATE } from '../utils/currency';
 
 /**
  * `website_settings` ne contient qu'une seule ligne, à cet identifiant fixe
@@ -40,6 +41,12 @@ export class DatabaseService {
       priceWeek: Math.round(Number(dbCar.price_week || dbCar.price_per_day * 2)),
       priceMonth: Math.round(Number(dbCar.price_month || dbCar.price_per_day * 4)),
       deposit: Math.round(Number(dbCar.deposit || dbCar.price_per_day * 2)),
+      // Tarifs euros saisis par l'agence. `undefined` (et non 0) quand la colonne est
+      // vide : c'est ce qui autorise le repli sur la conversion au taux courant.
+      priceDayEur: eurOrUndefined(dbCar.price_day_eur),
+      priceWeekEur: eurOrUndefined(dbCar.price_week_eur),
+      priceMonthEur: eurOrUndefined(dbCar.price_month_eur),
+      depositEur: eurOrUndefined(dbCar.deposit_eur),
       images: dbCar.image_url ? [dbCar.image_url] : ['https://picsum.photos/seed/car/400/300'],
       mileage: dbCar.mileage || 0,
       // Conserve 'maintenance' si c'est ce que la DB contient ;
@@ -1019,6 +1026,9 @@ export class DatabaseService {
           additional_fees,
           status,
           created_at,
+          payment_currency,
+          total_price_eur,
+          euro_rate,
           protection_assurance_id,
           protection_assurance_name,
           protection_assurance_price,
@@ -1041,8 +1051,10 @@ export class DatabaseService {
 
       if (error) {
         console.warn('Error fetching website orders:', error);
-        // Repli si la colonne source n'existe pas encore (migration non appliquée) :
-        // on retente sans le filtre pour ne pas casser l'affichage des commandes.
+        // Repli quand une colonne récente manque (`source`, ou les colonnes de
+        // devise ajoutées par 20260711_website_payment_currency.sql) : on retente
+        // sans elles pour ne pas casser l'affichage des commandes. La devise
+        // retombe alors sur 'DZD' à la cartographie.
         if (error.code === '42703' || /column .*source.* does not exist/i.test(error.message || '')) {
           const retry = await supabase
             .from('reservations')
@@ -1150,6 +1162,11 @@ export class DatabaseService {
         protectionAssurance,
         protectionAssuranceName: reservation.protection_assurance_name || undefined,
         assuranceTotal,
+        // Devise réglée par le client. Une commande antérieure à la migration
+        // (colonne absente ⇒ undefined) a forcément été réglée en dinars.
+        paymentCurrency: reservation.payment_currency === 'EUR' ? 'EUR' : 'DZD',
+        totalPriceEur: eurOrUndefined(reservation.total_price_eur),
+        euroRate: Number(reservation.euro_rate) || DEFAULT_EUR_RATE,
         status: reservation.status || 'pending',
         createdAt: reservation.created_at,
         source: 'website',

@@ -48,9 +48,9 @@ export const StepServices: React.FC = () => {
                   })}
                   className="rounded-2xl p-5 cursor-pointer transition-all duration-300 relative overflow-hidden"
                   style={{
-                    background: isSelected ? 'rgba(220,38,38,0.05)' : C.elevated,
-                    border: isSelected ? '1px solid rgba(220,38,38,0.25)' : '1px solid rgba(15,23,42,0.06)',
-                    boxShadow: isSelected ? '0 0 20px rgba(220,38,38,0.08)' : 'none',
+                    background: isSelected ? 'rgba(180,83,9,0.05)' : C.elevated,
+                    border: isSelected ? '1px solid rgba(180,83,9,0.25)' : '1px solid rgba(15,23,42,0.06)',
+                    boxShadow: isSelected ? '0 0 20px rgba(180,83,9,0.08)' : 'none',
                   }}
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -88,7 +88,7 @@ export const StepServices: React.FC = () => {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -16 }}
             className="rounded-2xl p-6 space-y-3"
-            style={{ background: 'rgba(220,38,38,0.05)', border: '1px solid rgba(220,38,38,0.16)' }}
+            style={{ background: 'rgba(180,83,9,0.05)', border: '1px solid rgba(180,83,9,0.16)' }}
           >
             <h4 className="font-black text-vel-ink" style={{ fontFamily: 'var(--font-display)' }}>
               🛒 {{ fr: 'Services sélectionnés', ar: 'الخدمات المختارة' }[lang]}
@@ -99,7 +99,7 @@ export const StepServices: React.FC = () => {
                 <span className="font-bold" style={{ color: C.accent }}>{s.price.toLocaleString()} {{ fr: 'DA', ar: 'د.ج' }[lang]}</span>
               </div>
             ))}
-            <div className="pt-3 flex justify-between items-center font-black text-base" style={{ borderTop: '1px solid rgba(220,38,38,0.16)' }}>
+            <div className="pt-3 flex justify-between items-center font-black text-base" style={{ borderTop: '1px solid rgba(180,83,9,0.16)' }}>
               <span className="text-vel-ink">{{ fr: 'Total services', ar: 'إجمالي الخدمات' }[lang]}</span>
               <span style={{ color: C.accent }}>{selectedServices.reduce((s, x) => s + x.price, 0).toLocaleString()} {{ fr: 'DA', ar: 'د.ج' }[lang]}</span>
             </div>

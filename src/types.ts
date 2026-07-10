@@ -59,6 +59,11 @@ export interface Car {
   priceWeek: number;
   priceMonth: number;
   deposit: number;
+  /** Tarifs en euros, saisis librement. Absents ⇒ conversion du tarif DZD au taux courant. */
+  priceDayEur?: number;
+  priceWeekEur?: number;
+  priceMonthEur?: number;
+  depositEur?: number;
   images: string[];
   mileage: number;
   fuelLevel?: 'full' | 'half' | 'quarter' | 'eighth' | 'empty';
@@ -448,11 +453,24 @@ export interface ReservationDetails {
   additionalServices: AdditionalService[];
   deposit: number;
   totalDays: number;
+  /** Montants de référence, toujours en dinars, quelle que soit `paymentCurrency`. */
   totalPrice: number;
   discountAmount: number;
   discountType: 'percentage' | 'fixed';
   advancePayment: number;
   remainingPayment: number;
+  /** Devise réglée par le client. Les colonnes DZD restent la référence comptable. */
+  paymentCurrency?: 'DZD' | 'EUR';
+  /** Contreparties en euros — renseignées seulement quand `paymentCurrency === 'EUR'`. */
+  totalPriceEur?: number | null;
+  advancePaymentEur?: number | null;
+  remainingPaymentEur?: number | null;
+  /** Taux DA/€ appliqué à la réservation (caution ET total). */
+  euroRate?: number;
+  /** Caution : montant de référence en dinars + devise dans laquelle elle est prise. */
+  cautionEnabled?: boolean;
+  cautionAmountDzd?: number;
+  cautionCurrency?: 'DZD' | 'EUR';
   status: 'pending' | 'accepted' | 'confirmed' | 'active' | 'completed' | 'cancelled';
   // Forfait d'assurance de protection sélectionné (snapshot + référence).
   protectionAssuranceId?: string;
@@ -656,8 +674,15 @@ export interface WebsiteOrder {
     additionalServices: AdditionalService[];
   };
   totalDays: number;
+  /** Toujours en dinars : devise de référence, quelle que soit `paymentCurrency`. */
   totalPrice: number;
   servicesTotal: number;
+  /** Devise choisie par le client au moment de la commande. */
+  paymentCurrency: 'DZD' | 'EUR';
+  /** Total en euros — renseigné seulement quand `paymentCurrency === 'EUR'`. */
+  totalPriceEur?: number;
+  /** Taux DA/€ appliqué à cette commande. */
+  euroRate: number;
   // Assurance de protection sélectionnée
   protectionAssurance?: ProtectionAssurance;
   protectionAssuranceName?: string;

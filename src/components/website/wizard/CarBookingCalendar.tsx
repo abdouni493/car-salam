@@ -126,7 +126,7 @@ export const CarBookingCalendar: React.FC<CarBookingCalendarProps> = ({
             {lang === 'fr' ? 'Sélectionné' : 'محدد'}
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded" style={{ background: 'rgba(239,68,68,0.45)' }} />
+            <span className="w-3 h-3 rounded" style={{ background: 'rgba(15,23,42,0.35)' }} />
             {lang === 'fr' ? 'Déjà réservé' : 'محجوز'}
           </span>
         </div>
@@ -134,7 +134,7 @@ export const CarBookingCalendar: React.FC<CarBookingCalendarProps> = ({
           onClick={clearDates}
           disabled={!range.from}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition-colors ${
-            range.from ? 'text-vel-slate hover:text-red-400' : 'text-vel-dim cursor-not-allowed'
+            range.from ? 'text-vel-slate hover:text-vel-gold' : 'text-vel-dim cursor-not-allowed'
           }`}
           style={{ border: '1px solid rgba(15,23,42,0.1)' }}
         >
@@ -152,7 +152,7 @@ export const CarBookingCalendar: React.FC<CarBookingCalendarProps> = ({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
             className="text-sm font-bold px-4 py-3 rounded-xl"
-            style={{ color: '#DC2626', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)' }}
+            style={{ color: '#B45309', background: 'rgba(180,83,9,0.08)', border: '1px solid rgba(180,83,9,0.25)' }}
           >
             ⚠️ {rangeError}
           </motion.p>

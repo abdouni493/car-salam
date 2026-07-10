@@ -12,6 +12,7 @@ import { CommissionModal } from './CommissionModal';
 import { Plus, Search, Loader2, RefreshCw } from 'lucide-react';
 import { motion } from 'motion/react';
 import { getCarsWithOwners, addCar, updateCar, deleteCar, AddCarData, CarOwnerInput } from '../services/carService';
+import { eurOrUndefined } from '../utils/currency';
 import { addVehicleExpense, getVehicleExpenses } from '../services/expenseService';
 import { ReservationsService } from '../services/ReservationsService';
 import { DatabaseService } from '../services/DatabaseService';
@@ -126,6 +127,10 @@ export const CarsPage: React.FC<CarsPageProps> = ({ lang, isAuthLoading = false,
           priceWeek: Math.round(Number(dbCar.price_week || dbCar.price_per_day * 2)),
           priceMonth: Math.round(Number(dbCar.price_month || dbCar.price_per_day * 4)),
           deposit: Math.round(Number(dbCar.deposit || dbCar.price_per_day * 2)),
+          priceDayEur: eurOrUndefined(dbCar.price_day_eur),
+          priceWeekEur: eurOrUndefined(dbCar.price_week_eur),
+          priceMonthEur: eurOrUndefined(dbCar.price_month_eur),
+          depositEur: eurOrUndefined(dbCar.deposit_eur),
           images: dbCar.image_url ? [dbCar.image_url] : ['https://picsum.photos/seed/car/400/300'],
           mileage: dbCar.mileage || 0,
           // Conserve 'maintenance' si en DB ; le vrai statut sera recalculé avec les réservations
@@ -270,6 +275,11 @@ export const CarsPage: React.FC<CarsPageProps> = ({ lang, isAuthLoading = false,
           price_week: carData.priceWeek || selectedCar.priceWeek,
           price_month: carData.priceMonth || selectedCar.priceMonth,
           deposit: carData.deposit || selectedCar.deposit,
+          // `?? null` et non `||` : un tarif euro remis à 0/vide doit être effacé en base.
+          price_day_eur: carData.priceDayEur ?? null,
+          price_week_eur: carData.priceWeekEur ?? null,
+          price_month_eur: carData.priceMonthEur ?? null,
+          deposit_eur: carData.depositEur ?? null,
           mileage: carData.mileage || selectedCar.mileage,
           fuel_level: carData.fuelLevel || selectedCar.fuelLevel || 'full',
           ownership_type: ownershipType,
@@ -302,6 +312,10 @@ export const CarsPage: React.FC<CarsPageProps> = ({ lang, isAuthLoading = false,
           price_week: carData.priceWeek || 0,
           price_month: carData.priceMonth || 0,
           deposit: carData.deposit || 0,
+          price_day_eur: carData.priceDayEur ?? null,
+          price_week_eur: carData.priceWeekEur ?? null,
+          price_month_eur: carData.priceMonthEur ?? null,
+          deposit_eur: carData.depositEur ?? null,
           mileage: carData.mileage || 0,
           ownership_type: ownershipType,
           description: carData.description || undefined,

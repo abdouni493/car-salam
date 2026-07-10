@@ -66,9 +66,23 @@ export const CarModal: React.FC<CarModalProps> = ({ isOpen, onClose, onSave, onD
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'year' || name === 'seats' || name === 'doors' || name.startsWith('price') || name === 'deposit' || name === 'mileage' 
-        ? Number(value) 
+      [name]: name === 'year' || name === 'seats' || name === 'doors' || name.startsWith('price') || name === 'deposit' || name === 'mileage'
+        ? Number(value)
         : value
+    }));
+  };
+
+  /**
+   * Tarifs euros : un champ vidé doit valoir `undefined` (tarif non défini ⇒ conversion
+   * automatique), et surtout pas 0 — qui serait enregistré comme « gratuit ».
+   */
+  const handleEurChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    const trimmed = value.trim();
+    const parsed = Number(trimmed);
+    setFormData(prev => ({
+      ...prev,
+      [name]: trimmed === '' || !Number.isFinite(parsed) || parsed < 0 ? undefined : parsed,
     }));
   };
 
@@ -317,31 +331,70 @@ export const CarModal: React.FC<CarModalProps> = ({ isOpen, onClose, onSave, onD
           <section className="space-y-6">
             <h3 className="text-xs font-black text-saas-primary-via flex items-center gap-3 uppercase tracking-[0.2em]">
               <span className="p-2 bg-saas-primary-via/10 rounded-lg">💰</span>
-              Tarification & Caution (DZD)
+              Tarification & Caution
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="grid grid-cols-1 gap-4">
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Colonne DZD */}
+              <div className="rounded-2xl border border-saas-border bg-saas-bg/60 p-5 space-y-4">
+                <p className="text-[11px] font-black uppercase tracking-widest text-saas-text-muted">
+                  Dinar algérien · DA
+                </p>
                 <div className="space-y-2">
                   <label className="label-saas">Prix / Jour</label>
-                  <input name="priceDay" type="number" value={formData.priceDay} onChange={handleChange} className="input-saas" />
+                  <input name="priceDay" type="number" min="0" value={formData.priceDay} onChange={handleChange} className="input-saas" />
                 </div>
                 <div className="space-y-2">
                   <label className="label-saas">Prix / Semaine</label>
-                  <input name="priceWeek" type="number" value={formData.priceWeek} onChange={handleChange} className="input-saas" />
+                  <input name="priceWeek" type="number" min="0" value={formData.priceWeek} onChange={handleChange} className="input-saas" />
                 </div>
                 <div className="space-y-2">
                   <label className="label-saas">Prix / Mois</label>
-                  <input name="priceMonth" type="number" value={formData.priceMonth} onChange={handleChange} className="input-saas" />
+                  <input name="priceMonth" type="number" min="0" value={formData.priceMonth} onChange={handleChange} className="input-saas" />
                 </div>
                 <div className="space-y-2">
                   <label className="label-saas">Caution</label>
-                  <input name="deposit" type="number" value={formData.deposit} onChange={handleChange} className="input-saas" />
+                  <input name="deposit" type="number" min="0" value={formData.deposit} onChange={handleChange} className="input-saas" />
                 </div>
               </div>
-              <div className="space-y-2">
-                <label className="label-saas">VIN (Châssis)</label>
-                <input name="vin" value={formData.vin} onChange={handleChange} className="input-saas" placeholder="Numéro de châssis" />
+
+              {/* Colonne EUR */}
+              <div className="rounded-2xl border border-amber-200 bg-amber-50/50 p-5 space-y-4">
+                <div>
+                  <p className="text-[11px] font-black uppercase tracking-widest text-amber-700">
+                    Euro · €
+                  </p>
+                  <p className="text-[11px] text-amber-700/80 mt-1 leading-snug">
+                    Facultatif. Laissez vide pour convertir automatiquement le tarif en dinars
+                    au taux de change de la réservation.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <label className="label-saas">Prix / Jour (€)</label>
+                  <input name="priceDayEur" type="number" min="0" step="0.01" value={formData.priceDayEur ?? ''}
+                    onChange={handleEurChange} className="input-saas" placeholder="Auto" />
+                </div>
+                <div className="space-y-2">
+                  <label className="label-saas">Prix / Semaine (€)</label>
+                  <input name="priceWeekEur" type="number" min="0" step="0.01" value={formData.priceWeekEur ?? ''}
+                    onChange={handleEurChange} className="input-saas" placeholder="Auto" />
+                </div>
+                <div className="space-y-2">
+                  <label className="label-saas">Prix / Mois (€)</label>
+                  <input name="priceMonthEur" type="number" min="0" step="0.01" value={formData.priceMonthEur ?? ''}
+                    onChange={handleEurChange} className="input-saas" placeholder="Auto" />
+                </div>
+                <div className="space-y-2">
+                  <label className="label-saas">Caution (€)</label>
+                  <input name="depositEur" type="number" min="0" step="0.01" value={formData.depositEur ?? ''}
+                    onChange={handleEurChange} className="input-saas" placeholder="Auto" />
+                </div>
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="label-saas">VIN (Châssis)</label>
+              <input name="vin" value={formData.vin} onChange={handleChange} className="input-saas" placeholder="Numéro de châssis" />
             </div>
           </section>
         </div>

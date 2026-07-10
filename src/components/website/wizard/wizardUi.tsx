@@ -3,9 +3,11 @@ import { motion } from 'motion/react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Language } from '../../../types';
 
-// ─── Palette claire "Automotive" (voir design-system/auto_location/MASTER.md) ──
+// ─── Palette claire "Automotive or & noir" (voir design-system/auto_location/MASTER.md) ──
 export const C = {
-  accent:    '#DC2626',
+  accent:    '#B45309',   // or lisible sur fond clair (AA)
+  gold:      '#D4AF37',   // or métallique : aplats et dégradés
+  black:     '#0F172A',   // texte posé sur les aplats or
   amber:     '#D97706',
   bg:        '#F8FAFC',
   surface:   '#FFFFFF',
@@ -39,8 +41,8 @@ export const inputStyle: React.CSSProperties = {
   color: '#0F172A',
 };
 export const focusInput = (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-  (e.target as HTMLElement).style.borderColor = '#DC2626';
-  (e.target as HTMLElement).style.boxShadow = '0 0 0 1px rgba(220,38,38,0.2)';
+  (e.target as HTMLElement).style.borderColor = '#B45309';
+  (e.target as HTMLElement).style.boxShadow = '0 0 0 1px rgba(180,83,9,0.2)';
 };
 export const blurInput = (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
   (e.target as HTMLElement).style.borderColor = 'rgba(15,23,42,0.1)';
@@ -53,7 +55,7 @@ export const inputClass = 'w-full px-4 py-3 rounded-xl outline-none transition-a
 export const SectionCard: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
   <div
     className={`rounded-2xl p-6 sm:p-8 space-y-6 ${className}`}
-    style={{ background: C.elevated, border: '1px solid rgba(220,38,38,0.08)' }}
+    style={{ background: C.elevated, border: '1px solid rgba(180,83,9,0.08)' }}
   >
     {children}
   </div>

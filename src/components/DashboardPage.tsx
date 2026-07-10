@@ -11,6 +11,7 @@ import { getVidangeAlert, getAssuranceAlert, getControleAlert, getChaineAlert } 
 import { ReservationsService } from '../services/ReservationsService';
 import { getReservationAlerts, ReservationAlert } from '../utils/reservationAlerts';
 import { scheduleNotification, checkAndTriggerScheduledNotifications, requestNotificationPermission } from '../services/notificationService';
+import { eurOrUndefined } from '../utils/currency';
 
 interface DashboardPageProps {
   lang: Language;
@@ -111,6 +112,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ lang, isAuthLoadin
           priceWeek: Math.round(Number(dbCar.price_week || dbCar.price_per_day * 2)),
           priceMonth: Math.round(Number(dbCar.price_month || dbCar.price_per_day * 4)),
           deposit: Math.round(Number(dbCar.deposit || dbCar.price_per_day * 2)),
+          priceDayEur: eurOrUndefined(dbCar.price_day_eur),
+          priceWeekEur: eurOrUndefined(dbCar.price_week_eur),
+          priceMonthEur: eurOrUndefined(dbCar.price_month_eur),
+          depositEur: eurOrUndefined(dbCar.deposit_eur),
           images: dbCar.image_url ? [dbCar.image_url] : ['https://picsum.photos/seed/car/400/300'],
           mileage: dbCar.mileage || 0,
           status: dbCar.status === 'maintenance' ? 'maintenance' : 'disponible',

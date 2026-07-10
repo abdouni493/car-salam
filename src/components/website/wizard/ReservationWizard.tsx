@@ -65,7 +65,7 @@ const WizardShell: React.FC<{ websiteSettings?: WebsiteSettings | null; onBackHo
     <div className="min-h-screen py-16 px-4 sm:px-6 lg:px-8" style={{ background: C.bg }}>
       {/* Halos d'arrière-plan */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-0 right-0 w-[600px] h-[600px]" style={{ background: 'radial-gradient(circle, rgba(220,38,38,0.04), transparent 70%)', transform: 'translate(30%, -30%)' }} />
+        <div className="absolute top-0 right-0 w-[600px] h-[600px]" style={{ background: 'radial-gradient(circle, rgba(180,83,9,0.04), transparent 70%)', transform: 'translate(30%, -30%)' }} />
         <div className="absolute bottom-0 left-0 w-[600px] h-[600px]" style={{ background: 'radial-gradient(circle, rgba(217,119,6,0.05), transparent 70%)', transform: 'translate(-30%, 30%)' }} />
       </div>
 
@@ -104,13 +104,13 @@ const WizardShell: React.FC<{ websiteSettings?: WebsiteSettings | null; onBackHo
                       className="w-11 h-11 rounded-full flex items-center justify-center transition-all duration-500"
                       style={{
                         background: isCompleted
-                          ? 'linear-gradient(135deg, #DC2626, #B91C1C)'
+                          ? 'linear-gradient(135deg, #D4AF37, #B45309)'
                           : isCurrent
-                          ? 'linear-gradient(135deg, rgba(220,38,38,0.16), rgba(217,119,6,0.18))'
+                          ? 'linear-gradient(135deg, rgba(180,83,9,0.16), rgba(217,119,6,0.18))'
                           : 'rgba(15,23,42,0.05)',
-                        border: isCompleted || isCurrent ? '2px solid #DC2626' : '2px solid rgba(15,23,42,0.1)',
-                        boxShadow: isCurrent ? '0 0 20px rgba(220,38,38,0.25)' : 'none',
-                        color: isCompleted ? '#FFFFFF' : isCurrent ? C.accent : '#64748B',
+                        border: isCompleted || isCurrent ? '2px solid #B45309' : '2px solid rgba(15,23,42,0.1)',
+                        boxShadow: isCurrent ? '0 0 20px rgba(180,83,9,0.25)' : 'none',
+                        color: isCompleted ? C.black : isCurrent ? C.accent : '#64748B',
                       }}
                     >
                       {isCompleted ? <Check size={17} /> : <Icon size={17} />}
@@ -122,7 +122,7 @@ const WizardShell: React.FC<{ websiteSettings?: WebsiteSettings | null; onBackHo
                   </button>
                   {n < WIZARD_STEP_COUNT && (
                     <div className="flex-1 max-w-16 h-0.5 mx-1.5 sm:mx-3 mt-5 rounded-full transition-all duration-700"
-                      style={{ background: step > n ? 'linear-gradient(90deg, #DC2626, #B91C1C)' : 'rgba(15,23,42,0.06)' }}
+                      style={{ background: step > n ? 'linear-gradient(90deg, #B45309, #92400E)' : 'rgba(15,23,42,0.06)' }}
                     />
                   )}
                 </React.Fragment>

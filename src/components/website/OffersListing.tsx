@@ -4,6 +4,7 @@ import { motion, useReducedMotion } from 'motion/react';
 import { Fuel, Settings, Users, DoorOpen, Gauge } from 'lucide-react';
 import { CarDetailsModal } from './CarDetailsModal';
 import { getCurrentSpecialOfferForCar } from '../../utils/specialOffers';
+import { carPricesEur, carEurRate, dzdToEur, formatMoney } from '../../utils/currency';
 
 interface OffersListingProps {
   lang: Language;
@@ -41,7 +42,7 @@ export const OffersListing: React.FC<OffersListingProps> = ({ lang, cars, specia
           className="text-center mb-14"
         >
           <p className="font-bold text-xs tracking-[0.25em] uppercase mb-4"
-            style={{ color: '#DC2626', fontFamily: 'var(--font-display)' }}>
+            style={{ color: '#B45309', fontFamily: 'var(--font-display)' }}>
             {{ fr: 'Nos Véhicules', ar: 'سياراتنا' }[lang]}
           </p>
           <h1 className="font-black text-5xl sm:text-6xl text-vel-ink" style={{ fontFamily: 'var(--font-display)' }}>
@@ -56,6 +57,9 @@ export const OffersListing: React.FC<OffersListingProps> = ({ lang, cars, specia
         <div className="grid grid-cols-1 min-[360px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 lg:gap-5">
           {cars.map((car, index) => {
             const promo = getCurrentSpecialOfferForCar(car.id, specialOffers);
+            // Tarifs euros de la fiche, ou conversion au taux implicite de l'agence.
+            const eur = carPricesEur(car);
+            const promoEur = promo ? dzdToEur(promo.newPrice, carEurRate(car)) : null;
             const specs = [
               { icon: Fuel, value: car.energy },
               { icon: Settings, value: car.transmission },
@@ -81,10 +85,10 @@ export const OffersListing: React.FC<OffersListingProps> = ({ lang, cars, specia
                 viewport={{ once: true, margin: '-40px' }}
                 transition={{ delay: reduceMotion ? 0 : Math.min(index % 8, 6) * 0.05, duration: 0.45 }}
                 whileHover={reduceMotion ? {} : { y: -4 }}
-                className="vel-glass rounded-xl overflow-hidden group cursor-pointer transition-shadow duration-300 flex flex-col outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                className="vel-glass rounded-xl overflow-hidden group cursor-pointer transition-shadow duration-300 flex flex-col outline-none focus-visible:ring-2 focus-visible:ring-vel-gold"
                 onMouseEnter={e => {
-                  (e.currentTarget as HTMLElement).style.borderColor = 'rgba(220,38,38,0.25)';
-                  (e.currentTarget as HTMLElement).style.boxShadow = '0 8px 30px rgba(220,38,38,0.09)';
+                  (e.currentTarget as HTMLElement).style.borderColor = 'rgba(180,83,9,0.25)';
+                  (e.currentTarget as HTMLElement).style.boxShadow = '0 8px 30px rgba(180,83,9,0.09)';
                 }}
                 onMouseLeave={e => {
                   (e.currentTarget as HTMLElement).style.borderColor = 'rgba(15,23,42,0.08)';
@@ -102,12 +106,12 @@ export const OffersListing: React.FC<OffersListingProps> = ({ lang, cars, specia
                   />
                   <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(8,12,20,0.7), transparent 55%)' }} />
                   <div className="absolute top-2 right-2 px-2 py-0.5 rounded-md text-[10px] font-bold backdrop-blur-sm"
-                    style={{ color: '#DC2626', background: 'rgba(220,38,38,0.1)', border: '1px solid rgba(220,38,38,0.25)', fontFamily: 'var(--font-display)' }}>
+                    style={{ color: '#B45309', background: 'rgba(180,83,9,0.1)', border: '1px solid rgba(180,83,9,0.25)', fontFamily: 'var(--font-display)' }}>
                     {car.year}
                   </div>
                   {promo && (
-                    <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md text-[10px] font-bold text-white shadow"
-                      style={{ background: '#EF4444', fontFamily: 'var(--font-display)' }}>
+                    <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md text-[10px] font-bold text-vel-black shadow"
+                      style={{ background: '#D4AF37', fontFamily: 'var(--font-display)' }}>
                       {promo.label || `-${Math.round((1 - promo.newPrice / promo.oldPrice) * 100)}%`}
                     </div>
                   )}
@@ -118,7 +122,7 @@ export const OffersListing: React.FC<OffersListingProps> = ({ lang, cars, specia
                   {/* Nom */}
                   <div className="min-w-0">
                     <h3 className="font-black text-sm text-vel-ink truncate" style={{ fontFamily: 'var(--font-display)' }}>
-                      {car.brand} <span style={{ color: '#DC2626' }}>{car.model}</span>
+                      {car.brand} <span style={{ color: '#B45309' }}>{car.model}</span>
                     </h3>
                     <p className="text-vel-muted text-[10px] truncate">{car.registration} · {car.color}</p>
                   </div>
@@ -134,39 +138,53 @@ export const OffersListing: React.FC<OffersListingProps> = ({ lang, cars, specia
                       <span key={i}
                         className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium text-vel-slate"
                         style={{ background: '#EEF2F7', border: '1px solid rgba(15,23,42,0.07)' }}>
-                        <s.icon size={9} style={{ color: 'rgba(220,38,38,0.55)' }} />
+                        <s.icon size={9} style={{ color: 'rgba(180,83,9,0.55)' }} />
                         {s.value}
                       </span>
                     ))}
                   </div>
 
-                  {/* Tous les tarifs, en rangées compactes */}
+                  {/* Tous les tarifs, en rangées compactes — dinar puis contre-valeur euro */}
                   <div className="rounded-lg px-2.5 py-2 space-y-1 mt-auto"
-                    style={{ background: 'rgba(220,38,38,0.05)', border: '1px solid rgba(220,38,38,0.1)' }}>
-                    <div className="flex justify-between items-baseline text-[10px]">
-                      <span className="text-vel-muted">{{ fr: 'Jour', ar: 'يوم' }[lang]}</span>
-                      {promo ? (
-                        <span className="font-black text-xs" style={{ color: '#DC2626' }}>
-                          <span className="line-through mr-1 font-medium" style={{ color: 'rgba(148,163,184,0.7)' }}>
-                            {car.priceDay.toLocaleString()}
+                    style={{ background: 'rgba(180,83,9,0.05)', border: '1px solid rgba(180,83,9,0.1)' }}>
+                    <div className="flex justify-between items-start gap-2 text-[10px]">
+                      <span className="text-vel-muted pt-px">{{ fr: 'Jour', ar: 'يوم' }[lang]}</span>
+                      <span className="text-right">
+                        {promo ? (
+                          <span className="font-black text-xs block" style={{ color: '#B45309' }}>
+                            <span className="line-through mr-1 font-medium" style={{ color: 'rgba(148,163,184,0.7)' }}>
+                              {car.priceDay.toLocaleString()}
+                            </span>
+                            {promo.newPrice.toLocaleString()} DA
                           </span>
-                          {promo.newPrice.toLocaleString()} DA
+                        ) : (
+                          <span className="font-black text-xs block" style={{ color: '#B45309' }}>{car.priceDay.toLocaleString()} DA</span>
+                        )}
+                        <span className="font-bold text-[9px] block text-vel-muted">
+                          {formatMoney(promoEur ?? eur.day, 'EUR')}
                         </span>
-                      ) : (
-                        <span className="font-black text-xs" style={{ color: '#DC2626' }}>{car.priceDay.toLocaleString()} DA</span>
-                      )}
+                      </span>
                     </div>
-                    <div className="flex justify-between items-baseline text-[10px]">
-                      <span className="text-vel-muted">{{ fr: 'Semaine', ar: 'أسبوع' }[lang]}</span>
-                      <span className="font-bold text-vel-slate">{car.priceWeek.toLocaleString()} DA</span>
+                    <div className="flex justify-between items-start gap-2 text-[10px]">
+                      <span className="text-vel-muted pt-px">{{ fr: 'Semaine', ar: 'أسبوع' }[lang]}</span>
+                      <span className="text-right">
+                        <span className="font-bold text-vel-slate block">{car.priceWeek.toLocaleString()} DA</span>
+                        <span className="font-bold text-[9px] block text-vel-muted">{formatMoney(eur.week, 'EUR')}</span>
+                      </span>
                     </div>
-                    <div className="flex justify-between items-baseline text-[10px]">
-                      <span className="text-vel-muted">{{ fr: 'Mois', ar: 'شهر' }[lang]}</span>
-                      <span className="font-bold text-vel-slate">{car.priceMonth.toLocaleString()} DA</span>
+                    <div className="flex justify-between items-start gap-2 text-[10px]">
+                      <span className="text-vel-muted pt-px">{{ fr: 'Mois', ar: 'شهر' }[lang]}</span>
+                      <span className="text-right">
+                        <span className="font-bold text-vel-slate block">{car.priceMonth.toLocaleString()} DA</span>
+                        <span className="font-bold text-[9px] block text-vel-muted">{formatMoney(eur.month, 'EUR')}</span>
+                      </span>
                     </div>
-                    <div className="flex justify-between items-baseline text-[10px] pt-1" style={{ borderTop: '1px solid rgba(15,23,42,0.06)' }}>
-                      <span className="text-vel-muted">{{ fr: 'Caution', ar: 'الكفالة' }[lang]}</span>
-                      <span className="font-bold" style={{ color: 'rgba(248,113,113,0.9)' }}>{car.deposit.toLocaleString()} DA</span>
+                    <div className="flex justify-between items-start gap-2 text-[10px] pt-1" style={{ borderTop: '1px solid rgba(15,23,42,0.06)' }}>
+                      <span className="text-vel-muted pt-px">{{ fr: 'Caution', ar: 'الكفالة' }[lang]}</span>
+                      <span className="text-right">
+                        <span className="font-bold block" style={{ color: '#B45309' }}>{car.deposit.toLocaleString()} DA</span>
+                        <span className="font-bold text-[9px] block text-vel-muted">{formatMoney(eur.deposit, 'EUR')}</span>
+                      </span>
                     </div>
                   </div>
 

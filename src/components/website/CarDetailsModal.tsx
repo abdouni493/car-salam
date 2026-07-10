@@ -2,6 +2,7 @@ import React from 'react';
 import { Language, Car } from '../../types';
 import { motion } from 'motion/react';
 import { X, Fuel, Settings, Users, DoorOpen, Palette, Gauge } from 'lucide-react';
+import { carPricesEur, formatMoney } from '../../utils/currency';
 
 interface CarDetailsModalProps {
   lang: Language;
@@ -11,6 +12,7 @@ interface CarDetailsModalProps {
 }
 
 export const CarDetailsModal: React.FC<CarDetailsModalProps> = ({ lang, car, onClose, onOrder }) => {
+  const eur = carPricesEur(car);
   const specs = [
     { icon: Fuel, label: { fr: 'Énergie', ar: 'الوقود' }, value: car.energy },
     { icon: Settings, label: { fr: 'Boîte', ar: 'علبة التروس' }, value: car.transmission },
@@ -38,8 +40,8 @@ export const CarDetailsModal: React.FC<CarDetailsModalProps> = ({ lang, car, onC
         className="relative rounded-3xl max-w-3xl w-full max-h-[90vh] overflow-y-auto"
         style={{
           background: '#FFFFFF',
-          border: '1px solid rgba(220,38,38,0.2)',
-          boxShadow: '0 0 60px rgba(220,38,38,0.06), 0 25px 50px rgba(15,23,42,0.15)',
+          border: '1px solid rgba(180,83,9,0.2)',
+          boxShadow: '0 0 60px rgba(180,83,9,0.06), 0 25px 50px rgba(15,23,42,0.15)',
         }}
       >
         {/* Close Button */}
@@ -52,7 +54,7 @@ export const CarDetailsModal: React.FC<CarDetailsModalProps> = ({ lang, car, onC
             background: 'rgba(15,23,42,0.06)',
             border: '1px solid rgba(15,23,42,0.1)',
           }}
-          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#DC2626'; }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = '#B45309'; }}
           onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = ''; }}
         >
           <X size={20} />
@@ -78,7 +80,7 @@ export const CarDetailsModal: React.FC<CarDetailsModalProps> = ({ lang, car, onC
           <div className="absolute bottom-6 left-6">
             <h2 className="font-black text-4xl text-white leading-none" style={{ fontFamily: 'var(--font-display)' }}>
               {car.brand}{' '}
-              <span style={{ color: '#F87171' }}>{car.model}</span>
+              <span style={{ color: '#E9C46A' }}>{car.model}</span>
             </h2>
             <p className="text-slate-200 mt-1">
               {car.registration} · {car.year}
@@ -94,7 +96,7 @@ export const CarDetailsModal: React.FC<CarDetailsModalProps> = ({ lang, car, onC
           {car.description && (
             <div>
               <h3 className="font-bold text-xs tracking-[0.2em] uppercase mb-4"
-                style={{ color: '#DC2626', fontFamily: 'var(--font-display)' }}>
+                style={{ color: '#B45309', fontFamily: 'var(--font-display)' }}>
                 {{ fr: 'Description', ar: 'الوصف' }[lang]}
               </h3>
               <p className="text-vel-muted text-sm leading-relaxed whitespace-pre-line">{car.description}</p>
@@ -104,13 +106,13 @@ export const CarDetailsModal: React.FC<CarDetailsModalProps> = ({ lang, car, onC
           {/* Specs Grid */}
           <div>
             <h3 className="font-bold text-xs tracking-[0.2em] uppercase mb-4"
-              style={{ color: '#DC2626', fontFamily: 'var(--font-display)' }}>
+              style={{ color: '#B45309', fontFamily: 'var(--font-display)' }}>
               {{ fr: 'Caractéristiques', ar: 'الخصائص' }[lang]}
             </h3>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               {specs.map((spec, i) => (
                 <div key={i} className="vel-glass rounded-xl p-4 flex items-center gap-3">
-                  <spec.icon size={16} className="flex-shrink-0" style={{ color: '#DC2626' }} />
+                  <spec.icon size={16} className="flex-shrink-0" style={{ color: '#B45309' }} />
                   <div className="min-w-0">
                     <p className="text-vel-muted text-xs">{spec.label[lang]}</p>
                     <p className="text-vel-ink font-bold text-sm truncate">{spec.value}</p>
@@ -123,17 +125,18 @@ export const CarDetailsModal: React.FC<CarDetailsModalProps> = ({ lang, car, onC
           {/* Pricing Section */}
           <div>
             <h3 className="font-bold text-xs tracking-[0.2em] uppercase mb-4"
-              style={{ color: '#DC2626', fontFamily: 'var(--font-display)' }}>
+              style={{ color: '#B45309', fontFamily: 'var(--font-display)' }}>
               {{ fr: 'Tarifs', ar: 'الأسعار' }[lang]}
             </h3>
             <div className="grid grid-cols-3 gap-3 mb-3">
               <div className="vel-glass-accent rounded-xl p-4 text-center">
-                <p className="font-black text-2xl" style={{ color: '#DC2626', fontFamily: 'var(--font-display)' }}>
+                <p className="font-black text-2xl" style={{ color: '#B45309', fontFamily: 'var(--font-display)' }}>
                   {car.priceDay.toLocaleString()}
                 </p>
                 <p className="text-vel-muted text-xs mt-1">
                   {{ fr: 'DA / jour', ar: 'د.ج / يوم' }[lang]}
                 </p>
+                <p className="font-bold text-xs mt-1" style={{ color: '#B45309' }}>{formatMoney(eur.day, 'EUR')}</p>
               </div>
               <div className="vel-glass rounded-xl p-4 text-center">
                 <p className="font-black text-2xl text-vel-slate" style={{ fontFamily: 'var(--font-display)' }}>
@@ -142,6 +145,7 @@ export const CarDetailsModal: React.FC<CarDetailsModalProps> = ({ lang, car, onC
                 <p className="text-vel-muted text-xs mt-1">
                   {{ fr: 'DA / semaine', ar: 'د.ج / أسبوع' }[lang]}
                 </p>
+                <p className="font-bold text-xs mt-1 text-vel-muted">{formatMoney(eur.week, 'EUR')}</p>
               </div>
               <div className="vel-glass rounded-xl p-4 text-center">
                 <p className="font-black text-2xl text-vel-slate" style={{ fontFamily: 'var(--font-display)' }}>
@@ -150,23 +154,25 @@ export const CarDetailsModal: React.FC<CarDetailsModalProps> = ({ lang, car, onC
                 <p className="text-vel-muted text-xs mt-1">
                   {{ fr: 'DA / mois', ar: 'د.ج / شهر' }[lang]}
                 </p>
+                <p className="font-bold text-xs mt-1 text-vel-muted">{formatMoney(eur.month, 'EUR')}</p>
               </div>
             </div>
 
             {/* Deposit */}
             <div className="rounded-xl p-4 flex items-center justify-between"
               style={{
-                background: 'rgba(239,68,68,0.08)',
-                border: '1px solid rgba(239,68,68,0.25)',
+                background: 'rgba(180,83,9,0.08)',
+                border: '1px solid rgba(180,83,9,0.25)',
               }}>
               <div>
                 <p className="text-xs text-vel-muted mb-0.5">{{ fr: 'Caution requise', ar: 'الكفالة المطلوبة' }[lang]}</p>
-                <p className="font-black text-2xl text-vel-red" style={{ fontFamily: 'var(--font-display)' }}>
+                <p className="font-black text-2xl text-vel-gold" style={{ fontFamily: 'var(--font-display)' }}>
                   {car.deposit.toLocaleString()} {{ fr: 'DA', ar: 'د.ج' }[lang]}
                 </p>
+                <p className="font-bold text-xs mt-0.5" style={{ color: '#B45309' }}>{formatMoney(eur.deposit, 'EUR')}</p>
               </div>
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center text-vel-red text-lg"
-                style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)' }}>
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center text-vel-gold text-lg"
+                style={{ background: 'rgba(180,83,9,0.12)', border: '1px solid rgba(180,83,9,0.3)' }}>
                 🏦
               </div>
             </div>

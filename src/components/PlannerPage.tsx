@@ -1213,29 +1213,18 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
 
               {/* Special Actions Row */}
               <div className="flex gap-2 items-center flex-wrap">
-                {/* Pending Status - Start Inspection */}
-                {reservation.status === 'pending' && (
+                {/*
+                  Inspection de départ — réservations en attente ou acceptées.
+                  Les deux ouvrent le même écran d'inspection seul : le formulaire
+                  d'édition ne connaît pas `inspectionMode` et affichait donc tout
+                  l'assistant au lieu de la seule check-list.
+                */}
+                {(reservation.status === 'pending' || reservation.status === 'accepted') && (
                   <button
                     onClick={() => {
-                      // Open inspection mode for pending reservation
-                      setSelectedReservation(reservation);
-                      setShowInspectionMode(true);
-                      setCurrentView('create');
-                    }}
-                    className="flex-1 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white font-bold py-2.5 px-4 rounded-xl transition-all text-sm shadow-sm"
-                  >
-                    📋 {lang === 'fr' ? 'Inspection' : 'الفحص'}
-                  </button>
-                )}
-
-                {/* Accepted Status - Start Inspection (same as pending) */}
-                {reservation.status === 'accepted' && (
-                  <button
-                    onClick={() => {
-                      // Open inspection mode for accepted reservation in edit mode
                       setSelectedReservation({ ...reservation });
                       setShowInspectionMode(true);
-                      setCurrentView('edit');
+                      setCurrentView('create');
                     }}
                     className="flex-1 bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white font-bold py-2.5 px-4 rounded-xl transition-all text-sm shadow-sm"
                   >

@@ -1,7 +1,10 @@
 import React, { useRef, useState } from 'react';
 import { Language, Agency } from '../../types';
 import { motion, useScroll, useTransform } from 'motion/react';
-import { ChevronDown, Shield, Zap, Star, ArrowRight, Car as CarIcon, MapPin, CalendarDays, Search } from 'lucide-react';
+import {
+  ChevronDown, Zap, ArrowRight, Car as CarIcon, MapPin, CalendarDays, Search,
+  Check, ShieldCheck, Headphones, Receipt, Gem, Wallet, Headset,
+} from 'lucide-react';
 import { Hero3D } from './Hero3D';
 import { ShowcaseBand } from './ShowcaseBand';
 import { HERO_SPLINE_SCENE_URL } from '../../constants';
@@ -10,9 +13,11 @@ import { toYmd } from './wizard/wizardUi';
 
 // ─── Colour tokens for this page ───────────────────────────────────────────
 const C = {
-  accent:    '#DC2626',
+  accent:    '#B45309',   // or lisible sur fond clair (AA)
+  gold:      '#D4AF37',   // or métallique : aplats et dégradés
+  black:     '#0F172A',   // texte posé sur les aplats or
   amber:     '#D97706',
-  accentDim: 'rgba(220,38,38,0.1)',
+  accentDim: 'rgba(180,83,9,0.1)',
   amberDim:  'rgba(217,119,6,0.1)',
   bg:        '#F8FAFC',
   surface:   '#FFFFFF',
@@ -32,7 +37,7 @@ function HeroVisual() {
         animate={{ rotate: 360 }}
         transition={{ duration: 28, repeat: Infinity, ease: 'linear' }}
         className="absolute w-[400px] h-[400px] rounded-full"
-        style={{ border: '1px solid rgba(220,38,38,0.09)' }}
+        style={{ border: '1px solid rgba(180,83,9,0.09)' }}
       >
         <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full"
           style={{ background: C.accent, boxShadow: `0 0 14px ${C.accent}` }} />
@@ -54,7 +59,7 @@ function HeroVisual() {
         animate={{ scale: [1, 1.07, 1], opacity: [0.35, 0.65, 0.35] }}
         transition={{ duration: 3, repeat: Infinity }}
         className="absolute w-[180px] h-[180px] rounded-full"
-        style={{ border: '1px solid rgba(220,38,38,0.3)' }}
+        style={{ border: '1px solid rgba(180,83,9,0.3)' }}
       />
 
       {/* Corner accent dots */}
@@ -83,13 +88,13 @@ function BookingSearchPanel({ lang, agencies, onSearch, hasBg }: {
 
   const isValid = !!departureAgencyId && !!from && !!to && from <= to && from >= today;
 
-  const selectClass = "w-full px-4 py-3 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-900 outline-none hover:border-red-400 focus:border-red-500 focus:ring-4 focus:ring-red-500/10 transition-all duration-200 cursor-pointer shadow-sm";
-  const inputClass = "w-full px-4 py-3 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-900 outline-none hover:border-red-400 focus:border-red-500 focus:ring-4 focus:ring-red-500/10 transition-all duration-200 shadow-sm";
+  const selectClass = "w-full px-4 py-3 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-900 outline-none hover:border-vel-gold focus:border-vel-gold focus:ring-4 focus:ring-vel-gold/10 transition-all duration-200 cursor-pointer shadow-sm";
+  const inputClass = "w-full px-4 py-3 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-900 outline-none hover:border-vel-gold focus:border-vel-gold focus:ring-4 focus:ring-vel-gold/10 transition-all duration-200 shadow-sm";
 
   const fields: { label: string; icon: React.ReactNode; el: React.ReactNode }[] = [
     {
       label: { fr: 'Lieu de départ', ar: 'مكان المغادرة' }[lang],
-      icon: <MapPin size={13} className="text-red-500" />,
+      icon: <MapPin size={13} className="text-vel-gold" />,
       el: (
         <select value={departureAgencyId} onChange={e => setDepartureAgencyId(e.target.value)}
           className={selectClass}>
@@ -100,7 +105,7 @@ function BookingSearchPanel({ lang, agencies, onSearch, hasBg }: {
     },
     {
       label: { fr: 'Lieu de retour', ar: 'مكان الإرجاع' }[lang],
-      icon: <MapPin size={13} className="text-red-500" />,
+      icon: <MapPin size={13} className="text-vel-gold" />,
       el: (
         <select value={returnAgencyId} onChange={e => setReturnAgencyId(e.target.value)}
           className={selectClass}>
@@ -111,7 +116,7 @@ function BookingSearchPanel({ lang, agencies, onSearch, hasBg }: {
     },
     {
       label: { fr: 'Date de départ', ar: 'تاريخ البدء' }[lang],
-      icon: <CalendarDays size={13} className="text-red-500" />,
+      icon: <CalendarDays size={13} className="text-vel-gold" />,
       el: (
         <input type="date" value={from} min={today}
           onChange={e => { setFrom(e.target.value); if (to && e.target.value > to) setTo(''); }}
@@ -120,7 +125,7 @@ function BookingSearchPanel({ lang, agencies, onSearch, hasBg }: {
     },
     {
       label: { fr: 'Date de retour', ar: 'تاريخ الإرجاع' }[lang],
-      icon: <CalendarDays size={13} className="text-red-500" />,
+      icon: <CalendarDays size={13} className="text-vel-gold" />,
       el: (
         <input type="date" value={to} min={from || today}
           onChange={e => setTo(e.target.value)}
@@ -169,12 +174,12 @@ function BookingSearchPanel({ lang, agencies, onSearch, hasBg }: {
           disabled={!isValid}
           whileHover={isValid ? { scale: 1.03, y: -1 } : {}}
           whileTap={isValid ? { scale: 0.97 } : {}}
-          className={`px-8 py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 whitespace-nowrap transition-all ${!isValid ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:shadow-lg hover:shadow-red-500/20'}`}
+          className={`px-8 py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 whitespace-nowrap transition-all ${!isValid ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:shadow-lg hover:shadow-vel-gold/20'}`}
           style={{
             fontFamily: 'var(--font-display)',
-            background: `linear-gradient(135deg, ${C.accent}, #B91C1C)`,
-            color: '#FFFFFF',
-            boxShadow: isValid ? '0 6px 20px rgba(220,38,38,0.25)' : 'none',
+            background: `linear-gradient(135deg, ${C.gold}, ${C.accent})`,
+            color: C.black,
+            boxShadow: isValid ? '0 6px 20px rgba(180,83,9,0.25)' : 'none',
           }}
         >
           {{ fr: 'Suivant', ar: 'التالي' }[lang]} <ArrowRight size={16} />
@@ -213,22 +218,40 @@ export const Welcome: React.FC<WelcomeProps> = ({ lang, websiteSettings, agencie
 
   const hasBg = !!websiteSettings?.landing_background;
 
-  const features = [
+  /** Nom d'enseigne affiché dans le titre « Pourquoi choisir … ? ». */
+  const brand = shortName(websiteSettings?.name || 'Car Salam');
+
+  /** Section « Confiance & confort » — cartes à coche. */
+  const trustPoints = [
     {
-      icon: Shield,
-      title: { fr: 'Assurance incluse', ar: 'التأمين مشمول' },
-      desc:  { fr: 'Tous nos véhicules sont assurés et couverts', ar: 'جميع سياراتنا مؤمنة ومغطاة' },
+      icon: CarIcon,
+      title: { fr: 'Voitures modernes', ar: 'سيارات حديثة' },
+      desc:  { fr: 'Une flotte récente, propre et régulièrement entretenue.', ar: 'أسطول حديث ونظيف تتم صيانته بانتظام.' },
     },
     {
-      icon: Zap,
-      title: { fr: 'Réservation rapide', ar: 'حجز سريع' },
-      desc:  { fr: 'En 3 étapes simples, réservez votre véhicule', ar: 'في 3 خطوات بسيطة احجز سيارتك' },
+      icon: ShieldCheck,
+      title: { fr: 'Assurance complète', ar: 'تأمين شامل' },
+      desc:  { fr: 'Chaque véhicule est assuré et couvert pendant toute la location.', ar: 'كل سيارة مؤمنة ومغطاة طوال مدة الإيجار.' },
     },
     {
-      icon: Star,
-      title: { fr: 'Flotte premium', ar: 'أسطول فاخر' },
-      desc:  { fr: 'Véhicules récents, propres et bien entretenus', ar: 'سيارات حديثة ونظيفة وجيدة الصيانة' },
+      icon: Headphones,
+      title: { fr: 'Service et assistance 24h/24', ar: 'خدمة ومساعدة على مدار الساعة' },
+      desc:  { fr: 'Une équipe joignable à toute heure, où que vous soyez.', ar: 'فريق متاح في أي وقت وأينما كنت.' },
     },
+    {
+      icon: Receipt,
+      title: { fr: 'Prix clairs et pas de frais cachés', ar: 'أسعار واضحة بدون رسوم خفية' },
+      desc:  { fr: 'Le tarif annoncé est le tarif payé, caution comprise.', ar: 'السعر المعلن هو السعر المدفوع، شاملاً الكفالة.' },
+    },
+  ];
+
+  /** Section « Pourquoi choisir … ? » — icônes animées. */
+  const whyUs = [
+    { icon: Gem,       title: { fr: 'Voitures de luxe', ar: 'سيارات فاخرة' } },
+    { icon: Wallet,    title: { fr: 'Meilleurs prix', ar: 'أفضل الأسعار' } },
+    { icon: Zap,       title: { fr: 'Réservation rapide', ar: 'حجز سريع' } },
+    { icon: Headset,   title: { fr: 'Service client professionnel', ar: 'خدمة عملاء احترافية' } },
+    { icon: MapPin,    title: { fr: "Disponible dans toute l'Algérie", ar: 'متوفر في جميع أنحاء الجزائر' } },
   ];
 
   return (
@@ -328,12 +351,12 @@ export const Welcome: React.FC<WelcomeProps> = ({ lang, websiteSettings, agencie
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.85, delay: 0.2 }}
               >
-                <h1 className="font-black leading-[0.92]" style={{ fontFamily: 'var(--font-display)' }}>
-                  <span className={`block text-5xl sm:text-6xl xl:text-7xl mb-1 ${hasBg ? 'text-white' : 'text-vel-ink'}`}>
-                    {{ fr: 'Vitesse', ar: 'سرعة' }[lang]}
+                <h1 className="font-black leading-[1.05]" style={{ fontFamily: 'var(--font-display)' }}>
+                  <span className={`block text-4xl sm:text-5xl xl:text-6xl mb-1 ${hasBg ? 'text-white' : 'text-vel-ink'}`}>
+                    {{ fr: 'Louez votre voiture', ar: 'استأجر سيارتك' }[lang]}
                   </span>
-                  <span className="block text-5xl sm:text-6xl xl:text-7xl" style={{ color: C.accent }}>
-                    {{ fr: '& Prestige', ar: '& فخامة' }[lang]}
+                  <span className="block text-4xl sm:text-5xl xl:text-6xl" style={{ color: C.accent }}>
+                    {{ fr: 'en toute confiance et confort.', ar: 'بكل ثقة وراحة.' }[lang]}
                   </span>
                 </h1>
               </motion.div>
@@ -410,7 +433,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ lang, websiteSettings, agencie
         </motion.div>
       </section>
 
-      {/* ══ FEATURES SECTION ══ */}
+      {/* ══ CONFIANCE & CONFORT — cartes à coche ══ */}
       <section className="relative py-24 px-4 sm:px-6 lg:px-8" style={{
         background: '#FFFFFF',
         borderTop: '1px solid rgba(15,23,42,0.06)',
@@ -426,26 +449,28 @@ export const Welcome: React.FC<WelcomeProps> = ({ lang, websiteSettings, agencie
           >
             <p className="font-bold text-xs tracking-[0.25em] uppercase mb-4"
               style={{ color: C.accent, fontFamily: 'var(--font-display)' }}>
-              {{ fr: 'Pourquoi nous choisir', ar: 'لماذا تختارنا' }[lang]}
+              {{ fr: 'Confiance & confort', ar: 'ثقة وراحة' }[lang]}
             </p>
-            <h2 className="font-black text-4xl text-vel-ink" style={{ fontFamily: 'var(--font-display)' }}>
-              {{ fr: "L'expérience automobile premium", ar: 'تجربة السيارات الفاخرة' }[lang]}
+            <h2 className="font-black text-3xl sm:text-4xl text-vel-ink max-w-3xl mx-auto leading-tight"
+              style={{ fontFamily: 'var(--font-display)' }}>
+              {{ fr: 'Louez votre voiture en toute confiance et confort.',
+                 ar: 'استأجر سيارتك بكل ثقة وراحة.' }[lang]}
             </h2>
           </motion.div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {features.map((f, i) => (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {trustPoints.map((p, i) => (
               <motion.div
                 key={i}
                 initial={{ opacity: 0, y: 40 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
-                transition={{ duration: 0.6, delay: i * 0.15 }}
+                transition={{ duration: 0.6, delay: i * 0.12 }}
                 whileHover={{ y: -6 }}
-                className="rounded-2xl p-8 space-y-4 transition-all duration-300 cursor-default"
+                className="relative overflow-hidden rounded-2xl p-7 flex flex-col gap-4 transition-all duration-300 cursor-default"
                 style={{
-                  background: 'rgba(220,38,38,0.04)',
-                  border: '1px solid rgba(220,38,38,0.09)',
+                  background: 'rgba(180,83,9,0.04)',
+                  border: '1px solid rgba(180,83,9,0.09)',
                   backdropFilter: 'blur(12px)',
                 }}
                 onMouseEnter={e => {
@@ -453,18 +478,107 @@ export const Welcome: React.FC<WelcomeProps> = ({ lang, websiteSettings, agencie
                   (e.currentTarget as HTMLElement).style.boxShadow = `0 0 30px ${C.accent}12`;
                 }}
                 onMouseLeave={e => {
-                  (e.currentTarget as HTMLElement).style.borderColor = 'rgba(220,38,38,0.09)';
+                  (e.currentTarget as HTMLElement).style.borderColor = 'rgba(180,83,9,0.09)';
                   (e.currentTarget as HTMLElement).style.boxShadow = 'none';
                 }}
               >
-                <div className="w-12 h-12 rounded-xl flex items-center justify-center"
-                  style={{ background: `${C.accent}14`, border: `1px solid ${C.accent}35` }}>
-                  <f.icon size={22} style={{ color: C.accent }} />
+                {/* Filet or en tête de carte */}
+                <span aria-hidden="true" className="absolute inset-x-0 top-0 h-px"
+                  style={{ background: `linear-gradient(90deg, transparent, ${C.gold}, transparent)` }} />
+
+                <div className="flex items-start justify-between gap-3">
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
+                    style={{ background: `${C.accent}14`, border: `1px solid ${C.accent}35` }}>
+                    <p.icon size={22} style={{ color: C.accent }} />
+                  </div>
+                  {/* Coche ✔ */}
+                  <span className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
+                    style={{ background: `linear-gradient(135deg, ${C.gold}, ${C.accent})` }}>
+                    <Check size={15} strokeWidth={3} color={C.black} />
+                  </span>
                 </div>
-                <h3 className="font-bold text-lg text-vel-ink" style={{ fontFamily: 'var(--font-display)' }}>
-                  {f.title[lang]}
+
+                <h3 className="font-bold text-lg text-vel-ink leading-snug" style={{ fontFamily: 'var(--font-display)' }}>
+                  {p.title[lang]}
                 </h3>
-                <p className="text-vel-muted text-sm leading-relaxed">{f.desc[lang]}</p>
+                <p className="text-vel-muted text-sm leading-relaxed">{p.desc[lang]}</p>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ══ POURQUOI CHOISIR <ENSEIGNE> ? — icônes animées ══ */}
+      <section className="relative py-24 px-4 sm:px-6 lg:px-8 overflow-hidden" style={{ background: C.bg }}>
+        <div className="absolute inset-0 pointer-events-none" style={{
+          background: `radial-gradient(ellipse 60% 50% at 50% 0%, ${C.accentDim}, transparent)`,
+        }} />
+
+        <div className="max-w-7xl mx-auto relative z-10">
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.7 }}
+            className="text-center mb-16"
+          >
+            <p className="font-bold text-xs tracking-[0.25em] uppercase mb-4"
+              style={{ color: C.accent, fontFamily: 'var(--font-display)' }}>
+              {{ fr: 'Nos atouts', ar: 'مزايانا' }[lang]}
+            </p>
+            <h2 className="font-black text-3xl sm:text-4xl text-vel-ink" style={{ fontFamily: 'var(--font-display)' }}>
+              {lang === 'fr' ? `Pourquoi choisir ${brand} ?` : `لماذا تختار ${brand}؟`}
+            </h2>
+          </motion.div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
+            {whyUs.map((w, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, y: 40 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.55, delay: i * 0.1 }}
+                whileHover="hover"
+                className="group relative rounded-2xl p-6 text-center flex flex-col items-center gap-4 cursor-default"
+                style={{ background: C.surface, border: '1px solid rgba(15,23,42,0.06)' }}
+                variants={{ hover: { y: -8, boxShadow: `0 18px 40px rgba(180,83,9,0.14)` } }}
+              >
+                <div className="relative">
+                  {/* Halo pulsé derrière l'icône */}
+                  <motion.span
+                    aria-hidden="true"
+                    className="absolute inset-0 rounded-2xl"
+                    style={{ background: C.accentDim }}
+                    animate={{ scale: [1, 1.25, 1], opacity: [0.5, 0.15, 0.5] }}
+                    transition={{ duration: 3, repeat: Infinity, delay: i * 0.3 }}
+                  />
+                  <motion.div
+                    className="relative w-14 h-14 rounded-2xl flex items-center justify-center"
+                    style={{
+                      background: `linear-gradient(135deg, ${C.gold}22, ${C.accent}18)`,
+                      border: `1px solid ${C.accent}35`,
+                    }}
+                    variants={{ hover: { scale: 1.12, rotate: -6 } }}
+                    transition={{ type: 'spring', stiffness: 320, damping: 16 }}
+                  >
+                    <w.icon size={24} style={{ color: C.accent }} />
+                  </motion.div>
+                </div>
+
+                <h3 className="font-bold text-base text-vel-ink leading-snug" style={{ fontFamily: 'var(--font-display)' }}>
+                  {w.title[lang]}
+                </h3>
+
+                {/* Soulignement or au survol */}
+                <motion.span
+                  aria-hidden="true"
+                  className="h-0.5 rounded-full"
+                  style={{ background: `linear-gradient(90deg, ${C.gold}, ${C.accent})` }}
+                  initial={{ width: 0 }}
+                  variants={{ hover: { width: 40 } }}
+                  transition={{ duration: 0.25 }}
+                />
               </motion.div>
             ))}
           </div>
@@ -506,9 +620,9 @@ export const Welcome: React.FC<WelcomeProps> = ({ lang, websiteSettings, agencie
             className="inline-flex items-center gap-2 text-lg px-12 py-5 rounded-xl font-bold transition-all duration-300"
             style={{
               fontFamily: 'var(--font-display)',
-              background: `linear-gradient(135deg, ${C.accent}, #B91C1C)`,
-              color: '#FFFFFF',
-              boxShadow: `0 6px 18px rgba(220,38,38,0.28)`,
+              background: `linear-gradient(135deg, ${C.gold}, ${C.accent})`,
+              color: C.black,
+              boxShadow: `0 6px 18px rgba(180,83,9,0.28)`,
             }}
           >
             <CarIcon size={20} /> {{ fr: 'Voir tous les véhicules', ar: 'عرض جميع السيارات' }[lang]}

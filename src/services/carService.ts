@@ -44,6 +44,11 @@ export interface Car {
   price_week?: number
   price_month?: number
   deposit?: number
+  /** Tarifs euros facultatifs : null ⇒ conversion du tarif DZD au taux courant. */
+  price_day_eur?: number | null
+  price_week_eur?: number | null
+  price_month_eur?: number | null
+  deposit_eur?: number | null
   mileage?: number
   fuel_level?: 'full' | 'half' | 'quarter' | 'eighth' | 'empty'
   is_hidden_from_site?: boolean
@@ -73,6 +78,11 @@ export interface AddCarData {
   price_week?: number
   price_month?: number
   deposit?: number
+  // Tarifs euros (optionnels : null ⇒ conversion du tarif DZD au taux courant)
+  price_day_eur?: number | null
+  price_week_eur?: number | null
+  price_month_eur?: number | null
+  deposit_eur?: number | null
   mileage?: number
   ownership_type?: 'personal' | 'consignment'
   description?: string
@@ -121,6 +131,10 @@ export async function addCar(carData: AddCarData): Promise<{ success: boolean; c
         price_week: carData.price_week,
         price_month: carData.price_month,
         deposit: carData.deposit,
+        price_day_eur: carData.price_day_eur ?? null,
+        price_week_eur: carData.price_week_eur ?? null,
+        price_month_eur: carData.price_month_eur ?? null,
+        deposit_eur: carData.deposit_eur ?? null,
         mileage: carData.mileage,
         ownership_type: carData.ownership_type || 'personal',
         description: carData.description,
