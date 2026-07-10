@@ -12,8 +12,8 @@
 --    `updateWebsiteSettings()` faisait « delete all + insert » : deux appels
 --    concurrents pouvaient dupliquer la ligne, et un insert en échec après le
 --    delete effaçait tout. Résultat en base : 3 lignes, toutes vides.
---    On fusionne les lignes en UNE ligne singleton, et un index unique
---    empêche définitivement les doublons.
+--    On fusionne les lignes en UNE ligne, et un index unique interdit
+--    définitivement les doublons. Le code écrit désormais par upsert.
 --
 -- 3) `agency_settings` : lue par les documents (BillingPage, éditeur de
 --    modèles) mais JAMAIS écrite -> nom et logo vides sur ces impressions.
@@ -88,19 +88,34 @@ update public.website_settings ws
   from (select name, address from public.agencies order by created_at limit 1) a
  where nullif(btrim(ws.name), '') is null;
 
--- 2.2 Verrou : une seule ligne, pour toujours. Clé primaire sur `id` + `id`
---     imposé => au plus une ligne. Un insert supplémentaire échoue bruyamment
---     au lieu de dupliquer silencieusement les réglages.
+-- 2.2 Verrou : au plus UNE ligne, pour toujours.
+--     `singleton` vaut toujours `true`, et l'index unique sur cette colonne
+--     interdit donc une deuxième ligne.
+--
+--     On ne verrouille PAS `id` sur une valeur fixe : un onglet encore ouvert
+--     sur l'ancien bundle fait « delete all + insert » avec un `id` aléatoire.
+--     Une contrainte `check (id = …)` rejetterait cet insert APRÈS le delete,
+--     laissant la table vide — exactement la perte de données qu'on corrige.
+--     Ici l'ancien client réinsère sa ligne, et le nouveau code fait un upsert
+--     sur l'`id` réellement présent.
+alter table public.website_settings
+  drop constraint if exists website_settings_singleton;
+
+alter table public.website_settings
+  add column if not exists singleton boolean not null default true;
+
 do $$
 begin
   if not exists (
-    select 1 from pg_constraint where conname = 'website_settings_singleton'
+    select 1 from pg_constraint where conname = 'website_settings_singleton_true'
   ) then
     alter table public.website_settings
-      add constraint website_settings_singleton
-      check (id = '00000000-0000-0000-0000-000000000001');
+      add constraint website_settings_singleton_true check (singleton);
   end if;
 end $$;
+
+create unique index if not exists website_settings_one_row
+  on public.website_settings (singleton);
 
 
 -- ─────────────────────────────────────────────────────────────────────────
@@ -129,16 +144,24 @@ begin
    limit 1;
 end $$;
 
+alter table public.agency_settings
+  drop constraint if exists agency_settings_singleton;
+
+alter table public.agency_settings
+  add column if not exists singleton boolean not null default true;
+
 do $$
 begin
   if not exists (
-    select 1 from pg_constraint where conname = 'agency_settings_singleton'
+    select 1 from pg_constraint where conname = 'agency_settings_singleton_true'
   ) then
     alter table public.agency_settings
-      add constraint agency_settings_singleton
-      check (id = '00000000-0000-0000-0000-000000000001');
+      add constraint agency_settings_singleton_true check (singleton);
   end if;
 end $$;
+
+create unique index if not exists agency_settings_one_row
+  on public.agency_settings (singleton);
 
 -- 3.1 Trigger : toute écriture sur `website_settings` recopie le branding dans
 --     `agency_settings`. `document_templates` n'est jamais touché.
@@ -148,19 +171,26 @@ language plpgsql
 security definer set search_path = public
 as $$
 begin
-  insert into public.agency_settings (
-    id, agency_name, slogan, address, phone, logo, updated_at
-  ) values (
-    '00000000-0000-0000-0000-000000000001',
-    new.name, new.description, new.address, new.phone, new.logo, now()
-  )
-  on conflict (id) do update
-     set agency_name = excluded.agency_name,
-         slogan      = excluded.slogan,
-         address     = excluded.address,
-         phone       = excluded.phone,
-         logo        = excluded.logo,
+  -- `agency_settings` ne contient qu'une ligne : un UPDATE sans WHERE la vise.
+  -- (Pas de `on conflict (id)` : l'unique ligne peut porter un `id` hérité,
+  --  et le conflit surviendrait alors sur l'index d'unicité, pas sur `id`.)
+  update public.agency_settings
+     set agency_name = new.name,
+         slogan      = new.description,
+         address     = new.address,
+         phone       = new.phone,
+         logo        = new.logo,
          updated_at  = now();
+
+  if not found then
+    insert into public.agency_settings (
+      id, agency_name, slogan, address, phone, logo, updated_at
+    ) values (
+      '00000000-0000-0000-0000-000000000001',
+      new.name, new.description, new.address, new.phone, new.logo, now()
+    );
+  end if;
+
   return new;
 end;
 $$;

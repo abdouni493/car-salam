@@ -256,21 +256,38 @@ export class DocumentTemplateService {
    * Update document templates for all document types
    */
   static async updateDocumentTemplates(templates: DocumentTemplates): Promise<DocumentTemplates> {
-    // `agency_settings` ne contient qu'une ligne (cf. migration 20260710).
-    // Un `update` seul ne créait rien tant que cette ligne n'existait pas :
-    // l'enregistrement des modèles échouait silencieusement sur base neuve.
-    const { data, error } = await supabase
+    // `agency_settings` ne contient qu'une ligne (cf. migration 20260710), mais
+    // son `id` peut être hérité d'une base antérieure : on cible la ligne
+    // réellement présente plutôt qu'un identifiant supposé. Un `update` seul ne
+    // créait rien tant qu'aucune ligne n'existait — l'enregistrement des modèles
+    // échouait alors silencieusement sur une base neuve.
+    const { data: existing, error: readError } = await supabase
       .from('agency_settings')
-      .upsert(
-        {
-          id: AGENCY_SETTINGS_ID,
-          document_templates: templates,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'id' }
-      )
-      .select('document_templates')
-      .single();
+      .select('id')
+      .limit(1)
+      .maybeSingle();
+
+    if (readError) {
+      throw new Error(`Failed to update document templates: ${readError.message}`);
+    }
+
+    const payload = {
+      document_templates: templates,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data, error } = existing
+      ? await supabase
+          .from('agency_settings')
+          .update(payload)
+          .eq('id', existing.id)
+          .select('document_templates')
+          .single()
+      : await supabase
+          .from('agency_settings')
+          .insert({ id: AGENCY_SETTINGS_ID, ...payload })
+          .select('document_templates')
+          .single();
 
     if (error) {
       throw new Error(`Failed to update document templates: ${error.message}`);
