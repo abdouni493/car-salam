@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X } from 'lucide-react';
 import { DatabaseService } from '../services/DatabaseService';
 import { supabase } from '../supabase';
+import { sessionService } from '../utils/sessionService';
 
 interface ConfigPageProps {
   lang: Language;
@@ -26,19 +27,35 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ lang, user }) => {
     logo: '',
   });
 
-  // Profile Settings - Load from workers table
+  // Deux natures de comptes, deux chemins d'écriture :
+  //  • admin   → compte Supabase Auth (auth.users + `profiles`). Une fois sa
+  //              session SDK restaurée, il écrit directement dans les tables.
+  //  • employé → ligne de `workers`. Sa session applicative n'est pas une session
+  //              Supabase : le client reste `anon`, pour qui RLS interdit `workers`.
+  //              Lecture et écriture passent donc par des RPC SECURITY DEFINER
+  //              qui vérifient le mot de passe actuel (cf. migration
+  //              20260711_profile_and_security_update.sql).
+  const isAdmin = user.role === 'admin';
+
+  // Profile Settings
   const [profileData, setProfileData] = useState({
     name: user.name,
     profilePhoto: user.avatar,
   });
+  /** Mot de passe actuel exigé de l'employé pour écrire via la RPC. */
+  const [profilePassword, setProfilePassword] = useState('');
 
-  // Security Settings - Load from workers table
+  // Security Settings
   const [securityData, setSecurityData] = useState({
     username: '',
     email: user.email,
+    currentPassword: '',
     newPassword: '',
     confirmPassword: '',
   });
+
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [savingSecurity, setSavingSecurity] = useState(false);
 
   // Database
   const [lastBackup] = useState('Aujourd\'hui à 10:45');
@@ -64,29 +81,34 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ lang, user }) => {
           logo: websiteSettings.logo || '',
         });
 
-        // Load worker data for profile and security
-        if (user.email) {
+        // Profil + sécurité.
+        // Admin : sa ligne `profiles` est lisible par tous (policy profiles_public_read).
+        // Employé : sa fiche `workers` n'est lisible qu'en présentant son mot de
+        // passe, qu'on n'a pas ici — on part donc des valeurs de la session, et le
+        // nom d'utilisateur reste vide jusqu'à ce qu'il le saisisse (la RPC de
+        // mise à jour conserve l'existant quand un champ est laissé vide).
+        if (user.email && isAdmin) {
           try {
-            const { data: workerData, error } = await supabase
-              .from('workers')
-              .select('full_name, profile_photo, username, email')
+            const { data: profile, error } = await supabase
+              .from('profiles')
+              .select('*')
               .eq('email', user.email)
               .maybeSingle();
 
-            if (!error && workerData) {
+            if (!error && profile) {
               setProfileData({
-                name: workerData.full_name,
-                profilePhoto: workerData.profile_photo || '',
+                name: profile.full_name || user.name,
+                profilePhoto: profile.profile_photo || user.avatar || '',
               });
 
               setSecurityData(prev => ({
                 ...prev,
-                username: workerData.username,
-                email: workerData.email,
+                username: profile.username || '',
+                email: profile.email || user.email,
               }));
             }
-          } catch (workerError) {
-            console.warn('Could not load worker data:', workerError);
+          } catch (profileError) {
+            console.warn('Could not load profile data:', profileError);
           }
         }
 
@@ -98,7 +120,7 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ lang, user }) => {
     };
 
     loadData();
-  }, [user.email]);
+  }, [user.email, isAdmin]);
 
   const handleGeneralChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -135,6 +157,228 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ lang, user }) => {
       console.error('Error updating agency info:', error);
       setNotification({ type: 'error', message: lang === 'fr' ? 'Erreur lors de la mise à jour des informations' : 'خطأ في تحديث المعلومات' });
       setTimeout(() => setNotification(null), 4000);
+    }
+  };
+
+  /** Affiche une notification et la retire au bout de quelques secondes. */
+  const notify = (type: 'success' | 'error', message: string, ms = 5000) => {
+    setNotification({ type, message });
+    setTimeout(() => setNotification(null), ms);
+  };
+
+  const tr = (fr: string, ar: string) => (lang === 'fr' ? fr : ar);
+
+  /**
+   * `profiles.profile_photo` manque tant que la migration n'a pas été jouée.
+   * PostgREST répond PGRST204 (colonne absente du cache de schéma) ; PostgreSQL
+   * répond 42703 quand la requête atteint la base.
+   */
+  const isMissingPhotoColumn = (error: { code?: string; message?: string } | null): boolean =>
+    !!error && (error.code === 'PGRST204' || error.code === '42703') && /profile_photo/.test(error.message || '');
+
+  /** Traduit les erreurs métier levées par les RPC en message lisible. */
+  const rpcErrorMessage = (message: string): string => {
+    if (message.includes('WRONG_PASSWORD')) return tr('Mot de passe actuel incorrect.', 'كلمة المرور الحالية غير صحيحة.');
+    if (message.includes('EMAIL_TAKEN')) return tr('Cet e-mail est déjà utilisé par un autre compte.', 'هذا البريد الإلكتروني مستخدم بالفعل.');
+    if (message.includes('WORKER_NOT_FOUND')) return tr('Compte introuvable.', 'الحساب غير موجود.');
+    if (message.includes('update_worker_account')) {
+      return tr(
+        "La fonction update_worker_account n'existe pas encore. Exécutez la migration supabase/migrations/20260711_profile_and_security_update.sql.",
+        'دالة update_worker_account غير موجودة بعد. نفّذ ملف الترحيل.'
+      );
+    }
+    return message;
+  };
+
+  /**
+   * Restaure la session Supabase de l'admin (le client tourne en
+   * `persistSession: false`, donc après un rechargement le SDK repasse en `anon`
+   * et RLS rejette silencieusement toute écriture).
+   */
+  const requireAdminSession = async (): Promise<boolean> => {
+    if (await sessionService.ensureSupabaseSession()) return true;
+    notify('error', tr(
+      'Votre session a expiré. Reconnectez-vous avant de modifier vos informations.',
+      'انتهت صلاحية جلستك. أعد تسجيل الدخول قبل تعديل معلوماتك.'
+    ));
+    return false;
+  };
+
+  // ─── Profil : nom affiché + photo ────────────────────────────────────────────
+  const handleSaveProfile = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const name = profileData.name.trim();
+    if (!name) {
+      notify('error', tr('Le nom complet ne peut pas être vide.', 'لا يمكن أن يكون الاسم الكامل فارغًا.'));
+      return;
+    }
+    if (!isAdmin && !profilePassword) {
+      notify('error', tr(
+        'Saisissez votre mot de passe actuel pour enregistrer votre profil.',
+        'أدخل كلمة المرور الحالية لحفظ ملفك الشخصي.'
+      ));
+      return;
+    }
+
+    setSavingProfile(true);
+    try {
+      let photoSkipped = false;
+
+      if (isAdmin) {
+        if (!(await requireAdminSession())) return;
+
+        const { error } = await supabase
+          .from('profiles')
+          .update({ full_name: name, profile_photo: profileData.profilePhoto || null })
+          .eq('email', user.email);
+
+        // `profiles.profile_photo` n'existe que depuis la migration
+        // 20260711_profile_and_security_update.sql. Tant qu'elle n'est pas jouée,
+        // le nom doit tout de même pouvoir être enregistré.
+        if (isMissingPhotoColumn(error)) {
+          photoSkipped = true;
+          const { error: retryError } = await supabase
+            .from('profiles')
+            .update({ full_name: name })
+            .eq('email', user.email);
+          if (retryError) throw retryError;
+        } else if (error) {
+          throw error;
+        }
+
+        // Garde auth.users aligné : c'est ce que la page de connexion relit.
+        const { error: metaError } = await supabase.auth.updateUser({ data: { full_name: name } });
+        if (metaError) console.warn('Auth metadata update failed:', metaError);
+      } else {
+        const { error } = await supabase.rpc('update_worker_account', {
+          p_email: user.email,
+          p_current_password: profilePassword,
+          p_full_name: name,
+          p_profile_photo: profileData.profilePhoto || null,
+        });
+        if (error) throw error;
+        setProfilePassword('');
+      }
+
+      notify(
+        photoSkipped ? 'error' : 'success',
+        photoSkipped
+          ? tr(
+              "Nom enregistré, mais la photo n'a pas pu l'être : exécutez la migration supabase/migrations/20260711_profile_and_security_update.sql.",
+              'تم حفظ الاسم، لكن تعذر حفظ الصورة: نفّذ ملف الترحيل 20260711_profile_and_security_update.sql.'
+            )
+          : tr(
+              'Profil mis à jour. Le nouveau nom apparaîtra à la prochaine connexion.',
+              'تم تحديث الملف الشخصي. سيظهر الاسم الجديد عند تسجيل الدخول التالي.'
+            ),
+        photoSkipped ? 8000 : 5000
+      );
+    } catch (error: any) {
+      console.error('Error updating profile:', error);
+      notify('error', rpcErrorMessage(error?.message || tr('erreur inconnue', 'خطأ غير معروف')));
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  // ─── Sécurité : nom d'utilisateur, e-mail, mot de passe ──────────────────────
+  const handleSaveSecurity = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+
+    const username = securityData.username.trim();
+    const newEmail = securityData.email.trim().toLowerCase();
+    const { currentPassword, newPassword, confirmPassword } = securityData;
+
+    const wantsNewPassword = newPassword.length > 0;
+    const emailChanged = newEmail !== (user.email || '').toLowerCase();
+
+    if (!newEmail) {
+      notify('error', tr("L'e-mail ne peut pas être vide.", 'لا يمكن أن يكون البريد الإلكتروني فارغًا.'));
+      return;
+    }
+    if (wantsNewPassword && newPassword.length < 6) {
+      notify('error', tr('Le mot de passe doit contenir au moins 6 caractères.', 'يجب أن تحتوي كلمة المرور على 6 أحرف على الأقل.'));
+      return;
+    }
+    if (wantsNewPassword && newPassword !== confirmPassword) {
+      notify('error', tr('Les deux mots de passe ne correspondent pas.', 'كلمتا المرور غير متطابقتين.'));
+      return;
+    }
+    // Modifier un identifiant exige de prouver qu'on est bien le titulaire du compte.
+    if (!currentPassword) {
+      notify('error', tr(
+        'Saisissez votre mot de passe actuel pour modifier vos informations de connexion.',
+        'أدخل كلمة المرور الحالية لتعديل معلومات تسجيل الدخول.'
+      ));
+      return;
+    }
+
+    setSavingSecurity(true);
+    try {
+      if (isAdmin) {
+        // `signInWithPassword` vérifie le mot de passe actuel ET ouvre la session
+        // dont `updateUser` a besoin. On la laisse ouverte : c'est exactement
+        // l'état que `ensureSupabaseSession` rétablirait de toute façon.
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: user.email,
+          password: currentPassword,
+        });
+        if (signInError) {
+          notify('error', tr('Mot de passe actuel incorrect.', 'كلمة المرور الحالية غير صحيحة.'));
+          return;
+        }
+
+        const payload: { email?: string; password?: string; data: Record<string, string> } = {
+          data: { username, full_name: profileData.name.trim() },
+        };
+        if (emailChanged) payload.email = newEmail;
+        if (wantsNewPassword) payload.password = newPassword;
+
+        const { error: updateError } = await supabase.auth.updateUser(payload);
+        if (updateError) throw updateError;
+
+        // Miroir applicatif (rôle, recherche par e-mail) — non bloquant.
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({ username, email: newEmail })
+          .eq('email', user.email);
+        if (profileError) console.warn('Profile mirror update failed:', profileError);
+      } else {
+        const { error } = await supabase.rpc('update_worker_account', {
+          p_email: user.email,
+          p_current_password: currentPassword,
+          p_username: username,
+          p_new_email: newEmail,
+          p_new_password: wantsNewPassword ? newPassword : null,
+        });
+        if (error) throw error;
+      }
+
+      // Les champs de mot de passe ne survivent jamais à une sauvegarde.
+      setSecurityData(prev => ({ ...prev, currentPassword: '', newPassword: '', confirmPassword: '' }));
+
+      // Un admin qui change d'e-mail doit confirmer via le lien reçu : tant qu'il
+      // ne l'a pas fait, l'ancienne adresse reste celle qui permet de se connecter.
+      const emailNotice = emailChanged && isAdmin
+        ? tr(
+            " Un e-mail de confirmation a été envoyé à la nouvelle adresse : la modification ne prendra effet qu'après validation.",
+            ' تم إرسال رسالة تأكيد إلى العنوان الجديد: لن يسري التغيير إلا بعد التحقق.'
+          )
+        : '';
+      const reloginNotice = wantsNewPassword || emailChanged
+        ? tr(' Reconnectez-vous avec vos nouveaux identifiants.', ' أعد تسجيل الدخول ببياناتك الجديدة.')
+        : '';
+
+      notify(
+        'success',
+        tr('Informations de connexion mises à jour.', 'تم تحديث معلومات تسجيل الدخول.') + emailNotice + reloginNotice,
+        7000
+      );
+    } catch (error: any) {
+      console.error('Error updating security info:', error);
+      notify('error', rpcErrorMessage(error?.message || tr('erreur inconnue', 'خطأ غير معروف')));
+    } finally {
+      setSavingSecurity(false);
     }
   };
 
@@ -201,6 +445,10 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ lang, user }) => {
       }
 
       try {
+        // Un admin écrit dans le Storage sous le rôle `authenticated` : sa session
+        // SDK doit être rétablie, sinon RLS rejette l'upload.
+        if (isAdmin) await sessionService.ensureSupabaseSession();
+
         // Upload to Supabase storage
         const fileExt = file.name.split('.').pop();
         const fileName = `${user.email}_profile.${fileExt}`;
@@ -217,28 +465,20 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ lang, user }) => {
           .from('workers')
           .getPublicUrl(filePath);
 
-        const publicUrl = urlData.publicUrl;
-
-        // Update local state
+        // La photo n'est que téléversée ici : elle est enregistrée sur le compte
+        // avec le reste du profil (un employé doit d'abord saisir son mot de passe).
         setProfileData(prev => ({
           ...prev,
-          profilePhoto: publicUrl,
+          profilePhoto: urlData.publicUrl,
         }));
 
-        // Update worker profile in database
-        const { error: updateError } = await supabase
-          .from('workers')
-          .update({ profile_photo: publicUrl })
-          .eq('email', user.email);
-
-        if (updateError) throw updateError;
-
-        setNotification({ type: 'success', message: lang === 'fr' ? 'Photo de profil mise à jour avec succès!' : 'تم تحديث صورة الملف بنجاح!' });
-        setTimeout(() => setNotification(null), 4000);
+        notify('success', tr(
+          'Photo téléversée. Cliquez sur « Enregistrer » pour l\'appliquer à votre profil.',
+          'تم رفع الصورة. اضغط على «حفظ» لتطبيقها على ملفك الشخصي.'
+        ));
       } catch (error) {
-        console.error('Error updating profile photo:', error);
-        setNotification({ type: 'error', message: lang === 'fr' ? 'Erreur lors de la mise à jour de la photo' : 'خطأ في تحديث الصورة' });
-        setTimeout(() => setNotification(null), 4000);
+        console.error('Error uploading profile photo:', error);
+        notify('error', tr('Erreur lors du téléversement de la photo', 'خطأ في رفع الصورة'));
       }
     }
   };
@@ -659,7 +899,7 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ lang, user }) => {
                   <h2 className="text-2xl font-black uppercase tracking-tighter">👤 {{fr: 'Mon Profil', ar: 'ملفي الشخصي'}[lang]}</h2>
                 </div>
 
-                <form className="p-8 space-y-6">
+                <form className="p-8 space-y-6" onSubmit={handleSaveProfile}>
                   {/* Profile Photo */}
                   <div className="space-y-4">
                     <label className="label-saas">📸 {{fr: 'Photo de profil', ar: 'صورة الملف'}[lang]}</label>
@@ -699,19 +939,43 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ lang, user }) => {
                     />
                   </div>
 
+                  {/* Un employé n'a pas de session Supabase : son mot de passe est
+                      la seule preuve d'identité acceptée par la RPC de mise à jour. */}
+                  {!isAdmin && (
+                    <div className="space-y-2">
+                      <label className="label-saas">🔑 {{fr: 'Mot de passe actuel', ar: 'كلمة المرور الحالية'}[lang]}</label>
+                      <input
+                        type="password"
+                        value={profilePassword}
+                        onChange={e => setProfilePassword(e.target.value)}
+                        placeholder="••••••••"
+                        autoComplete="current-password"
+                        className="input-saas"
+                      />
+                      <p className="text-xs text-saas-text-muted">
+                        {{fr: 'Requis pour confirmer les modifications de votre profil.', ar: 'مطلوب لتأكيد تعديلات ملفك الشخصي.'}[lang]}
+                      </p>
+                    </div>
+                  )}
+
                   {/* Save Button */}
                   <div className="flex gap-3 pt-6 border-t border-saas-border">
                     <button
                       type="button"
-                      className="flex-1 py-3 px-4 rounded-lg font-bold text-sm bg-white border-2 border-saas-border hover:bg-saas-bg-light transition-colors text-saas-text-main"
+                      onClick={() => { setProfileData(prev => ({ ...prev, name: user.name })); setProfilePassword(''); }}
+                      disabled={savingProfile}
+                      className="flex-1 py-3 px-4 rounded-lg font-bold text-sm bg-white border-2 border-saas-border hover:bg-saas-bg-light transition-colors text-saas-text-main disabled:opacity-50"
                     >
                       {{fr: 'Annuler', ar: 'إلغاء'}[lang]}
                     </button>
                     <button
                       type="submit"
-                      className="flex-1 btn-saas-primary py-3"
+                      disabled={savingProfile}
+                      className="flex-1 btn-saas-primary py-3 disabled:opacity-60"
                     >
-                      {{fr: 'Enregistrer', ar: 'حفظ'}[lang]}
+                      {savingProfile
+                        ? {fr: 'Enregistrement…', ar: 'جاري الحفظ…'}[lang]
+                        : {fr: 'Enregistrer', ar: 'حفظ'}[lang]}
                     </button>
                   </div>
                 </form>
@@ -725,7 +989,7 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ lang, user }) => {
                   </h2>
                 </div>
 
-                <form className="p-8 space-y-6">
+                <form className="p-8 space-y-6" onSubmit={handleSaveSecurity}>
                   {/* Username */}
                   <div className="space-y-2">
                     <label className="label-saas">👤 {{fr: 'Nom d\'utilisateur', ar: 'اسم المستخدم'}[lang]}</label>
@@ -734,6 +998,7 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ lang, user }) => {
                       name="username"
                       value={securityData.username}
                       onChange={handleSecurityChange}
+                      autoComplete="username"
                       className="input-saas"
                     />
                   </div>
@@ -746,8 +1011,26 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ lang, user }) => {
                       name="email"
                       value={securityData.email}
                       onChange={handleSecurityChange}
+                      autoComplete="email"
                       className="input-saas"
                     />
+                  </div>
+
+                  {/* Mot de passe actuel — exigé pour toute modification d'identifiant */}
+                  <div className="space-y-2">
+                    <label className="label-saas">🔑 {{fr: 'Mot de passe actuel', ar: 'كلمة المرور الحالية'}[lang]}</label>
+                    <input
+                      type="password"
+                      name="currentPassword"
+                      value={securityData.currentPassword}
+                      onChange={handleSecurityChange}
+                      placeholder="••••••••"
+                      autoComplete="current-password"
+                      className="input-saas"
+                    />
+                    <p className="text-xs text-saas-text-muted">
+                      {{fr: 'Requis pour changer l\'e-mail ou le mot de passe.', ar: 'مطلوب لتغيير البريد الإلكتروني أو كلمة المرور.'}[lang]}
+                    </p>
                   </div>
 
                   {/* New Password */}
@@ -759,8 +1042,12 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ lang, user }) => {
                       value={securityData.newPassword}
                       onChange={handleSecurityChange}
                       placeholder="••••••••"
+                      autoComplete="new-password"
                       className="input-saas"
                     />
+                    <p className="text-xs text-saas-text-muted">
+                      {{fr: 'Laissez vide pour conserver le mot de passe actuel (6 caractères minimum).', ar: 'اتركه فارغًا للاحتفاظ بكلمة المرور الحالية (6 أحرف على الأقل).'}[lang]}
+                    </p>
                   </div>
 
                   {/* Confirm Password */}
@@ -772,6 +1059,7 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ lang, user }) => {
                       value={securityData.confirmPassword}
                       onChange={handleSecurityChange}
                       placeholder="••••••••"
+                      autoComplete="new-password"
                       className="input-saas"
                     />
                   </div>
@@ -780,15 +1068,26 @@ export const ConfigPage: React.FC<ConfigPageProps> = ({ lang, user }) => {
                   <div className="flex gap-3 pt-6 border-t border-saas-border">
                     <button
                       type="button"
-                      className="flex-1 py-3 px-4 rounded-lg font-bold text-sm bg-white border-2 border-saas-border hover:bg-saas-bg-light transition-colors text-saas-text-main"
+                      onClick={() => setSecurityData(prev => ({
+                        ...prev,
+                        email: user.email,
+                        currentPassword: '',
+                        newPassword: '',
+                        confirmPassword: '',
+                      }))}
+                      disabled={savingSecurity}
+                      className="flex-1 py-3 px-4 rounded-lg font-bold text-sm bg-white border-2 border-saas-border hover:bg-saas-bg-light transition-colors text-saas-text-main disabled:opacity-50"
                     >
                       {{fr: 'Annuler', ar: 'إلغاء'}[lang]}
                     </button>
                     <button
                       type="submit"
-                      className="flex-1 btn-saas-primary py-3"
+                      disabled={savingSecurity}
+                      className="flex-1 btn-saas-primary py-3 disabled:opacity-60"
                     >
-                      {{fr: 'Mettre à jour', ar: 'تحديث'}[lang]}
+                      {savingSecurity
+                        ? {fr: 'Mise à jour…', ar: 'جاري التحديث…'}[lang]
+                        : {fr: 'Mettre à jour', ar: 'تحديث'}[lang]}
                     </button>
                   </div>
                 </form>
