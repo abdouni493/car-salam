@@ -14,6 +14,8 @@
 --    delete effaçait tout. Résultat en base : 3 lignes, toutes vides.
 --    On fusionne les lignes en UNE ligne, et un index unique interdit
 --    définitivement les doublons. Le code écrit désormais par upsert.
+--    Le branding déjà effacé est repêché depuis `agency_settings`, que le
+--    « delete all » n'a jamais touché (cf. 2).
 --
 -- 3) `agency_settings` : lue par les documents (BillingPage, éditeur de
 --    modèles) mais JAMAIS écrite -> nom et logo vides sur ces impressions.
@@ -25,6 +27,19 @@
 -- ============================================================================
 
 begin;
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- 0) LEVÉE DU VERROU D'`id` POSÉ PAR LA PREMIÈRE VERSION DE CETTE MIGRATION
+--    `check (id = <uuid fixe>)` rejetait l'insert d'un onglet resté sur
+--    l'ancien bundle (« delete all + insert » avec un id aléatoire) :
+--      « new row for relation "website_settings" violates check constraint
+--        "website_settings_singleton" »
+--    Le delete passait, l'insert échouait -> table vide. On lève la contrainte
+--    AVANT toute écriture, pour que les blocs suivants réinsèrent librement.
+-- ─────────────────────────────────────────────────────────────────────────
+alter table public.website_settings drop constraint if exists website_settings_singleton;
+alter table public.agency_settings  drop constraint if exists agency_settings_singleton;
+
 
 -- ─────────────────────────────────────────────────────────────────────────
 -- 1) CHAUFFEUR ET CAUTION SUR `reservation_services`
@@ -44,11 +59,19 @@ create index if not exists idx_reservation_services_driver
 -- 2) `website_settings` -> UNE SEULE LIGNE
 --    Fusion colonne par colonne : on garde, pour chaque champ, la valeur non
 --    vide la plus récente. Une ligne vide n'écrase donc jamais une vraie valeur.
+--
+--    Filet de secours : si le « delete all + insert » a vidé la table, le
+--    branding survit dans `agency_settings` — le delete ne visait que
+--    `website_settings`, et le trigger y avait recopié nom/slogan/logo/adresse.
+--    On repêche donc chaque champ manquant depuis ce miroir.
+--    (`phone_number_2`, `bank_number` et `landing_background` n'y sont pas
+--     recopiés : eux seuls sont réellement perdus et à ressaisir.)
 -- ─────────────────────────────────────────────────────────────────────────
 do $$
 declare
   v_id constant uuid := '00000000-0000-0000-0000-000000000001';
   v_merged record;
+  v_mirror record;
 begin
   -- `(array_agg(col order by updated_at desc) filter (where col non vide))[1]`
   -- = la valeur la plus récemment renseignée pour cette colonne.
@@ -64,6 +87,17 @@ begin
     into v_merged
     from public.website_settings;
 
+  -- Miroir de secours. Sur une table vide les agrégats renvoient une ligne de
+  -- NULL, donc `v_mirror` est toujours défini et chaque champ vaut au pire ''.
+  select
+    coalesce((array_agg(agency_name order by updated_at desc) filter (where nullif(btrim(agency_name), '') is not null))[1], '') as name,
+    coalesce((array_agg(slogan      order by updated_at desc) filter (where nullif(btrim(slogan), '')      is not null))[1], '') as description,
+    coalesce((array_agg(logo        order by updated_at desc) filter (where nullif(btrim(logo), '')        is not null))[1], '') as logo,
+    coalesce((array_agg(address     order by updated_at desc) filter (where nullif(btrim(address), '')     is not null))[1], '') as address,
+    coalesce((array_agg(phone       order by updated_at desc) filter (where nullif(btrim(phone), '')       is not null))[1], '') as phone
+    into v_mirror
+    from public.agency_settings;
+
   delete from public.website_settings;
 
   insert into public.website_settings (
@@ -71,10 +105,14 @@ begin
     bank_number, address, phone, landing_background, updated_at
   ) values (
     v_id,
-    coalesce(v_merged.name, ''),               coalesce(v_merged.description, ''),
-    coalesce(v_merged.logo, ''),               coalesce(v_merged.phone_number_2, ''),
-    coalesce(v_merged.bank_number, ''),        coalesce(v_merged.address, ''),
-    coalesce(v_merged.phone, ''),              coalesce(v_merged.landing_background, ''),
+    coalesce(nullif(v_merged.name, ''),        v_mirror.name,        ''),
+    coalesce(nullif(v_merged.description, ''), v_mirror.description, ''),
+    coalesce(nullif(v_merged.logo, ''),        v_mirror.logo,        ''),
+    coalesce(v_merged.phone_number_2, ''),
+    coalesce(v_merged.bank_number, ''),
+    coalesce(nullif(v_merged.address, ''),     v_mirror.address,     ''),
+    coalesce(nullif(v_merged.phone, ''),       v_mirror.phone,       ''),
+    coalesce(v_merged.landing_background, ''),
     now()
   );
 end $$;
@@ -97,10 +135,8 @@ update public.website_settings ws
 --     Une contrainte `check (id = …)` rejetterait cet insert APRÈS le delete,
 --     laissant la table vide — exactement la perte de données qu'on corrige.
 --     Ici l'ancien client réinsère sa ligne, et le nouveau code fait un upsert
---     sur l'`id` réellement présent.
-alter table public.website_settings
-  drop constraint if exists website_settings_singleton;
-
+--     sur l'`id` réellement présent. (Le `check (id = …)` de la première version
+--     a été levé en 0.)
 alter table public.website_settings
   add column if not exists singleton boolean not null default true;
 
@@ -143,9 +179,6 @@ begin
     from public.website_settings ws
    limit 1;
 end $$;
-
-alter table public.agency_settings
-  drop constraint if exists agency_settings_singleton;
 
 alter table public.agency_settings
   add column if not exists singleton boolean not null default true;
