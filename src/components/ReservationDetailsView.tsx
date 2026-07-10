@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Language, ReservationDetails, Payment, VehicleInspection, InspectionItem, Agency } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Calendar, Clock, MapPin, Fuel, Camera, FileText, CreditCard, DollarSign, Printer, AlertTriangle, CheckCircle, XCircle, Plus, Trash2, Edit, Eye, Car as CarIcon, User, Phone, Mail, CreditCard as CardIcon, Shield, Wrench, Sofa, Sparkles, Droplets } from 'lucide-react';
+import { ArrowLeft, Calendar, Clock, MapPin, Fuel, Camera, FileText, CreditCard, DollarSign, Printer, AlertTriangle, Check, CheckCircle, XCircle, Plus, Trash2, Edit, Eye, Car as CarIcon, User, Phone, Mail, CreditCard as CardIcon, Shield, Wrench, Sofa, Sparkles, Droplets } from 'lucide-react';
 import { ReservationsService } from '../services/ReservationsService';
 import { DatabaseService } from '../services/DatabaseService';
 import { supabase } from '../supabase';
@@ -1509,6 +1509,16 @@ export const ActivationModal: React.FC<{ lang: Language; reservation: Reservatio
   );
 };
 
+/**
+ * `inspection_checklist_items.category` (base) -> `InspectionItem.category` (front).
+ * Les deux vocabulaires coexistent : la base est en français, le type en anglais.
+ */
+const DB_CATEGORY_TO_INSPECTION: Record<string, InspectionItem['category']> = {
+  securite: 'security',
+  equipements: 'equipment',
+  confort: 'comfort',
+};
+
 export const CompletionModal: React.FC<{ lang: Language; reservation: ReservationDetails; onClose: () => void; onComplete?: (reservation: ReservationDetails) => void }> = ({ lang, reservation, onClose, onComplete }) => {
   const [returnMileage, setReturnMileage] = useState('');
   const [returnFuelLevel, setReturnFuelLevel] = useState<'full' | 'half' | 'quarter' | 'eighth' | 'empty'>('full');
@@ -1524,6 +1534,31 @@ export const CompletionModal: React.FC<{ lang: Language; reservation: Reservatio
   const [notes, setNotes] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Une réservation créée sans inspection de départ (statut 'pending') n'a aucun
+  // point de contrôle à recopier : la section retour serait alors vide. On charge
+  // dans ce cas la liste maître, tous points décochés.
+  useEffect(() => {
+    if (returnInspectionItems.length > 0) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const masterItems = await DatabaseService.getInspectionChecklistItems();
+        if (cancelled || !masterItems?.length) return;
+        setReturnInspectionItems(masterItems.map((item: any) => ({
+          id: item.id,
+          name: item.item_name,
+          checked: false,
+          category: DB_CATEGORY_TO_INSPECTION[item.category] ?? 'cleanliness',
+        })));
+      } catch (err) {
+        console.error('Error loading checklist items:', err);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, []);
 
   const totalDistance = returnMileage && reservation.departureInspection?.mileage
     ? parseInt(returnMileage) - reservation.departureInspection.mileage
@@ -1543,12 +1578,26 @@ export const CompletionModal: React.FC<{ lang: Language; reservation: Reservatio
   const equipmentItems = returnInspectionItems.filter(i => i.category === 'equipment');
   const comfortItems = returnInspectionItems.filter(i => i.category === 'comfort' || i.category === 'cleanliness');
 
+  // Mêmes catégories, mêmes icônes et même ordre que l'étape 3 de la création :
+  // l'agent retrouve la check-list de départ, à l'identique, au moment du retour.
+  const returnChecklistCategories = [
+    { key: 'security', title: lang === 'fr' ? 'Sécurité' : 'الأمان', icon: '🛡️', items: securityItems },
+    { key: 'equipment', title: lang === 'fr' ? 'Équipements' : 'المعدات', icon: '🔧', items: equipmentItems },
+    { key: 'comfort', title: lang === 'fr' ? 'Confort & Propreté' : 'الراحة والنظافة', icon: '✨', items: comfortItems },
+  ];
+
+  const checkedItemsCount = returnInspectionItems.filter(i => i.checked).length;
+
   const handleInspectionItemToggle = (itemId: string, checked?: boolean) => {
     setReturnInspectionItems(prev =>
       prev.map(item =>
         item.id === itemId ? { ...item, checked: checked !== undefined ? checked : !item.checked } : item
       )
     );
+  };
+
+  const setAllInspectionItems = (checked: boolean) => {
+    setReturnInspectionItems(prev => prev.map(item => ({ ...item, checked })));
   };
 
   const handleComplete = async () => {
@@ -1906,96 +1955,97 @@ export const CompletionModal: React.FC<{ lang: Language; reservation: Reservatio
             </div>
           </div>
 
-          {/* Return Inspection */}
-          <div className="bg-orange-50 rounded-2xl p-6 border border-orange-200">
-            <h4 className="text-lg font-black text-orange-900 mb-4">
-              🔄 {lang === 'fr' ? 'Vérification Retour (État de Retour)' : 'التحقق من العودة (حالة العودة)'}
-            </h4>
-            <div className="space-y-6">
-              {/* Security Items */}
+          {/* Return Inspection — même check-list que l'étape « Inspection Départ » de la création */}
+          <div className="space-y-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h5 className="font-bold text-orange-900 mb-2">🛡️ {lang === 'fr' ? 'Sécurité' : 'الأمان'}</h5>
-                <div className="space-y-2">
-                  {securityItems.map(item => (
-                    <div key={item.id} className="flex items-center justify-between bg-white p-3 rounded-lg border">
-                      <span className="font-bold capitalize text-orange-900">
-                        {item.name}
-                      </span>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleInspectionItemToggle(item.id, true)}
-                          className={`px-3 py-1 rounded font-bold text-sm ${item.checked ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-green-100'}`}
-                        >
-                          {lang === 'fr' ? 'Oui' : 'نعم'}
-                        </button>
-                        <button
-                          onClick={() => handleInspectionItemToggle(item.id, false)}
-                          className={`px-3 py-1 rounded font-bold text-sm ${!item.checked ? 'bg-red-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-red-100'}`}
-                        >
-                          {lang === 'fr' ? 'Non' : 'لا'}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <h4 className="text-xl font-black text-slate-900">
+                  ✅ {lang === 'fr' ? 'Contrôle d\'État du Véhicule (Retour)' : 'فحص حالة المركبة (العودة)'}
+                </h4>
+                <p className="text-sm font-bold text-slate-500 mt-1">
+                  {lang === 'fr'
+                    ? `${checkedItemsCount} / ${returnInspectionItems.length} points conformes`
+                    : `${checkedItemsCount} / ${returnInspectionItems.length} عناصر مطابقة`}
+                </p>
               </div>
-
-              {/* Equipment Items */}
-              <div>
-                <h5 className="font-bold text-orange-900 mb-2">🔧 {lang === 'fr' ? 'Équipements' : 'المعدات'}</h5>
-                <div className="space-y-2">
-                  {equipmentItems.map(item => (
-                    <div key={item.id} className="flex items-center justify-between bg-white p-3 rounded-lg border">
-                      <span className="font-bold capitalize text-orange-900">
-                        {item.name}
-                      </span>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleInspectionItemToggle(item.id, true)}
-                          className={`px-3 py-1 rounded font-bold text-sm ${item.checked ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-green-100'}`}
-                        >
-                          {lang === 'fr' ? 'Oui' : 'نعم'}
-                        </button>
-                        <button
-                          onClick={() => handleInspectionItemToggle(item.id, false)}
-                          className={`px-3 py-1 rounded font-bold text-sm ${!item.checked ? 'bg-red-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-red-100'}`}
-                        >
-                          {lang === 'fr' ? 'Non' : 'لا'}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+              {returnInspectionItems.length > 0 && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setAllInspectionItems(true)}
+                    className="px-4 py-2 rounded-lg border-2 border-green-500 text-green-700 hover:bg-green-50 font-bold text-sm transition-colors"
+                  >
+                    {lang === 'fr' ? 'Tout conforme' : 'الكل مطابق'}
+                  </button>
+                  <button
+                    onClick={() => setAllInspectionItems(false)}
+                    className="px-4 py-2 rounded-lg border-2 border-red-300 text-red-700 hover:bg-red-50 font-bold text-sm transition-colors"
+                  >
+                    {lang === 'fr' ? 'Tout décocher' : 'إلغاء تحديد الكل'}
+                  </button>
                 </div>
-              </div>
-
-              {/* Comfort & Cleanliness Items */}
-              <div>
-                <h5 className="font-bold text-orange-900 mb-2">✨ {lang === 'fr' ? 'Confort & Propreté' : 'الراحة والنظافة'}</h5>
-                <div className="space-y-2">
-                  {comfortItems.map(item => (
-                    <div key={item.id} className="flex items-center justify-between bg-white p-3 rounded-lg border">
-                      <span className="font-bold capitalize text-orange-900">
-                        {item.name}
-                      </span>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleInspectionItemToggle(item.id, true)}
-                          className={`px-3 py-1 rounded font-bold text-sm ${item.checked ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-green-100'}`}
-                        >
-                          {lang === 'fr' ? 'Oui' : 'نعم'}
-                        </button>
-                        <button
-                          onClick={() => handleInspectionItemToggle(item.id, false)}
-                          className={`px-3 py-1 rounded font-bold text-sm ${!item.checked ? 'bg-red-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-red-100'}`}
-                        >
-                          {lang === 'fr' ? 'Non' : 'لا'}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              )}
             </div>
+
+            {returnInspectionItems.length === 0 ? (
+              <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200">
+                <p className="font-bold text-slate-600">
+                  {lang === 'fr'
+                    ? 'Aucun point de contrôle disponible pour cette réservation.'
+                    : 'لا توجد عناصر فحص متاحة لهذا الحجز.'}
+                </p>
+              </div>
+            ) : (
+              returnChecklistCategories
+                .filter(category => category.items.length > 0)
+                .map(category => {
+                  const categoryCheckedCount = category.items.filter(i => i.checked).length;
+
+                  return (
+                    <div key={category.key} className="bg-white rounded-2xl shadow-lg p-6 border border-slate-200">
+                      <h5 className="text-lg font-black text-slate-900 mb-4 flex items-center gap-2">
+                        {category.icon} {category.title}
+                        <span className="ml-auto text-sm font-bold text-slate-500">
+                          {categoryCheckedCount} / {category.items.length}
+                        </span>
+                      </h5>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {category.items.map(item => (
+                          <div
+                            key={item.id}
+                            onClick={() => handleInspectionItemToggle(item.id)}
+                            role="checkbox"
+                            aria-checked={item.checked}
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                handleInspectionItemToggle(item.id);
+                              }
+                            }}
+                            className={`flex items-center gap-3 p-3 border-2 rounded-lg cursor-pointer transition-all ${
+                              item.checked
+                                ? 'border-green-500 bg-green-50'
+                                : 'border-red-300 bg-red-50'
+                            }`}
+                          >
+                            <div
+                              className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                                item.checked ? 'border-green-500 bg-green-500' : 'border-red-300 bg-red-300'
+                              }`}
+                            >
+                              {item.checked && <Check className="w-3 h-3 text-white" />}
+                            </div>
+                            <span className={`font-bold flex-1 ${item.checked ? 'text-green-800' : 'text-red-800'}`}>
+                              {item.name}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })
+            )}
           </div>
 
           {/* Signature */}

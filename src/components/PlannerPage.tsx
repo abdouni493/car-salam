@@ -528,7 +528,6 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
     return (
       <CreateReservationForm
         lang={lang}
-        defaultStatus="confirmed"
         onBack={async () => {
           setCurrentView('list');
           setShowInspectionMode(false);

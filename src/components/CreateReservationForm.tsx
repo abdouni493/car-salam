@@ -147,11 +147,10 @@ interface CreateReservationFormProps {
   onBack: () => void;
   inspectionMode?: boolean;
   initialData?: Partial<ReservationDetails>;
-  defaultStatus?: 'pending' | 'confirmed' | 'active' | 'completed' | 'cancelled';
   user?: any;
 }
 
-export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ lang, onBack, inspectionMode = false, initialData, defaultStatus = 'pending', user }) => {
+export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ lang, onBack, inspectionMode = false, initialData, user }) => {
   const [currentStep, setCurrentStep] = useState(inspectionMode ? 3 : 1);
   const [agencies, setAgencies] = useState<any[]>([]);
   const [isLoadingAgencies, setIsLoadingAgencies] = useState(true);
@@ -263,6 +262,21 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
     ...(initialData as unknown as Partial<ReservationWizardData> | undefined),
   }));
 
+  /**
+   * L'inspection de départ décide du statut de la réservation.
+   *
+   * La check-list est pré-remplie avec TOUS les points de contrôle décochés dès
+   * que la liste maître est chargée : sa simple présence ne prouve donc rien.
+   * Le seul signal fiable qu'une inspection a réellement eu lieu est qu'au moins
+   * un point ait été coché — d'où `some(checked)` plutôt que `length > 0`.
+   *
+   *   check-list touchée  -> 'confirmed' (véhicule inspecté, prêt à être activé)
+   *   check-list vierge   -> 'pending'   (réservation posée, inspection à faire)
+   */
+  const isDepartureChecklistTouched = (formData.step3?.departureInspection?.inspectionItems ?? [])
+    .some((item: any) => item?.checked);
+  const resolvedStatus: 'pending' | 'confirmed' = isDepartureChecklistTouched ? 'confirmed' : 'pending';
+
   const totalSteps = 6;
   const steps = [
     { id: 1, title: lang === 'fr' ? 'Dates & Lieux' : 'التواريخ والأماكن', icon: '📅' },
@@ -363,10 +377,11 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
       // Use appropriate function based on mode
       let reservationId: string;
       if (inspectionMode && initialData) {
-        // Update existing reservation in inspection mode and change status to confirmed
+        // Update existing reservation in inspection mode. Le statut suit la check-list :
+        // confirmée seulement si l'inspection de départ a été réellement remplie.
         reservationId = (initialData as any).id;
         await ReservationsService.updateReservation(reservationId, {
-          status: 'confirmed',
+          status: resolvedStatus,
           notes: formData.step6?.notes || '',
           totalPrice: totalPrice,
           advancePayment: advancePayment,
@@ -430,7 +445,8 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
             deposit: formData.step2?.selectedCar?.deposit || 0,
             advancePayment: advancePayment,
             remainingPayment: remainingPayment,
-            status: 'pending', // save as pending until confirmed
+            // 'confirmed' si la check-list d'inspection a été remplie, sinon 'pending'.
+            status: resolvedStatus,
             notes: formData.step6?.notes || '',
             // Caution and Assurance fields
             cautionAmountDzd: (formData.step6 as any)?.caution_amount_dzd || formData.step2?.selectedCar?.deposit || 0,
@@ -575,10 +591,17 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
       }
 
       // Confirmation visible avant de rendre la main au planificateur (qui recharge la liste).
+      // Le message annonce le statut réellement enregistré, pour que l'utilisateur
+      // comprenne pourquoi la réservation apparaît « En attente » plutôt que « Confirmée ».
+      const savedAsConfirmed = resolvedStatus === 'confirmed';
       setSuccessMessage(
         inspectionMode && initialData
-          ? (lang === 'fr' ? '✅ Réservation confirmée avec succès' : '✅ تم تأكيد الحجز بنجاح')
-          : (lang === 'fr' ? '✅ Réservation créée avec succès' : '✅ تم إنشاء الحجز بنجاح')
+          ? savedAsConfirmed
+            ? (lang === 'fr' ? '✅ Réservation confirmée avec succès' : '✅ تم تأكيد الحجز بنجاح')
+            : (lang === 'fr' ? '⏳ Réservation enregistrée en attente (inspection non remplie)' : '⏳ تم حفظ الحجز قيد الانتظار (لم يتم ملء الفحص)')
+          : savedAsConfirmed
+            ? (lang === 'fr' ? '✅ Réservation créée et confirmée' : '✅ تم إنشاء الحجز وتأكيده')
+            : (lang === 'fr' ? '⏳ Réservation créée en attente (inspection non remplie)' : '⏳ تم إنشاء الحجز قيد الانتظار (لم يتم ملء الفحص)')
       );
       setTimeout(onBack, 1200);
     } catch (err: any) {
@@ -695,6 +718,32 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
           </div>
         </motion.div>
       </AnimatePresence>
+
+      {/* Statut résultant — annoncé avant la soumission pour éviter la surprise. */}
+      {currentStep === totalSteps && (
+        <div
+          className={`rounded-2xl p-5 border-2 ${
+            resolvedStatus === 'confirmed'
+              ? 'bg-green-50 border-green-300'
+              : 'bg-amber-50 border-amber-300'
+          }`}
+        >
+          <p className={`font-black text-sm ${resolvedStatus === 'confirmed' ? 'text-green-900' : 'text-amber-900'}`}>
+            {resolvedStatus === 'confirmed'
+              ? (lang === 'fr' ? '✅ Statut : Confirmée' : '✅ الحالة: مؤكد')
+              : (lang === 'fr' ? '⏳ Statut : En attente' : '⏳ الحالة: قيد الانتظار')}
+          </p>
+          <p className={`text-xs font-bold mt-1 ${resolvedStatus === 'confirmed' ? 'text-green-700' : 'text-amber-700'}`}>
+            {resolvedStatus === 'confirmed'
+              ? (lang === 'fr'
+                  ? 'La check-list d\'inspection de départ a été remplie : la réservation sera enregistrée comme confirmée.'
+                  : 'تم ملء قائمة فحص المغادرة: سيتم حفظ الحجز كمؤكد.')
+              : (lang === 'fr'
+                  ? 'Aucun point de la check-list d\'inspection (étape 3) n\'est coché : la réservation restera en attente jusqu\'à l\'inspection.'
+                  : 'لم يتم تحديد أي عنصر في قائمة الفحص (الخطوة 3): سيبقى الحجز قيد الانتظار حتى إجراء الفحص.')}
+          </p>
+        </div>
+      )}
 
       {/* Navigation Buttons */}
       <div className="flex justify-between">
