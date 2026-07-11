@@ -1,0 +1,505 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   THÈME "CARBONE" — la peau sombre du back-office
+   ──────────────────────────────────────────────────────────────────────────
+   GÉNÉRÉ par scripts/gen-theme-carbon.cjs — ne pas éditer à la main.
+
+   Le back-office est écrit en clair (bg-white, slate-*, pastilles pastel).
+   Plutôt que de retoucher 65 composants, on redéfinit ici ce que valent ces
+   utilitaires quand <html data-admin-theme="carbon"> : les surfaces claires
+   deviennent les noirs du site public, les textes foncés s'éclaircissent, et
+   les pastilles pastel deviennent des teintes translucides de la même couleur.
+
+   Le site public (data-surface="site") est exclu : il porte déjà sa palette.
+
+   Palette : design-system/car_salam/MASTER.md (noir & rouge sang).
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 1. Jetons sémantiques du back-office ──
+   Les 1400 classes saas-* du code basculent d'un coup : Tailwind les compile
+   en var(--color-saas-*), il suffit de redéfinir les variables. */
+html[data-admin-theme="carbon"]:not([data-surface="site"]) {
+  --color-saas-bg:              #0E0E11;  /* fond de page + creux dans les cartes */
+  --color-saas-surface:         #151519;  /* cartes */
+  --color-saas-border:          rgba(255, 255, 255, 0.09);
+  --color-saas-text-main:       #F5F6F7;
+  --color-saas-text-muted:      #9BA1AB;
+
+  /* Rouge sang. -via est la valeur lisible en TEXTE (5.8:1 sur le noir) ;
+     les surfaces pleines la reprennent en profondeur plus bas (§5). */
+  --color-saas-primary-start:   #C8102E;
+  --color-saas-primary-via:     #FF4D52;
+  --color-saas-primary-end:     #8A0A1C;
+
+  --color-saas-secondary-start: #2A2A31;
+  --color-saas-secondary-end:   #3A3A44;
+
+  color-scheme: dark;
+}
+
+/* ── 2. Surfaces neutres ── */
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-white,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .glass-card {
+  background-color: #151519;
+}
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-slate-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-gray-50 { background-color: #121216; }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-slate-100,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-gray-100 { background-color: #1A1A20; }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-slate-200,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-gray-200 { background-color: #24242B; }
+
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:bg-white:hover,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:bg-slate-50:hover,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:bg-gray-50:hover {
+  background-color: #1C1C22;
+}
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:bg-slate-100:hover,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:bg-gray-100:hover,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:bg-slate-200:hover {
+  background-color: #24242B;
+}
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .disabled\:bg-slate-100:disabled,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .disabled\:bg-gray-400:disabled {
+  background-color: #24242B;
+}
+
+/* Blancs translucides. Au-dessus de 40 % c'est une SURFACE (barre de nav
+   floutée, carte de verre) : elle doit noircir. En dessous, c'est un VOILE
+   posé sur un dégradé coloré (survol d'un bouton bleu) : on n'y touche pas,
+   sinon le survol disparaît. */
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-white\/40,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-white\/50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-white\/60,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-white\/70,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-white\/80,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-white\/85,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-white\/90,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-white\/95 {
+  background-color: rgba(21, 21, 25, 0.86);
+}
+
+/* bg-slate-700/800/900 restent tels quels : ils étaient déjà sombres. */
+
+/* ── 3. Textes neutres — l'échelle claire s'inverse ── */
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-slate-900,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-slate-800,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-slate-700,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-gray-900,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-gray-800,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-gray-700 {
+  color: #F5F6F7;
+}
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-slate-600,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-gray-600 { color: #C7CBD2; }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-slate-500,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-gray-500 { color: #9BA1AB; }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-slate-400,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-gray-400 { color: #7A808B; }
+/* text-slate-300 et plus clair : déjà posés sur des fonds foncés, on n'y touche pas. */
+
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:text-slate-900:hover,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:text-gray-900:hover { color: #FFFFFF; }
+
+/* ── 4. Bordures, anneaux, séparateurs ── */
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-slate-100,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-gray-100,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-slate-50 { border-color: rgba(255, 255, 255, 0.06); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-slate-200,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-gray-200 { border-color: rgba(255, 255, 255, 0.09); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-slate-300,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-gray-300 { border-color: rgba(255, 255, 255, 0.16); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:border-slate-300:hover,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:border-gray-300:hover {
+  border-color: rgba(200, 16, 46, 0.45);
+}
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .divide-slate-100 > :not(:last-child),
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .divide-slate-200 > :not(:last-child),
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .divide-gray-100 > :not(:last-child),
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .divide-gray-200 > :not(:last-child) {
+  border-color: rgba(255, 255, 255, 0.07);
+}
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .ring-slate-200,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .ring-gray-200 { --tw-ring-color: rgba(255, 255, 255, 0.09); }
+
+/* ── 5. Classes composants (index.css) ── */
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .glass-card {
+  border-color: rgba(255, 255, 255, 0.09);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .input-saas {
+  background-color: #1C1C22;
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #F5F6F7;
+}
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .input-saas:focus {
+  border-color: #C8102E;
+}
+/* Le rouge de REMPLISSAGE est plus profond que le rouge de texte : blanc sur
+   #C8102E = 5.9:1, blanc sur #FF4D52 ne passerait pas. */
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .btn-saas-primary,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-saas-primary-via,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-saas-primary-start {
+  background-color: #C8102E;
+  background-image: linear-gradient(135deg, #C8102E, #8A0A1C);
+  box-shadow: 0 4px 14px rgba(200, 16, 46, 0.30);
+}
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .btn-saas-primary:hover {
+  box-shadow: 0 10px 28px rgba(200, 16, 46, 0.42);
+}
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .via-saas-primary-via {
+  --tw-gradient-via: #C8102E;
+}
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .btn-saas-outline {
+  border-color: rgba(255, 255, 255, 0.16);
+}
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .btn-saas-outline:hover {
+  border-color: rgba(200, 16, 46, 0.45);
+  background-color: rgba(200, 16, 46, 0.08);
+}
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .btn-saas-secondary {
+  background-image: linear-gradient(135deg, #2A2A31, #3A3A44);
+}
+
+/* Champs natifs : sans cela le navigateur les rend en blanc sur blanc. */
+html[data-admin-theme="carbon"]:not([data-surface="site"]) input,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) textarea,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) select {
+  color-scheme: dark;
+}
+html[data-admin-theme="carbon"]:not([data-surface="site"]) input::placeholder,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) textarea::placeholder {
+  color: #7A808B;
+}
+html[data-admin-theme="carbon"]:not([data-surface="site"]) option {
+  background-color: #1C1C22;
+  color: #F5F6F7;
+}
+
+/* Barres de défilement */
+html[data-admin-theme="carbon"]:not([data-surface="site"]) ::-webkit-scrollbar-track,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .custom-scrollbar::-webkit-scrollbar-track { background: #0E0E11; }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) ::-webkit-scrollbar-thumb,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .custom-scrollbar::-webkit-scrollbar-thumb { background: #2A2A31; }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) ::-webkit-scrollbar-thumb:hover,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #C8102E; }
+
+/* Le fond de page : body lit --color-saas-bg, mais html[data-surface] gagne. */
+html[data-admin-theme="carbon"][data-surface="admin"] body {
+  background: #0E0E11;
+  color: #F5F6F7;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   6. PASTILLES ET ACCENTS COLORÉS
+   L'admin signale ses états avec le triplet bg-{teinte}-50 / text-{teinte}-700
+   / border-{teinte}-200. Sur noir, le pastel éblouit et le texte foncé devient
+   illisible : la pastille devient une teinte translucide, le texte s'éclaircit.
+   Les remplissages 400→900 (boutons pleins, dégradés à texte blanc) sont
+   laissés intacts.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* red */
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-red-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-red-100 { background-color: color-mix(in srgb, #ef4444 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:bg-red-50:hover,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:bg-red-100:hover { background-color: color-mix(in srgb, #ef4444 22%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-red-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-red-100 { --tw-gradient-from: color-mix(in srgb, #ef4444 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-red-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-red-100 { --tw-gradient-to: color-mix(in srgb, #ef4444 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-red-100 { border-color: color-mix(in srgb, #ef4444 24%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-red-200 { border-color: color-mix(in srgb, #ef4444 38%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-red-300 { border-color: color-mix(in srgb, #ef4444 52%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .ring-red-200 { --tw-ring-color: color-mix(in srgb, #ef4444 38%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-red-600,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-red-700,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-red-800,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-red-900 { color: #fca5a5; }
+
+/* rose */
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-rose-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-rose-100 { background-color: color-mix(in srgb, #f43f5e 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:bg-rose-50:hover,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:bg-rose-100:hover { background-color: color-mix(in srgb, #f43f5e 22%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-rose-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-rose-100 { --tw-gradient-from: color-mix(in srgb, #f43f5e 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-rose-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-rose-100 { --tw-gradient-to: color-mix(in srgb, #f43f5e 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-rose-100 { border-color: color-mix(in srgb, #f43f5e 24%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-rose-200 { border-color: color-mix(in srgb, #f43f5e 38%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-rose-300 { border-color: color-mix(in srgb, #f43f5e 52%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .ring-rose-200 { --tw-ring-color: color-mix(in srgb, #f43f5e 38%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-rose-600,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-rose-700,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-rose-800,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-rose-900 { color: #fda4af; }
+
+/* orange */
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-orange-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-orange-100 { background-color: color-mix(in srgb, #f97316 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:bg-orange-50:hover,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:bg-orange-100:hover { background-color: color-mix(in srgb, #f97316 22%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-orange-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-orange-100 { --tw-gradient-from: color-mix(in srgb, #f97316 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-orange-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-orange-100 { --tw-gradient-to: color-mix(in srgb, #f97316 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-orange-100 { border-color: color-mix(in srgb, #f97316 24%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-orange-200 { border-color: color-mix(in srgb, #f97316 38%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-orange-300 { border-color: color-mix(in srgb, #f97316 52%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .ring-orange-200 { --tw-ring-color: color-mix(in srgb, #f97316 38%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-orange-600,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-orange-700,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-orange-800,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-orange-900 { color: #fdba74; }
+
+/* amber */
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-amber-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-amber-100 { background-color: color-mix(in srgb, #f59e0b 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:bg-amber-50:hover,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:bg-amber-100:hover { background-color: color-mix(in srgb, #f59e0b 22%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-amber-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-amber-100 { --tw-gradient-from: color-mix(in srgb, #f59e0b 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-amber-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-amber-100 { --tw-gradient-to: color-mix(in srgb, #f59e0b 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-amber-100 { border-color: color-mix(in srgb, #f59e0b 24%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-amber-200 { border-color: color-mix(in srgb, #f59e0b 38%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-amber-300 { border-color: color-mix(in srgb, #f59e0b 52%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .ring-amber-200 { --tw-ring-color: color-mix(in srgb, #f59e0b 38%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-amber-600,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-amber-700,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-amber-800,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-amber-900 { color: #fcd34d; }
+
+/* yellow */
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-yellow-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-yellow-100 { background-color: color-mix(in srgb, #eab308 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:bg-yellow-50:hover,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:bg-yellow-100:hover { background-color: color-mix(in srgb, #eab308 22%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-yellow-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-yellow-100 { --tw-gradient-from: color-mix(in srgb, #eab308 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-yellow-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-yellow-100 { --tw-gradient-to: color-mix(in srgb, #eab308 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-yellow-100 { border-color: color-mix(in srgb, #eab308 24%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-yellow-200 { border-color: color-mix(in srgb, #eab308 38%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-yellow-300 { border-color: color-mix(in srgb, #eab308 52%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .ring-yellow-200 { --tw-ring-color: color-mix(in srgb, #eab308 38%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-yellow-600,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-yellow-700,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-yellow-800,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-yellow-900 { color: #fde047; }
+
+/* lime */
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-lime-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-lime-100 { background-color: color-mix(in srgb, #84cc16 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:bg-lime-50:hover,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:bg-lime-100:hover { background-color: color-mix(in srgb, #84cc16 22%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-lime-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-lime-100 { --tw-gradient-from: color-mix(in srgb, #84cc16 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-lime-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-lime-100 { --tw-gradient-to: color-mix(in srgb, #84cc16 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-lime-100 { border-color: color-mix(in srgb, #84cc16 24%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-lime-200 { border-color: color-mix(in srgb, #84cc16 38%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-lime-300 { border-color: color-mix(in srgb, #84cc16 52%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .ring-lime-200 { --tw-ring-color: color-mix(in srgb, #84cc16 38%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-lime-600,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-lime-700,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-lime-800,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-lime-900 { color: #bef264; }
+
+/* green */
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-green-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-green-100 { background-color: color-mix(in srgb, #22c55e 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:bg-green-50:hover,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:bg-green-100:hover { background-color: color-mix(in srgb, #22c55e 22%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-green-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-green-100 { --tw-gradient-from: color-mix(in srgb, #22c55e 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-green-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-green-100 { --tw-gradient-to: color-mix(in srgb, #22c55e 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-green-100 { border-color: color-mix(in srgb, #22c55e 24%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-green-200 { border-color: color-mix(in srgb, #22c55e 38%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-green-300 { border-color: color-mix(in srgb, #22c55e 52%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .ring-green-200 { --tw-ring-color: color-mix(in srgb, #22c55e 38%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-green-600,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-green-700,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-green-800,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-green-900 { color: #86efac; }
+
+/* emerald */
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-emerald-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-emerald-100 { background-color: color-mix(in srgb, #10b981 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:bg-emerald-50:hover,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:bg-emerald-100:hover { background-color: color-mix(in srgb, #10b981 22%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-emerald-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-emerald-100 { --tw-gradient-from: color-mix(in srgb, #10b981 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-emerald-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-emerald-100 { --tw-gradient-to: color-mix(in srgb, #10b981 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-emerald-100 { border-color: color-mix(in srgb, #10b981 24%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-emerald-200 { border-color: color-mix(in srgb, #10b981 38%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-emerald-300 { border-color: color-mix(in srgb, #10b981 52%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .ring-emerald-200 { --tw-ring-color: color-mix(in srgb, #10b981 38%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-emerald-600,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-emerald-700,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-emerald-800,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-emerald-900 { color: #6ee7b7; }
+
+/* teal */
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-teal-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-teal-100 { background-color: color-mix(in srgb, #14b8a6 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:bg-teal-50:hover,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:bg-teal-100:hover { background-color: color-mix(in srgb, #14b8a6 22%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-teal-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-teal-100 { --tw-gradient-from: color-mix(in srgb, #14b8a6 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-teal-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-teal-100 { --tw-gradient-to: color-mix(in srgb, #14b8a6 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-teal-100 { border-color: color-mix(in srgb, #14b8a6 24%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-teal-200 { border-color: color-mix(in srgb, #14b8a6 38%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-teal-300 { border-color: color-mix(in srgb, #14b8a6 52%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .ring-teal-200 { --tw-ring-color: color-mix(in srgb, #14b8a6 38%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-teal-600,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-teal-700,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-teal-800,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-teal-900 { color: #5eead4; }
+
+/* cyan */
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-cyan-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-cyan-100 { background-color: color-mix(in srgb, #06b6d4 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:bg-cyan-50:hover,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:bg-cyan-100:hover { background-color: color-mix(in srgb, #06b6d4 22%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-cyan-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-cyan-100 { --tw-gradient-from: color-mix(in srgb, #06b6d4 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-cyan-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-cyan-100 { --tw-gradient-to: color-mix(in srgb, #06b6d4 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-cyan-100 { border-color: color-mix(in srgb, #06b6d4 24%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-cyan-200 { border-color: color-mix(in srgb, #06b6d4 38%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-cyan-300 { border-color: color-mix(in srgb, #06b6d4 52%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .ring-cyan-200 { --tw-ring-color: color-mix(in srgb, #06b6d4 38%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-cyan-600,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-cyan-700,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-cyan-800,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-cyan-900 { color: #67e8f9; }
+
+/* sky */
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-sky-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-sky-100 { background-color: color-mix(in srgb, #0ea5e9 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:bg-sky-50:hover,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:bg-sky-100:hover { background-color: color-mix(in srgb, #0ea5e9 22%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-sky-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-sky-100 { --tw-gradient-from: color-mix(in srgb, #0ea5e9 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-sky-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-sky-100 { --tw-gradient-to: color-mix(in srgb, #0ea5e9 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-sky-100 { border-color: color-mix(in srgb, #0ea5e9 24%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-sky-200 { border-color: color-mix(in srgb, #0ea5e9 38%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-sky-300 { border-color: color-mix(in srgb, #0ea5e9 52%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .ring-sky-200 { --tw-ring-color: color-mix(in srgb, #0ea5e9 38%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-sky-600,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-sky-700,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-sky-800,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-sky-900 { color: #7dd3fc; }
+
+/* blue */
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-blue-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-blue-100 { background-color: color-mix(in srgb, #3b82f6 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:bg-blue-50:hover,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:bg-blue-100:hover { background-color: color-mix(in srgb, #3b82f6 22%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-blue-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-blue-100 { --tw-gradient-from: color-mix(in srgb, #3b82f6 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-blue-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-blue-100 { --tw-gradient-to: color-mix(in srgb, #3b82f6 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-blue-100 { border-color: color-mix(in srgb, #3b82f6 24%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-blue-200 { border-color: color-mix(in srgb, #3b82f6 38%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-blue-300 { border-color: color-mix(in srgb, #3b82f6 52%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .ring-blue-200 { --tw-ring-color: color-mix(in srgb, #3b82f6 38%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-blue-600,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-blue-700,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-blue-800,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-blue-900 { color: #93c5fd; }
+
+/* indigo */
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-indigo-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-indigo-100 { background-color: color-mix(in srgb, #6366f1 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:bg-indigo-50:hover,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:bg-indigo-100:hover { background-color: color-mix(in srgb, #6366f1 22%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-indigo-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-indigo-100 { --tw-gradient-from: color-mix(in srgb, #6366f1 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-indigo-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-indigo-100 { --tw-gradient-to: color-mix(in srgb, #6366f1 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-indigo-100 { border-color: color-mix(in srgb, #6366f1 24%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-indigo-200 { border-color: color-mix(in srgb, #6366f1 38%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-indigo-300 { border-color: color-mix(in srgb, #6366f1 52%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .ring-indigo-200 { --tw-ring-color: color-mix(in srgb, #6366f1 38%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-indigo-600,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-indigo-700,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-indigo-800,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-indigo-900 { color: #a5b4fc; }
+
+/* violet */
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-violet-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-violet-100 { background-color: color-mix(in srgb, #8b5cf6 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:bg-violet-50:hover,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:bg-violet-100:hover { background-color: color-mix(in srgb, #8b5cf6 22%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-violet-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-violet-100 { --tw-gradient-from: color-mix(in srgb, #8b5cf6 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-violet-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-violet-100 { --tw-gradient-to: color-mix(in srgb, #8b5cf6 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-violet-100 { border-color: color-mix(in srgb, #8b5cf6 24%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-violet-200 { border-color: color-mix(in srgb, #8b5cf6 38%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-violet-300 { border-color: color-mix(in srgb, #8b5cf6 52%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .ring-violet-200 { --tw-ring-color: color-mix(in srgb, #8b5cf6 38%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-violet-600,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-violet-700,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-violet-800,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-violet-900 { color: #c4b5fd; }
+
+/* purple */
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-purple-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-purple-100 { background-color: color-mix(in srgb, #a855f7 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:bg-purple-50:hover,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:bg-purple-100:hover { background-color: color-mix(in srgb, #a855f7 22%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-purple-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-purple-100 { --tw-gradient-from: color-mix(in srgb, #a855f7 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-purple-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-purple-100 { --tw-gradient-to: color-mix(in srgb, #a855f7 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-purple-100 { border-color: color-mix(in srgb, #a855f7 24%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-purple-200 { border-color: color-mix(in srgb, #a855f7 38%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-purple-300 { border-color: color-mix(in srgb, #a855f7 52%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .ring-purple-200 { --tw-ring-color: color-mix(in srgb, #a855f7 38%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-purple-600,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-purple-700,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-purple-800,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-purple-900 { color: #d8b4fe; }
+
+/* fuchsia */
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-fuchsia-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-fuchsia-100 { background-color: color-mix(in srgb, #d946ef 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:bg-fuchsia-50:hover,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:bg-fuchsia-100:hover { background-color: color-mix(in srgb, #d946ef 22%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-fuchsia-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-fuchsia-100 { --tw-gradient-from: color-mix(in srgb, #d946ef 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-fuchsia-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-fuchsia-100 { --tw-gradient-to: color-mix(in srgb, #d946ef 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-fuchsia-100 { border-color: color-mix(in srgb, #d946ef 24%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-fuchsia-200 { border-color: color-mix(in srgb, #d946ef 38%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-fuchsia-300 { border-color: color-mix(in srgb, #d946ef 52%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .ring-fuchsia-200 { --tw-ring-color: color-mix(in srgb, #d946ef 38%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-fuchsia-600,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-fuchsia-700,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-fuchsia-800,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-fuchsia-900 { color: #f0abfc; }
+
+/* pink */
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-pink-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-pink-100 { background-color: color-mix(in srgb, #ec4899 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:bg-pink-50:hover,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:bg-pink-100:hover { background-color: color-mix(in srgb, #ec4899 22%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-pink-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-pink-100 { --tw-gradient-from: color-mix(in srgb, #ec4899 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-pink-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-pink-100 { --tw-gradient-to: color-mix(in srgb, #ec4899 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-pink-100 { border-color: color-mix(in srgb, #ec4899 24%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-pink-200 { border-color: color-mix(in srgb, #ec4899 38%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-pink-300 { border-color: color-mix(in srgb, #ec4899 52%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .ring-pink-200 { --tw-ring-color: color-mix(in srgb, #ec4899 38%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-pink-600,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-pink-700,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-pink-800,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .text-pink-900 { color: #f9a8d4; }

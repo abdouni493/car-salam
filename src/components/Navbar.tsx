@@ -1,7 +1,8 @@
 import React from 'react';
-import { Globe, Menu, Search, Monitor } from 'lucide-react';
+import { Globe, Menu, Search, Monitor, Palette, Sun } from 'lucide-react';
 import { Language, User } from '../types';
 import { TRANSLATIONS } from '../constants';
+import { useAdminTheme } from '../theme';
 
 interface NavbarProps {
   user: User;
@@ -13,6 +14,8 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({ user, lang, setLang, toggleSidebar, onWebsiteToggle }) => {
   const t = TRANSLATIONS[lang];
+  const [theme, toggleTheme] = useAdminTheme();
+  const isCarbon = theme === 'carbon';
 
   return (
     <header className="h-20 bg-white/80 backdrop-blur-md border-b border-saas-border px-8 flex items-center justify-between sticky top-0 z-40">
@@ -35,7 +38,30 @@ export const Navbar: React.FC<NavbarProps> = ({ user, lang, setLang, toggleSideb
       </div>
 
       <div className="flex items-center gap-6">
-        <button 
+        {/* Bascule la palette de tout le back-office (sidebar comprise) vers le
+            noir & rouge du site public. Le thème est posé sur <html>, la feuille
+            theme-carbon.css fait le reste : aucune page n'a à en tenir compte. */}
+        <button
+          onClick={toggleTheme}
+          aria-pressed={isCarbon}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl border transition-all text-[10px] font-bold uppercase tracking-widest shadow-sm ${
+            isCarbon
+              ? 'bg-saas-primary-via/10 border-saas-primary-via text-saas-primary-via'
+              : 'bg-white border-saas-border hover:border-saas-primary-via text-saas-text-main'
+          }`}
+          title={
+            isCarbon
+              ? (lang === 'fr' ? 'Revenir au thème clair' : 'العودة إلى المظهر الفاتح')
+              : (lang === 'fr' ? 'Thème carbone (couleurs du site)' : 'مظهر الكربون (ألوان الموقع)')
+          }
+        >
+          {isCarbon ? <Sun size={16} /> : <Palette size={16} className="text-saas-primary-via" />}
+          {isCarbon
+            ? { fr: 'Clair', ar: 'فاتح' }[lang]
+            : { fr: 'Carbone', ar: 'كربون' }[lang]}
+        </button>
+
+        <button
           onClick={() => setLang(lang === 'fr' ? 'ar' : 'fr')}
           className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-saas-border hover:border-saas-primary-via transition-all text-[10px] font-bold uppercase tracking-widest text-saas-text-main shadow-sm"
         >

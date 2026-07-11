@@ -1,7 +1,17 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-surface="admin">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      // Le thème du back-office AVANT le premier pixel : appliqué par React, la
+      // page clignoterait en blanc à chaque rechargement avant de virer au noir.
+      try {
+        document.documentElement.dataset.adminTheme =
+          localStorage.getItem('salam:admin-theme') === 'carbon' ? 'carbon' : 'light';
+      } catch (e) {
+        document.documentElement.dataset.adminTheme = 'light';
+      }
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MHD-AUTO | Location de Voitures</title>
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
