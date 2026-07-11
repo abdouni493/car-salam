@@ -7,6 +7,7 @@ import { Language, UserRole, User } from '../types';
 import { TRANSLATIONS } from '../constants';
 import { DatabaseService } from '../services/DatabaseService';
 import { sessionService } from '../utils/sessionService';
+import { BrandMark } from './BrandMark';
 
 interface LoginProps {
   lang: Language;
@@ -20,6 +21,7 @@ interface AdminCount {
 
 interface AgencyBranding {
   logo: string;
+  navbarLogo: string;
   name: string;
 }
 
@@ -37,6 +39,7 @@ export const Login: React.FC<LoginProps> = ({ lang, onLogin }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [agencyBranding, setAgencyBranding] = useState<AgencyBranding>({
     logo: '',
+    navbarLogo: '',
     name: 'AutoLocation'
   });
 
@@ -66,6 +69,7 @@ export const Login: React.FC<LoginProps> = ({ lang, onLogin }) => {
         if (settings) {
           setAgencyBranding({
             logo: settings.logo || '',
+            navbarLogo: settings.navbar_logo || '',
             name: settings.name || 'AutoLocation'
           });
         }
@@ -398,18 +402,21 @@ export const Login: React.FC<LoginProps> = ({ lang, onLogin }) => {
             animate={{ opacity: 1 }}
             transition={{ delay: 0.2, duration: 0.8 }}
           >
-            {/* Logo */}
-            {agencyBranding.logo && (
+            {/* Logo — l'écusson détouré. Le wordmark, lui, est un bloc noir 3:2 :
+                enfermé dans ce carré de 80 px il ne donnait qu'une barre noire. */}
+            {(agencyBranding.navbarLogo || agencyBranding.logo) && (
               <motion.div
                 initial={{ scale: 0, rotate: -180 }}
                 animate={{ scale: 1, rotate: 0 }}
                 transition={{ delay: 0.3, duration: 0.8, type: "spring", stiffness: 100 }}
                 className="flex justify-center mb-2"
               >
-                <img 
-                  src={agencyBranding.logo} 
-                  alt="Logo"
-                  className="h-20 w-20 object-contain drop-shadow-lg rounded-xl border border-saas-border"
+                <BrandMark
+                  logo={agencyBranding.navbarLogo}
+                  fallbackLogo={agencyBranding.logo}
+                  name={agencyBranding.name}
+                  size={88}
+                  className="drop-shadow-lg"
                 />
               </motion.div>
             )}

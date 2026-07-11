@@ -86,7 +86,7 @@ export const CarBookingCalendar: React.FC<CarBookingCalendarProps> = ({
   return (
     <div className="space-y-4">
       <div className="wizard-calendar relative rounded-2xl p-4 sm:p-6 flex justify-center"
-        style={{ background: 'rgba(15,23,42,0.02)', border: '1px solid rgba(15,23,42,0.08)' }}>
+        style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
         {loading && (
           <div className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl"
             style={{ background: 'rgba(248,250,252,0.8)' }}>
@@ -126,7 +126,7 @@ export const CarBookingCalendar: React.FC<CarBookingCalendarProps> = ({
             {lang === 'fr' ? 'Sélectionné' : 'محدد'}
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded" style={{ background: 'rgba(15,23,42,0.35)' }} />
+            <span className="w-3 h-3 rounded" style={{ background: 'rgba(255, 255, 255, 0.35)' }} />
             {lang === 'fr' ? 'Déjà réservé' : 'محجوز'}
           </span>
         </div>
@@ -136,7 +136,7 @@ export const CarBookingCalendar: React.FC<CarBookingCalendarProps> = ({
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition-colors ${
             range.from ? 'text-vel-slate hover:text-vel-gold' : 'text-vel-dim cursor-not-allowed'
           }`}
-          style={{ border: '1px solid rgba(15,23,42,0.1)' }}
+          style={{ border: '1px solid rgba(255, 255, 255, 0.1)' }}
         >
           <Eraser size={13} />
           {lang === 'fr' ? 'Effacer les dates' : 'مسح التواريخ'}
@@ -152,7 +152,7 @@ export const CarBookingCalendar: React.FC<CarBookingCalendarProps> = ({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
             className="text-sm font-bold px-4 py-3 rounded-xl"
-            style={{ color: '#B45309', background: 'rgba(180,83,9,0.08)', border: '1px solid rgba(180,83,9,0.25)' }}
+            style={{ color: 'var(--color-vel-cta-bright)', background: 'rgba(200, 16, 46, 0.08)', border: '1px solid rgba(200, 16, 46, 0.25)' }}
           >
             ⚠️ {rangeError}
           </motion.p>

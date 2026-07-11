@@ -11,16 +11,17 @@ import { HERO_SPLINE_SCENE_URL } from '../../constants';
 import { WizardSearchCriteria } from './wizard/WizardContext';
 import { toYmd } from './wizard/wizardUi';
 
-// ─── Colour tokens for this page ───────────────────────────────────────────
+// ─── Colour tokens for this page (design-system/car_salam/MASTER.md) ────────
+// `accent` = rouge de TEXTE (AA en petit corps) ; `gold` = rouge de REMPLISSAGE.
 const C = {
-  accent:    '#B45309',   // or lisible sur fond clair (AA)
-  gold:      '#D4AF37',   // or métallique : aplats et dégradés
-  black:     '#0F172A',   // texte posé sur les aplats or
-  amber:     '#D97706',
-  accentDim: 'rgba(180,83,9,0.1)',
-  amberDim:  'rgba(217,119,6,0.1)',
-  bg:        '#F8FAFC',
-  surface:   '#FFFFFF',
+  accent:    'var(--color-vel-cta-bright)',
+  gold:      'var(--color-vel-cta)',
+  black:     '#FFFFFF',   // texte posé sur les aplats rouges (5.9:1)
+  amber:     'var(--color-vel-cta-deep)',
+  accentDim: 'rgba(200, 16, 46, 0.12)',
+  amberDim:  'rgba(200, 16, 46, 0.08)',
+  bg:        'var(--color-vel-void)',
+  surface:   'var(--color-vel-surface)',
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -37,7 +38,7 @@ function HeroVisual() {
         animate={{ rotate: 360 }}
         transition={{ duration: 28, repeat: Infinity, ease: 'linear' }}
         className="absolute w-[400px] h-[400px] rounded-full"
-        style={{ border: '1px solid rgba(180,83,9,0.09)' }}
+        style={{ border: '1px solid rgba(200, 16, 46, 0.09)' }}
       >
         <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full"
           style={{ background: C.accent, boxShadow: `0 0 14px ${C.accent}` }} />
@@ -48,7 +49,7 @@ function HeroVisual() {
         animate={{ rotate: -360 }}
         transition={{ duration: 18, repeat: Infinity, ease: 'linear' }}
         className="absolute w-[290px] h-[290px] rounded-full"
-        style={{ border: '1px dashed rgba(217,119,6,0.2)' }}
+        style={{ border: '1px dashed rgba(200, 16, 46, 0.2)' }}
       >
         <div className="absolute top-0 right-6 w-2 h-2 rounded-full"
           style={{ background: C.amber, boxShadow: `0 0 10px ${C.amber}` }} />
@@ -59,7 +60,7 @@ function HeroVisual() {
         animate={{ scale: [1, 1.07, 1], opacity: [0.35, 0.65, 0.35] }}
         transition={{ duration: 3, repeat: Infinity }}
         className="absolute w-[180px] h-[180px] rounded-full"
-        style={{ border: '1px solid rgba(180,83,9,0.3)' }}
+        style={{ border: '1px solid rgba(200, 16, 46, 0.3)' }}
       />
 
       {/* Corner accent dots */}
@@ -88,8 +89,9 @@ function BookingSearchPanel({ lang, agencies, onSearch, hasBg }: {
 
   const isValid = !!departureAgencyId && !!from && !!to && from <= to && from >= today;
 
-  const selectClass = "w-full px-4 py-3 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-900 outline-none hover:border-vel-gold focus:border-vel-gold focus:ring-4 focus:ring-vel-gold/10 transition-all duration-200 cursor-pointer shadow-sm";
-  const inputClass = "w-full px-4 py-3 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-900 outline-none hover:border-vel-gold focus:border-vel-gold focus:ring-4 focus:ring-vel-gold/10 transition-all duration-200 shadow-sm";
+  const fieldBase = "w-full px-4 py-3 rounded-xl border border-vel-border-strong bg-vel-deep text-sm font-medium text-vel-ink outline-none hover:border-vel-cta focus:border-vel-cta focus:ring-4 focus:ring-vel-cta/25 transition-all duration-200";
+  const selectClass = `${fieldBase} cursor-pointer`;
+  const inputClass = fieldBase;
 
   const fields: { label: string; icon: React.ReactNode; el: React.ReactNode }[] = [
     {
@@ -141,11 +143,11 @@ function BookingSearchPanel({ lang, agencies, onSearch, hasBg }: {
       transition={{ duration: 0.8, delay: 0.75 }}
       className="relative z-20 rounded-3xl p-6 sm:p-8"
       style={{
-        background: 'rgba(255, 255, 255, 0.12)',
-        border: '1px solid rgba(255, 255, 255, 0.35)',
+        background: 'rgba(20, 20, 24, 0.72)',
+        border: '1px solid rgba(255, 255, 255, 0.12)',
         backdropFilter: 'blur(20px) saturate(140%)',
         WebkitBackdropFilter: 'blur(20px) saturate(140%)',
-        boxShadow: '0 20px 60px rgba(15, 23, 42, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.4)',
+        boxShadow: '0 24px 70px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.08)',
       }}
     >
       <p className="text-xs font-bold tracking-[0.2em] uppercase mb-5 flex items-center gap-2"
@@ -157,7 +159,7 @@ function BookingSearchPanel({ lang, agencies, onSearch, hasBg }: {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_1fr_auto] gap-4 items-end">
         {fields.map((f, i) => (
           <div key={i}>
-            <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2"
+            <label className="flex items-center gap-1.5 text-[11px] font-bold text-vel-muted uppercase tracking-wider mb-2"
               style={{ fontFamily: 'var(--font-display)' }}>
               {f.icon} {f.label}
             </label>
@@ -177,16 +179,18 @@ function BookingSearchPanel({ lang, agencies, onSearch, hasBg }: {
           className={`px-8 py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 whitespace-nowrap transition-all ${!isValid ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:shadow-lg hover:shadow-vel-gold/20'}`}
           style={{
             fontFamily: 'var(--font-display)',
-            background: `linear-gradient(135deg, ${C.gold}, ${C.accent})`,
+            // Rouge plein → rouge profond : le libellé blanc reste à 5.9:1.
+            // (Un dégradé vers le rouge clair ferait tomber le texte sous 3.3:1.)
+            background: `linear-gradient(135deg, ${C.gold}, ${C.amber})`,
             color: C.black,
-            boxShadow: isValid ? '0 6px 20px rgba(180,83,9,0.25)' : 'none',
+            boxShadow: isValid ? '0 6px 20px rgba(200, 16, 46, 0.35)' : 'none',
           }}
         >
           {{ fr: 'Suivant', ar: 'التالي' }[lang]} <ArrowRight size={16} />
         </motion.button>
       </div>
 
-      <p className="text-slate-400 text-[11px] mt-4 font-medium">
+      <p className="text-vel-dim text-[11px] mt-4 font-medium">
         {{ fr: 'Nous afficherons uniquement les voitures disponibles sur la période choisie.',
            ar: 'سنعرض فقط السيارات المتاحة في الفترة المختارة.' }[lang]}
       </p>
@@ -272,41 +276,39 @@ export const Welcome: React.FC<WelcomeProps> = ({ lang, websiteSettings, agencie
               transition={{ duration: 25, repeat: Infinity, ease: 'easeInOut' }}
               referrerPolicy="no-referrer"
             />
-            {/* Multi-layer overlay: dark bottom for readability, lighter top to show image */}
+            {/* Voile cinématographique : la photo se fond dans le noir de la page.
+                Un voile SOMBRE, jamais clair — c'est lui qui rend le texte lisible. */}
             <div className="absolute inset-0" style={{
               background: `linear-gradient(180deg,
-                rgba(15,23,42,0.3) 0%,
-                rgba(15,23,42,0.2) 30%,
-                rgba(15,23,42,0.35) 60%,
-                rgba(15,23,42,0.7) 100%)`,
+                rgba(8, 8, 10, 0.55) 0%,
+                rgba(8, 8, 10, 0.45) 30%,
+                rgba(8, 8, 10, 0.70) 60%,
+                rgba(8, 8, 10, 0.98) 100%)`,
             }} />
-            {/* Left-side text protection gradient */}
+            {/* Protection du texte à gauche */}
             <div className="absolute inset-0" style={{
-              background: 'linear-gradient(90deg, rgba(15,23,42,0.5) 0%, rgba(15,23,42,0.1) 55%, transparent 100%)',
+              background: 'linear-gradient(90deg, rgba(8, 8, 10, 0.92) 0%, rgba(8, 8, 10, 0.45) 55%, transparent 100%)',
             }} />
           </div>
         )}
 
-        {/* Fine diagonal grid */}
-        <div className="absolute inset-0 opacity-[0.04]" style={{
-          backgroundImage: `linear-gradient(${C.accent} 1px, transparent 1px), linear-gradient(90deg, ${C.accent} 1px, transparent 1px)`,
-          backgroundSize: '70px 70px',
-        }} />
+        {/* Grille de piste, masquée en fondu */}
+        <div className="absolute inset-0 vel-grid-bg pointer-events-none" aria-hidden="true" />
 
-        {/* Cyan top glow */}
+        {/* Halo rouge diffus — la seule grande surface colorée du hero */}
         <div className="absolute inset-0 pointer-events-none" style={{
           background: `radial-gradient(ellipse 75% 55% at 60% -10%, ${C.accentDim}, transparent)`,
         }} />
 
-        {/* Violet bottom-left blob */}
+        {/* Braise rouge en bas à gauche */}
         <div className="absolute bottom-0 left-0 w-[500px] h-[500px] pointer-events-none" style={{
           background: `radial-gradient(circle, ${C.amberDim}, transparent 70%)`,
           transform: 'translate(-30%, 30%)',
         }} />
 
-        {/* Horizontal accent line */}
+        {/* Filet chrome horizontal (le trait sous le logo) */}
         <div className="absolute top-[48%] left-0 right-0 h-px pointer-events-none" style={{
-          background: `linear-gradient(90deg, transparent, ${C.accent}22, ${C.amber}33, transparent)`,
+          background: 'linear-gradient(90deg, transparent, rgba(200,16,46,0.5), rgba(233,235,238,0.25), transparent)',
         }} />
 
         <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
@@ -340,7 +342,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ lang, websiteSettings, agencie
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.6, delay: 0.1 }}
                 className="text-sm font-bold tracking-[0.3em] uppercase"
-                style={{ color: hasBg ? '#FBBF24' : C.amber, fontFamily: 'var(--font-display)' }}
+                style={{ color: C.accent, fontFamily: 'var(--font-display)' }}
               >
                 {shortName(websiteSettings?.name)}
               </motion.p>
@@ -366,7 +368,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ lang, websiteSettings, agencie
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.8, delay: 0.38 }}
-                className={`text-base leading-relaxed max-w-md ${hasBg ? 'text-slate-200' : 'text-vel-slate'}`}
+                className="text-base leading-relaxed max-w-md text-vel-slate"
               >
                 {websiteSettings?.description || (lang === 'fr'
                   ? "Des véhicules d'exception pour des expériences inoubliables. Réservez en quelques clics."
@@ -435,9 +437,9 @@ export const Welcome: React.FC<WelcomeProps> = ({ lang, websiteSettings, agencie
 
       {/* ══ CONFIANCE & CONFORT — cartes à coche ══ */}
       <section className="relative py-24 px-4 sm:px-6 lg:px-8" style={{
-        background: '#FFFFFF',
-        borderTop: '1px solid rgba(15,23,42,0.06)',
-        borderBottom: '1px solid rgba(15,23,42,0.06)',
+        background: 'var(--color-vel-abyss)',
+        borderTop: '1px solid var(--color-vel-border)',
+        borderBottom: '1px solid var(--color-vel-border)',
       }}>
         <div className="max-w-7xl mx-auto">
           <motion.div
@@ -469,8 +471,8 @@ export const Welcome: React.FC<WelcomeProps> = ({ lang, websiteSettings, agencie
                 whileHover={{ y: -6 }}
                 className="relative overflow-hidden rounded-2xl p-7 flex flex-col gap-4 transition-all duration-300 cursor-default"
                 style={{
-                  background: 'rgba(180,83,9,0.04)',
-                  border: '1px solid rgba(180,83,9,0.09)',
+                  background: 'rgba(200, 16, 46, 0.04)',
+                  border: '1px solid rgba(200, 16, 46, 0.09)',
                   backdropFilter: 'blur(12px)',
                 }}
                 onMouseEnter={e => {
@@ -478,7 +480,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ lang, websiteSettings, agencie
                   (e.currentTarget as HTMLElement).style.boxShadow = `0 0 30px ${C.accent}12`;
                 }}
                 onMouseLeave={e => {
-                  (e.currentTarget as HTMLElement).style.borderColor = 'rgba(180,83,9,0.09)';
+                  (e.currentTarget as HTMLElement).style.borderColor = 'rgba(200, 16, 46, 0.09)';
                   (e.currentTarget as HTMLElement).style.boxShadow = 'none';
                 }}
               >
@@ -541,8 +543,8 @@ export const Welcome: React.FC<WelcomeProps> = ({ lang, websiteSettings, agencie
                 transition={{ duration: 0.55, delay: i * 0.1 }}
                 whileHover="hover"
                 className="group relative rounded-2xl p-6 text-center flex flex-col items-center gap-4 cursor-default"
-                style={{ background: C.surface, border: '1px solid rgba(15,23,42,0.06)' }}
-                variants={{ hover: { y: -8, boxShadow: `0 18px 40px rgba(180,83,9,0.14)` } }}
+                style={{ background: C.surface, border: '1px solid rgba(255, 255, 255, 0.06)' }}
+                variants={{ hover: { y: -8, boxShadow: `0 18px 40px rgba(200, 16, 46, 0.14)` } }}
               >
                 <div className="relative">
                   {/* Halo pulsé derrière l'icône */}
@@ -622,7 +624,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ lang, websiteSettings, agencie
               fontFamily: 'var(--font-display)',
               background: `linear-gradient(135deg, ${C.gold}, ${C.accent})`,
               color: C.black,
-              boxShadow: `0 6px 18px rgba(180,83,9,0.28)`,
+              boxShadow: `0 6px 18px rgba(200, 16, 46, 0.28)`,
             }}
           >
             <CarIcon size={20} /> {{ fr: 'Voir tous les véhicules', ar: 'عرض جميع السيارات' }[lang]}

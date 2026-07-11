@@ -4,6 +4,7 @@ import { LogOut, X } from 'lucide-react';
 import { SIDEBAR_ITEMS } from '../constants';
 import { Language } from '../types';
 import { AGENCY_BRANDING_EVENT, DatabaseService, DEFAULT_AGENCY_NAME } from '../services/DatabaseService';
+import { BrandMark } from './BrandMark';
 
 interface SidebarProps {
   lang: Language;
@@ -23,8 +24,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [agencyData, setAgencyData] = useState({
     name: DEFAULT_AGENCY_NAME,
     logo: '',
+    navbarLogo: '',
   });
-  const [logoFailed, setLogoFailed] = useState(false);
 
   // Load agency data from database, et re-charge après chaque sauvegarde des
   // réglages : sans cela le nouveau nom/logo n'apparaissait qu'au rechargement.
@@ -32,11 +33,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
     const loadAgencyData = async () => {
       try {
         const branding = await DatabaseService.getAgencyBranding();
-        setAgencyData({ name: branding.name, logo: branding.logo });
-        setLogoFailed(false);
+        setAgencyData({
+          name: branding.name,
+          logo: branding.logo,
+          navbarLogo: branding.navbar_logo,
+        });
       } catch (error) {
         console.error('Error loading agency data:', error);
-        setAgencyData({ name: DEFAULT_AGENCY_NAME, logo: '' });
+        setAgencyData({ name: DEFAULT_AGENCY_NAME, logo: '', navbarLogo: '' });
       }
     };
 
@@ -61,24 +65,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
         >
           <div className="p-8 flex items-center justify-between border-b border-saas-border">
             <div className="flex items-center gap-3 min-w-0">
-              {/* `shrink-0` : sans lui, un nom d'agence long écrasait la pastille
-                  du logo jusqu'à la faire disparaître (`flex-shrink-0` n'existe
-                  plus en Tailwind v4). */}
-              <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-saas-border shadow-lg shadow-saas-primary-start/20 flex items-center justify-center shrink-0">
-                {agencyData.logo && !logoFailed ? (
-                  <img
-                    src={agencyData.logo}
-                    alt="Agency Logo"
-                    className="w-full h-full object-cover"
-                    referrerPolicy="no-referrer"
-                    onError={() => setLogoFailed(true)}
-                  />
-                ) : (
-                  <span className="text-white font-black text-xl italic bg-linear-to-br from-saas-primary-start to-saas-primary-end w-full h-full flex items-center justify-center">
-                    {firstWord?.charAt(0) || 'A'}
-                  </span>
-                )}
-              </div>
+              {/* L'écusson détouré, pas le wordmark : ce dernier est un bloc noir
+                  3:2 que l'ancienne pastille ronde recadrait en `object-cover`,
+                  n'en montrant qu'une tranche centrale de la silhouette. */}
+              <BrandMark
+                logo={agencyData.navbarLogo}
+                fallbackLogo={agencyData.logo}
+                name={agencyData.name}
+                size={40}
+              />
               <span className="text-xl font-black tracking-tighter uppercase truncate">
                 {firstWord}
                 {restWords.length > 0 && (

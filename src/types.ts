@@ -303,7 +303,13 @@ export interface ContactInfo {
 export interface WebsiteSettings {
   name: string;
   description: string;
+  /** Logo principal : barre latérale de l'admin + en-tête des documents imprimés. */
   logo?: string;
+  /**
+   * Logo dédié à la barre de navigation du site public (fond noir, format large).
+   * Vide → le site retombe sur `logo`.
+   */
+  navbar_logo?: string;
   phone_number_2?: string;
   bank_number?: string;
   address?: string;
@@ -324,8 +330,15 @@ export interface AgencyBranding {
   name: string;
   agency_name: string;
   agencyName: string;
+  /** Wordmark sur fond noir : en-tête des documents imprimés. */
   logo: string;
   agency_logo: string;
+  /**
+   * Écusson détouré (`website_settings.navbar_logo`) : navbar du site, mais
+   * aussi barre latérale et page de connexion, où le wordmark noir ne tient pas
+   * dans une pastille. Vide → on retombe sur `logo`.
+   */
+  navbar_logo: string;
   address: string;
   agency_address: string;
   phone: string;

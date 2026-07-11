@@ -21,7 +21,7 @@ export const ThankYouPage: React.FC<ThankYouPageProps> = ({ lang, onBackHome, we
 
   return (
     <div className="fixed inset-0 flex items-center justify-center p-4 z-50 overflow-hidden"
-      style={{ background: '#F8FAFC' }}>
+      style={{ background: 'var(--color-vel-void)' }}>
 
       {/* Halos d'arrière-plan */}
       <div className="absolute inset-0 pointer-events-none">
@@ -29,10 +29,10 @@ export const ThankYouPage: React.FC<ThankYouPageProps> = ({ lang, onBackHome, we
           animate={{ scale: [1, 1.15, 1], opacity: [0.3, 0.5, 0.3] }}
           transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
           className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] rounded-full"
-          style={{ background: 'radial-gradient(circle, rgba(180,83,9,0.09), transparent 60%)' }}
+          style={{ background: 'radial-gradient(circle, rgba(200, 16, 46, 0.09), transparent 60%)' }}
         />
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] rounded-full"
-          style={{ background: 'radial-gradient(circle, rgba(217,119,6,0.08), transparent 60%)' }} />
+          style={{ background: 'radial-gradient(circle, rgba(200, 16, 46, 0.08), transparent 60%)' }} />
       </div>
 
       {/* Carte de contenu */}
@@ -43,19 +43,19 @@ export const ThankYouPage: React.FC<ThankYouPageProps> = ({ lang, onBackHome, we
         className="relative z-10 text-center max-w-lg w-full rounded-3xl p-10 space-y-6"
         style={{
           background: 'rgba(255,255,255,0.97)',
-          border: '1px solid rgba(180,83,9,0.2)',
-          boxShadow: '0 20px 60px rgba(15,23,42,0.1)',
+          border: '1px solid rgba(200, 16, 46, 0.2)',
+          boxShadow: '0 20px 60px rgba(0, 0, 0, 0.30)',
         }}
       >
         {/* Logo + nom de l'agence */}
         <div className="flex flex-col items-center gap-3">
           <div className="w-20 h-20 rounded-2xl overflow-hidden flex items-center justify-center"
-            style={{ background: 'rgba(180,83,9,0.06)', border: '1px solid rgba(180,83,9,0.25)' }}>
+            style={{ background: 'rgba(200, 16, 46, 0.06)', border: '1px solid rgba(200, 16, 46, 0.25)' }}>
             {websiteSettings?.logo ? (
               <img src={websiteSettings.logo} alt={agencyName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
             ) : (
               // TODO: remplacer par le vrai logo de l'agence quand il sera disponible
-              <Car size={36} style={{ color: '#B45309' }} />
+              <Car size={36} style={{ color: 'var(--color-vel-cta-bright)' }} />
             )}
           </div>
           <h2 className="font-black text-xl text-vel-ink" style={{ fontFamily: 'var(--font-display)' }}>
@@ -70,7 +70,7 @@ export const ThankYouPage: React.FC<ThankYouPageProps> = ({ lang, onBackHome, we
           transition={{ delay: 0.3, type: 'spring', stiffness: 260, damping: 18 }}
           className="flex justify-center"
         >
-          <CheckCircle size={56} style={{ color: '#B45309', filter: 'drop-shadow(0 0 16px rgba(180,83,9,0.35))' }} />
+          <CheckCircle size={56} style={{ color: 'var(--color-vel-cta-bright)', filter: 'drop-shadow(0 0 16px rgba(200, 16, 46, 0.35))' }} />
         </motion.div>
 
         {/* Message */}
@@ -85,7 +85,7 @@ export const ThankYouPage: React.FC<ThankYouPageProps> = ({ lang, onBackHome, we
             }[lang]}
           </p>
           <p className="flex items-center justify-center gap-2 text-sm text-vel-muted">
-            <PhoneCall size={14} style={{ color: '#B45309' }} />
+            <PhoneCall size={14} style={{ color: 'var(--color-vel-cta-bright)' }} />
             {{ fr: 'Gardez votre téléphone à portée de main', ar: 'أبقِ هاتفك في متناول اليد' }[lang]}
           </p>
         </div>

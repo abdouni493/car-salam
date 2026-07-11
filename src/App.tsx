@@ -243,6 +243,13 @@ export default function App() {
   const authListenerInitialized = useRef(false);
   const isWebsiteMode = location.pathname === '/website';
 
+  // Le site public est noir, l'admin reste clair : les deux partagent le même
+  // <body>, donc on marque la racine pour que index.css bascule la surface
+  // (fond, couleur de texte héritée, scrollbar) sans contaminer le back-office.
+  useEffect(() => {
+    document.documentElement.dataset.surface = isWebsiteMode ? 'site' : 'admin';
+  }, [isWebsiteMode]);
+
   // Sync URL with active tab - extract tab from URL on mount and when URL changes
   useEffect(() => {
     const pathname = location.pathname;

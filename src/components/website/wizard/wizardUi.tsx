@@ -3,15 +3,17 @@ import { motion } from 'motion/react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Language } from '../../../types';
 
-// ─── Palette claire "Automotive or & noir" (voir design-system/auto_location/MASTER.md) ──
+// ─── Palette "Car Salam — noir & rouge sang" (voir design-system/car_salam/MASTER.md) ──
+// `accent` est le rouge de TEXTE (AA en petit corps sur le noir) ;
+// `gold` (nom historique) est le rouge de REMPLISSAGE des aplats et dégradés.
 export const C = {
-  accent:    '#B45309',   // or lisible sur fond clair (AA)
-  gold:      '#D4AF37',   // or métallique : aplats et dégradés
-  black:     '#0F172A',   // texte posé sur les aplats or
-  amber:     '#D97706',
-  bg:        '#F8FAFC',
-  surface:   '#FFFFFF',
-  elevated:  '#FFFFFF',
+  accent:    'var(--color-vel-cta-bright)',
+  gold:      'var(--color-vel-cta)',
+  black:     '#FFFFFF',   // texte posé sur les aplats rouges (5.9:1)
+  amber:     'var(--color-vel-cta-deep)',
+  bg:        'var(--color-vel-void)',
+  surface:   'var(--color-vel-surface)',
+  elevated:  'var(--color-vel-elevated)',
 };
 
 export const ALGERIAN_WILAYAS = [
@@ -36,16 +38,16 @@ export const fromYmd = (s: string): Date => {
 
 // ─── Styles d'inputs partagés ─────────────────────────────────────────────────
 export const inputStyle: React.CSSProperties = {
-  background: '#FFFFFF',
-  border: '1px solid rgba(15,23,42,0.1)',
-  color: '#0F172A',
+  background: 'var(--color-vel-deep)',
+  border: '1px solid var(--color-vel-border-strong)',
+  color: 'var(--color-vel-ink)',
 };
 export const focusInput = (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-  (e.target as HTMLElement).style.borderColor = '#B45309';
-  (e.target as HTMLElement).style.boxShadow = '0 0 0 1px rgba(180,83,9,0.2)';
+  (e.target as HTMLElement).style.borderColor = 'var(--color-vel-cta)';
+  (e.target as HTMLElement).style.boxShadow = '0 0 0 3px rgba(200, 16, 46, 0.22)';
 };
 export const blurInput = (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-  (e.target as HTMLElement).style.borderColor = 'rgba(15,23,42,0.1)';
+  (e.target as HTMLElement).style.borderColor = 'var(--color-vel-border-strong)';
   (e.target as HTMLElement).style.boxShadow = 'none';
 };
 
@@ -55,7 +57,11 @@ export const inputClass = 'w-full px-4 py-3 rounded-xl outline-none transition-a
 export const SectionCard: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
   <div
     className={`rounded-2xl p-6 sm:p-8 space-y-6 ${className}`}
-    style={{ background: C.elevated, border: '1px solid rgba(180,83,9,0.08)' }}
+    style={{
+      background: C.surface,
+      border: '1px solid var(--color-vel-border)',
+      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04), 0 12px 32px rgba(0,0,0,0.5)',
+    }}
   >
     {children}
   </div>

@@ -12,10 +12,15 @@ interface ShowcaseBandProps {
   imageUrl?: string;
 }
 
+/** Canaux de --color-vel-void (#08080A) : le voile doit pouvoir varier en alpha. */
+const VOID = '8, 8, 10';
+
 /**
- * Bande vitrine pleine largeur (issue du prompt magic /ui, intégrée aux tokens
- * du design system) : une voiture en arrière-plan — scène Spline 3D si une URL
- * est configurée, sinon photo avec effet parallaxe — derrière un titre français.
+ * Bande vitrine pleine largeur : une voiture en arrière-plan — scène Spline 3D
+ * si une URL est configurée, sinon photo avec effet parallaxe — derrière le
+ * titre. Le décor reprend celui des autres sections du site (fond vel-void,
+ * grille de piste, halo rouge, filets de bord) : le voile est SOMBRE, jamais
+ * clair, sinon le texte vel-ink quasi blanc devient illisible.
  * La couche visuelle est décorative : pointer-events-none, aria-hidden,
  * parallaxe désactivée si prefers-reduced-motion.
  */
@@ -30,12 +35,17 @@ export const ShowcaseBand: React.FC<ShowcaseBandProps> = ({ lang, onReserve, ima
   const parallaxY = useTransform(scrollYProgress, [0, 1], ['-12%', '12%']);
 
   const use3D = !!HERO_SPLINE_SCENE_URL && !reduceMotion;
+  const hasVisual = use3D || !!imageUrl;
 
   return (
     <section
       ref={sectionRef}
       className="relative overflow-hidden py-28 px-4 sm:px-6 lg:px-8"
-      style={{ background: '#F8FAFC' }}
+      style={{
+        background: 'var(--color-vel-void)',
+        borderTop: '1px solid var(--color-vel-border)',
+        borderBottom: '1px solid var(--color-vel-border)',
+      }}
     >
       {/* ── Couche visuelle d'arrière-plan (décorative, non interactive) ── */}
       <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
@@ -51,18 +61,41 @@ export const ShowcaseBand: React.FC<ShowcaseBandProps> = ({ lang, onReserve, ima
             className="w-full h-[130%] object-cover -mt-[15%]"
             style={reduceMotion ? {} : { y: parallaxY }}
           />
-        ) : (
-          // Pas d'image disponible : simple fond dégradé discret
-          <div className="w-full h-full" style={{
-            background: 'radial-gradient(ellipse 70% 80% at 85% 50%, rgba(180,83,9,0.08), transparent 70%)',
-          }} />
+        ) : null}
+
+        {hasVisual && (
+          <>
+            {/* Voile cinématographique : la voiture émerge du noir à droite,
+                le texte repose sur du vel-void quasi plein à gauche. */}
+            <div className="absolute inset-0" style={{
+              background: `linear-gradient(90deg,
+                rgba(${VOID}, 0.97) 0%,
+                rgba(${VOID}, 0.88) 34%,
+                rgba(${VOID}, 0.45) 66%,
+                rgba(${VOID}, 0.10) 100%)`,
+            }} />
+            {/* Fondu haut/bas : la bande se raccorde aux sections voisines. */}
+            <div className="absolute inset-0" style={{
+              background: `linear-gradient(180deg,
+                var(--color-vel-void) 0%,
+                rgba(${VOID}, 0) 28%,
+                rgba(${VOID}, 0) 68%,
+                var(--color-vel-void) 100%)`,
+            }} />
+          </>
         )}
-        {/* Dégradé clair pour la lisibilité du texte au-dessus (la voiture reste visible à droite) */}
+
+        {/* Grille de piste — même décor que le hero et les autres sections. */}
+        <div className="absolute inset-0 vel-grid-bg" />
+
+        {/* Halo rouge diffus derrière le texte (seule grande surface colorée). */}
         <div className="absolute inset-0" style={{
-          background: 'linear-gradient(90deg, rgba(248,250,252,0.97) 0%, rgba(248,250,252,0.82) 40%, rgba(248,250,252,0.12) 75%, rgba(248,250,252,0) 100%)',
+          background: 'radial-gradient(ellipse 60% 70% at 12% 50%, rgba(200, 16, 46, 0.14), transparent 70%)',
         }} />
-        <div className="absolute inset-0" style={{
-          background: 'linear-gradient(to bottom, rgba(248,250,252,0.85), transparent 22%, transparent 78%, rgba(248,250,252,0.85))',
+
+        {/* Filet rouge → chrome le long du bord haut (signature du hero). */}
+        <div className="absolute top-0 left-0 right-0 h-px" style={{
+          background: 'linear-gradient(90deg, transparent, rgba(200, 16, 46, 0.5), rgba(233, 235, 238, 0.25), transparent)',
         }} />
       </div>
 
@@ -76,7 +109,7 @@ export const ShowcaseBand: React.FC<ShowcaseBandProps> = ({ lang, onReserve, ima
           className="max-w-xl space-y-6"
         >
           <p className="font-bold text-xs tracking-[0.25em] uppercase"
-            style={{ color: '#B45309', fontFamily: 'var(--font-display)' }}>
+            style={{ color: 'var(--color-vel-cta-bright)', fontFamily: 'var(--font-display)' }}>
             {{ fr: 'Prêt quand vous l\'êtes', ar: 'جاهزون عندما تكون جاهزًا' }[lang]}
           </p>
           <h2 className="font-black text-4xl sm:text-5xl text-vel-ink leading-tight"

@@ -1599,6 +1599,7 @@ export class DatabaseService {
           name: row.name ?? '',
           description: row.description ?? '',
           logo: row.logo ?? '',
+          navbar_logo: row.navbar_logo ?? '',
           phone_number_2: row.phone_number_2 ?? '',
           bank_number: row.bank_number ?? '',
           address: row.address ?? '',
@@ -1615,6 +1616,7 @@ export class DatabaseService {
       name: '',
       description: '',
       logo: '',
+      navbar_logo: '',
       phone_number_2: '',
       bank_number: '',
       address: '',
@@ -1665,8 +1667,11 @@ export class DatabaseService {
       name,
       agency_name: name,
       agencyName: name,
+      // `logo` reste le wordmark : il part tel quel dans les contrats et factures.
+      // L'écusson est exposé à côté, pour les pastilles de l'admin.
       logo,
       agency_logo: logo,
+      navbar_logo: (settings.navbar_logo || '').trim(),
       address,
       agency_address: address,
       phone,
@@ -1683,11 +1688,12 @@ export class DatabaseService {
     // les champs non fournis : on fusionne avec l'enregistrement existant.
     // Si la lecture échoue, on abandonne — écrire par-dessus serait destructeur.
     const current = await this.fetchWebsiteSettingsRow();
-    const merged = {
+    const merged: Record<string, any> = {
       id: current?.id ?? WEBSITE_SETTINGS_ID,
       name: settings.name ?? current?.name ?? '',
       description: settings.description ?? current?.description ?? '',
       logo: settings.logo ?? current?.logo ?? '',
+      navbar_logo: settings.navbar_logo ?? current?.navbar_logo ?? '',
       phone_number_2: settings.phone_number_2 ?? current?.phone_number_2 ?? '',
       bank_number: settings.bank_number ?? current?.bank_number ?? '',
       address: settings.address ?? current?.address ?? '',
@@ -1696,23 +1702,23 @@ export class DatabaseService {
       updated_at: new Date().toISOString(),
     };
 
+    const upsert = (payload: Record<string, any>) =>
+      supabase.from('website_settings').upsert(payload, { onConflict: 'id' }).select().single();
+
     // Upsert sur la ligne unique : jamais de fenêtre pendant laquelle la table
     // est vide, et deux sauvegardes concurrentes ne créent plus de doublon.
-    let { data, error } = await supabase
-      .from('website_settings')
-      .upsert(merged, { onConflict: 'id' })
-      .select()
-      .single();
+    let payload = { ...merged };
+    let { data, error } = await upsert(payload);
 
-    // Colonne landing_background absente (migration 20260706 non appliquée) :
-    // on réessaie sans la colonne pour ne pas bloquer la sauvegarde des autres champs.
-    if (error && (error.message || '').includes('landing_background')) {
-      const { landing_background: _lb, ...withoutBackground } = merged;
-      ({ data, error } = await supabase
-        .from('website_settings')
-        .upsert(withoutBackground, { onConflict: 'id' })
-        .select()
-        .single());
+    // Colonne optionnelle absente (migration pas encore appliquée) : on la retire
+    // et on réessaie, plutôt que de bloquer la sauvegarde de TOUS les autres champs.
+    // On boucle : si deux migrations manquent, chaque tour en retire une.
+    for (const column of ['landing_background', 'navbar_logo']) {
+      if (!error) break;
+      if (!(error.message || '').includes(column)) continue;
+      console.warn(`Colonne "${column}" absente de website_settings — sauvegarde sans elle. Appliquez les migrations Supabase.`);
+      delete payload[column];
+      ({ data, error } = await upsert(payload));
     }
 
     if (error) throw error;
@@ -1726,6 +1732,7 @@ export class DatabaseService {
       name: data.name,
       description: data.description,
       logo: data.logo,
+      navbar_logo: data.navbar_logo ?? '',
       phone_number_2: data.phone_number_2,
       bank_number: data.bank_number,
       address: data.address,

@@ -4,42 +4,62 @@
   --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Space Grotesk", "DM Sans", sans-serif;
 
-  /* === PALETTE "AUTOMOTIVE OR & NOIR" ===
-     Source de vérité : design-system/auto_location/MASTER.md
-     Primary ardoise #1E293B · CTA or #B45309 · fond #F8FAFC · texte #0F172A.
-     Les noms vel-* historiques sont conservés (échelle de profondeur) mais
-     pointent désormais vers des valeurs CLAIRES. */
-  --color-vel-void:        #F8FAFC;  /* fond de page */
-  --color-vel-abyss:       #F1F5F9;  /* bandes / placeholders d'image */
-  --color-vel-deep:        #E8EDF4;  /* creux plus profonds */
-  --color-vel-surface:     #FFFFFF;  /* cartes */
-  --color-vel-elevated:    #FFFFFF;  /* cartes / champs */
+  /* === PALETTE "CAR SALAM — NOIR & ROUGE SANG" ===
+     Source de vérité : design-system/car_salam/MASTER.md
+     Dérivée du logo : fond noir · lettrage chrome · accent cramoisi profond.
+     Le rouge est RARE : il signale l'action et l'état actif, jamais le décor. */
 
-  --color-vel-primary:     #1E293B;  /* ardoise premium (titres, nav) */
-  --color-vel-cta:         #B45309;  /* or action (boutons, accents) */
+  /* Surfaces — échelle de profondeur (noms vel-* historiques conservés) */
+  --color-vel-void:        #08080A;  /* fond de page (pas #000 pur : évite le smearing OLED) */
+  --color-vel-abyss:       #0E0E11;  /* bandes / placeholders d'image */
+  --color-vel-deep:        #121216;  /* creux, pistes de champs */
+  --color-vel-surface:     #151519;  /* cartes */
+  --color-vel-elevated:    #1C1C22;  /* cartes survolées, modales, champs */
 
-  /* Or : -gold est lisible sur fond clair (AA, 5:1 sur blanc),
-     -light est l'or métallique réservé aux remplissages et aux fonds sombres. */
-  --color-vel-gold:        #B45309;
-  --color-vel-gold-light:  #D4AF37;
-  --color-vel-gold-dark:   #92400E;
-  --color-vel-gold-pale:   #E9C46A;  /* or clair : texte sur fond sombre */
-  --color-vel-gold-glow:   rgba(212, 175, 55, 0.14);
+  --color-vel-primary:     #E9EBEE;  /* chrome : titres, nav */
 
-  /* Noir : contrepartie de l'or (texte des boutons, aplats) */
-  --color-vel-black:       #0F172A;
+  /* Rouge — échelle d'accent.
+     -cta        = rouge de REMPLISSAGE (3.4:1 sur le noir → OK composants/grands
+                   titres, texte blanc dessus = 5.9:1). PAS de texte en petit corps.
+     -cta-bright = rouge de TEXTE (6.1:1 sur le noir → AA en petit corps). */
+  --color-vel-cta:         #C8102E;
+  --color-vel-cta-deep:    #8A0A1C;
+  --color-vel-cta-bright:  #FF4D52;
+
+  /* Chrome — le lettrage "CAR" du logo */
+  --color-vel-chrome:      #E9EBEE;
+  --color-vel-silver:      #9AA0AA;
+
+  /* Alias rétro-compat : les composants qui parlaient encore "gold" pointent
+     désormais vers le rouge/chrome. Évite un rename dans 18 fichiers. */
+  --color-vel-gold:        #FF4D52;  /* ex-or → rouge lisible en texte */
+  --color-vel-gold-light:  #C8102E;  /* ex-or clair → rouge de remplissage */
+  --color-vel-gold-dark:   #8A0A1C;
+  --color-vel-gold-pale:   #FF8A8E;
+  --color-vel-gold-glow:   rgba(200, 16, 46, 0.22);
+
+  --color-vel-black:       #08080A;
   --color-vel-black-deep:  #000000;
 
-  /* Texte (ex vel-white/silver, renommés ink/slate) */
-  --color-vel-ink:         #0F172A;  /* texte principal */
-  --color-vel-slate:       #334155;  /* texte secondaire */
-  --color-vel-muted:       #64748B;  /* texte atténué */
-  --color-vel-dim:         #94A3B8;  /* texte discret */
+  /* Texte — les 4 niveaux passent AA en corps de texte sur #08080A */
+  --color-vel-ink:         #F5F6F7;  /* 18.5:1 — titres, texte principal */
+  --color-vel-slate:       #C7CBD2;  /* 12.0:1 — texte secondaire */
+  --color-vel-muted:       #9BA1AB;  /*  8.3:1 — texte tertiaire, labels */
+  --color-vel-dim:         #7A808B;  /*  5.1:1 — méta, copyright, désactivé */
 
-  --color-vel-glass:       #FFFFFF;
-  --color-vel-glass-gold:  rgba(180, 83, 9, 0.08);
-  --color-vel-border:      rgba(15, 23, 42, 0.08);
-  --color-vel-border-gold: rgba(180, 83, 9, 0.3);
+  --color-vel-glass:            rgba(255, 255, 255, 0.03);
+  --color-vel-glass-gold:       rgba(200, 16, 46, 0.10);
+  --color-vel-border:           rgba(255, 255, 255, 0.09);
+  --color-vel-border-strong:    rgba(255, 255, 255, 0.16);
+  --color-vel-border-gold:      rgba(200, 16, 46, 0.35);
+  --color-vel-border-red:       rgba(200, 16, 46, 0.35);
+
+  /* Mouvement — rythme global partagé (cf. MASTER.md §5) */
+  --ease-enter: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-exit:  cubic-bezier(0.4, 0, 1, 1);
+  --dur-enter:  280ms;
+  --dur-exit:   180ms;
+  --dur-micro:  180ms;
 
   /* Legacy saas vars kept for admin compatibility */
   --color-saas-primary-start:   #1e3a8a;
@@ -60,40 +80,60 @@
   --color-saas-text-muted:      #64748b;
 }
 
-/* ── Global ── */
+/* ── Global ──
+   Le site public est noir, l'admin reste clair. Les deux partagent le même
+   <body>, donc la surface sombre est portée par html[data-surface="site"]
+   (posé par App.tsx selon la route). Sans ce garde-fou, le noir + le texte
+   quasi-blanc de vel-ink fuiraient dans le back-office. */
 body {
-  @apply bg-vel-void text-vel-ink antialiased;
+  @apply antialiased;
   font-family: var(--font-sans);
+  background: var(--color-saas-bg);
+  color: var(--color-saas-text-main);
+}
+
+html[data-surface="site"] body {
+  background: var(--color-vel-void);
+  color: var(--color-vel-ink);
 }
 
 .font-display { font-family: var(--font-display); }
 
-/* ── Carte claire (ex "glass" sombre) ── */
+/* ── Lettrage chrome : le dégradé métallique du "CAR" du logo ── */
+.text-chrome {
+  background: linear-gradient(180deg, var(--color-vel-chrome) 0%, #FFFFFF 42%, var(--color-vel-silver) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ── Carte sombre (verre sur noir) ── */
 .vel-glass {
   background: var(--color-vel-surface);
   border: 1px solid var(--color-vel-border);
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05), 0 8px 24px rgba(15, 23, 42, 0.04);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 12px 32px rgba(0, 0, 0, 0.5);
 }
 
 .vel-glass-gold {
   background: var(--color-vel-glass-gold);
-  border: 1px solid var(--color-vel-border-gold);
+  border: 1px solid var(--color-vel-border-red);
 }
 
-/* ── Encart accent (ex glass-cyan) ── */
+/* ── Encart accent rouge ── */
 .vel-glass-accent {
-  background: rgba(180, 83, 9, 0.04);
-  border: 1px solid rgba(180, 83, 9, 0.14);
+  background: rgba(200, 16, 46, 0.07);
+  border: 1px solid rgba(200, 16, 46, 0.22);
 }
 
-/* ── Bouton CTA principal (or, texte noir) ── */
+/* ── Bouton CTA principal (rouge plein, texte blanc — 5.9:1) ── */
 .btn-vel-cta {
   font-family: var(--font-display);
   font-weight: 700;
   letter-spacing: 0.05em;
-  color: var(--color-vel-black);
+  color: #FFFFFF;
   border-radius: 0.75rem;
-  transition: all 0.2s ease;
+  transition: transform var(--dur-micro) var(--ease-enter),
+              box-shadow var(--dur-micro) var(--ease-enter);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -101,67 +141,70 @@ body {
   position: relative;
   overflow: hidden;
   cursor: pointer;
-  background: linear-gradient(135deg, #D4AF37, #B45309);
-  box-shadow: 0 4px 14px rgba(180, 83, 9, 0.25);
+  background: linear-gradient(135deg, var(--color-vel-cta), var(--color-vel-cta-deep));
+  box-shadow: 0 4px 14px rgba(200, 16, 46, 0.30);
 }
 .btn-vel-cta:hover {
-  box-shadow: 0 8px 22px rgba(180, 83, 9, 0.32);
+  box-shadow: 0 10px 28px rgba(200, 16, 46, 0.42);
   transform: translateY(-2px);
 }
 .btn-vel-cta:active { transform: scale(0.97); }
-.btn-vel-cta:focus-visible { outline: 2px solid var(--color-vel-black); outline-offset: 2px; }
+.btn-vel-cta:focus-visible { outline: 2px solid var(--color-vel-cta-bright); outline-offset: 2px; }
 
 /* ── Bouton contour ── */
 .btn-vel-outline-cyan {
   font-family: var(--font-display);
   font-weight: 700;
   letter-spacing: 0.05em;
-  color: #334155;
+  color: var(--color-vel-slate);
   border-radius: 0.75rem;
-  transition: all 0.2s ease;
+  transition: all var(--dur-micro) var(--ease-enter);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
   cursor: pointer;
-  background: #FFFFFF;
-  border: 1px solid rgba(15, 23, 42, 0.14);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--color-vel-border-strong);
 }
 .btn-vel-outline-cyan:hover {
-  border-color: rgba(180, 83, 9, 0.4);
-  color: var(--color-vel-gold);
-  background: rgba(180, 83, 9, 0.04);
+  border-color: var(--color-vel-border-red);
+  color: var(--color-vel-cta-bright);
+  background: rgba(200, 16, 46, 0.08);
 }
 .btn-vel-outline-cyan:active { transform: scale(0.97); }
+.btn-vel-outline-cyan:focus-visible { outline: 2px solid var(--color-vel-cta-bright); outline-offset: 2px; }
 
-/* ── Anciennes classes "glow" neutralisées (pas de néon en mode clair) ── */
-.text-glow-cyan, .text-glow-violet, .text-glow-gold { text-shadow: none; }
+/* ── Lueur rouge : réservée aux éléments actifs / CTA ── */
+.text-glow-cyan, .text-glow-violet, .text-glow-gold {
+  text-shadow: 0 0 18px rgba(200, 16, 46, 0.45);
+}
 
-/* ── Bouton or (identique au CTA, conservé pour compat) ── */
+/* ── Bouton rouge (alias du CTA, conservé pour compat) ── */
 .btn-vel-gold {
   @apply relative overflow-hidden font-display font-bold tracking-wider
          px-8 py-4 rounded-xl transition-all duration-200
          active:scale-95 flex items-center justify-center gap-2 cursor-pointer;
-  color: var(--color-vel-black);
-  background: linear-gradient(135deg, #D4AF37, #B45309);
-  box-shadow: 0 4px 14px rgba(180, 83, 9, 0.25);
+  color: #FFFFFF;
+  background: linear-gradient(135deg, var(--color-vel-cta), var(--color-vel-cta-deep));
+  box-shadow: 0 4px 14px rgba(200, 16, 46, 0.30);
 }
 .btn-vel-gold:hover {
-  box-shadow: 0 8px 22px rgba(180, 83, 9, 0.32);
+  box-shadow: 0 10px 28px rgba(200, 16, 46, 0.42);
   transform: translateY(-2px);
 }
 
-/* ── Bouton noir (contrepartie de l'or : actions secondaires appuyées) ── */
+/* ── Bouton chrome (contrepartie du rouge : actions secondaires appuyées) ── */
 .btn-vel-black {
   @apply relative overflow-hidden font-display font-bold tracking-wider
          px-8 py-4 rounded-xl transition-all duration-200
          active:scale-95 flex items-center justify-center gap-2 cursor-pointer;
-  color: var(--color-vel-gold-light);
-  background: linear-gradient(135deg, #1E293B, #000000);
-  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.28);
+  color: var(--color-vel-black);
+  background: linear-gradient(135deg, #FFFFFF, var(--color-vel-silver));
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
 }
 .btn-vel-black:hover {
-  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.35);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.6);
   transform: translateY(-2px);
 }
 
@@ -170,20 +213,30 @@ body {
   @apply relative overflow-hidden font-display font-bold tracking-wider
          text-vel-slate px-8 py-4 rounded-xl transition-all duration-200
          active:scale-95 flex items-center justify-center gap-2 cursor-pointer;
-  background: #FFFFFF;
+  background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--color-vel-border);
 }
 .btn-vel-ghost:hover {
-  border-color: rgba(180, 83, 9, 0.35);
-  color: var(--color-vel-cta);
-  background: rgba(180, 83, 9, 0.03);
+  border-color: var(--color-vel-border-red);
+  color: var(--color-vel-cta-bright);
+  background: rgba(200, 16, 46, 0.08);
 }
 
-/* ── Scrollbar ── */
+/* ── Focus visible global (site public) ── */
+.vel-focusable:focus-visible {
+  outline: 2px solid var(--color-vel-cta-bright);
+  outline-offset: 2px;
+}
+
+/* ── Scrollbar : claire dans l'admin, sombre sur le site public ── */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: #F1F5F9; }
 ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 10px; }
 ::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+
+html[data-surface="site"] ::-webkit-scrollbar-track { background: #0E0E11; }
+html[data-surface="site"] ::-webkit-scrollbar-thumb { background: #2A2A31; }
+html[data-surface="site"] ::-webkit-scrollbar-thumb:hover { background: var(--color-vel-cta); }
 
 /* ── RTL Support ── */
 [dir="rtl"] { font-family: 'Noto Sans Arabic', sans-serif; }
@@ -258,49 +311,100 @@ body {
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #E2E8F0; border-radius: 10px; }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #CBD5E1; }
 
-/* ── Calendrier du wizard de réservation (react-day-picker, thème clair) ── */
+/* ── Calendrier du wizard de réservation (react-day-picker, thème sombre) ── */
 .wizard-calendar .rdp-root {
-  --rdp-accent-color: #B45309;
-  --rdp-accent-background-color: rgba(180, 83, 9, 0.10);
+  --rdp-accent-color: var(--color-vel-cta);
+  --rdp-accent-background-color: rgba(200, 16, 46, 0.16);
   --rdp-day-height: 42px;
   --rdp-day-width: 42px;
   --rdp-day_button-border-radius: 10px;
-  --rdp-today-color: #B45309;
-  --rdp-selected-border: 2px solid #B45309;
-  --rdp-range_start-color: #0F172A;
-  --rdp-range_end-color: #0F172A;
-  --rdp-range_start-background: linear-gradient(135deg, #D4AF37, #B45309);
-  --rdp-range_end-background: linear-gradient(135deg, #D4AF37, #B45309);
-  color: #334155;
+  --rdp-today-color: var(--color-vel-cta-bright);
+  --rdp-selected-border: 2px solid var(--color-vel-cta);
+  --rdp-range_start-color: #FFFFFF;
+  --rdp-range_end-color: #FFFFFF;
+  --rdp-range_start-background: linear-gradient(135deg, var(--color-vel-cta), var(--color-vel-cta-deep));
+  --rdp-range_end-background: linear-gradient(135deg, var(--color-vel-cta), var(--color-vel-cta-deep));
+  color: var(--color-vel-slate);
   font-family: var(--font-sans);
 }
 .wizard-calendar .rdp-month_caption,
 .wizard-calendar .rdp-caption_label {
-  color: #0F172A;
+  color: var(--color-vel-ink);
   font-family: var(--font-display);
   font-weight: 700;
 }
-.wizard-calendar .rdp-weekday { color: #94A3B8; font-size: 11px; }
-.wizard-calendar .rdp-chevron { fill: #B45309; }
-.wizard-calendar .rdp-day_button { cursor: pointer; transition: background 0.15s ease; }
+.wizard-calendar .rdp-weekday { color: var(--color-vel-dim); font-size: 11px; }
+.wizard-calendar .rdp-chevron { fill: var(--color-vel-cta-bright); }
+.wizard-calendar .rdp-day_button { cursor: pointer; transition: background var(--dur-micro) var(--ease-enter); }
 .wizard-calendar .rdp-day:not(.rdp-disabled) .rdp-day_button:hover {
-  background: rgba(180, 83, 9, 0.08);
+  background: rgba(200, 16, 46, 0.18);
 }
 .wizard-calendar .rdp-disabled { opacity: 0.4; }
 .wizard-calendar .rdp-disabled .rdp-day_button { cursor: not-allowed; text-decoration: line-through; }
-/* Jours déjà réservés : noir, distinct du simple passé et de l'or sélectionné */
+/* Jours déjà réservés : gris barré, distinct du passé et du rouge sélectionné */
 .wizard-calendar .wizard-day-blocked { opacity: 1; }
 .wizard-calendar .wizard-day-blocked .rdp-day_button {
-  background: rgba(15, 23, 42, 0.12);
-  color: rgba(15, 23, 42, 0.6);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-vel-dim);
   text-decoration: line-through;
   cursor: not-allowed;
 }
 /* Plage survolée entre le 1er et le 2e clic */
 .wizard-calendar .wizard-day-preview:not(.rdp-selected):not(.wizard-day-blocked) .rdp-day_button {
-  background: rgba(180, 83, 9, 0.07);
+  background: rgba(200, 16, 46, 0.12);
   border-radius: 0;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MOUVEMENT — cf. design-system/car_salam/MASTER.md §5
+   Animer uniquement transform/opacity. Toute animation exprime cause → effet.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Balayage lumineux sur les CTA (chrome qui passe sur la carrosserie) */
+@keyframes vel-sheen {
+  0%   { transform: translateX(-120%) skewX(-20deg); }
+  100% { transform: translateX(320%)  skewX(-20deg); }
+}
+.vel-sheen::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.28), transparent);
+  transform: translateX(-120%) skewX(-20deg);
+  pointer-events: none;
+}
+.vel-sheen:hover::after { animation: vel-sheen 850ms var(--ease-enter); }
+
+/* Pulsation de la lueur rouge — points d'état "live" uniquement */
+@keyframes vel-pulse-red {
+  0%, 100% { opacity: 1;   box-shadow: 0 0 0 0 rgba(200, 16, 46, 0.5); }
+  50%      { opacity: 0.7; box-shadow: 0 0 0 6px rgba(200, 16, 46, 0); }
+}
+.vel-pulse-red { animation: vel-pulse-red 2s var(--ease-enter) infinite; }
+
+/* Grille de fond façon piste — décor de section, très basse opacité */
+.vel-grid-bg {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 40%, transparent 100%);
+}
+
+/* Halo rouge diffus derrière le hero */
+.vel-halo-red {
+  background: radial-gradient(ellipse 60% 50% at 50% 40%, rgba(200, 16, 46, 0.20), transparent 70%);
+}
+
+/* ── Reduced motion : coupe tout, le contenu reste immédiatement lisible ── */
 @media (prefers-reduced-motion: reduce) {
-  .wizard-calendar .rdp-day_button { transition: none; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .vel-sheen:hover::after { animation: none; }
+  .vel-pulse-red { animation: none; }
 }

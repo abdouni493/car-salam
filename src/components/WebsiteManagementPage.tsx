@@ -1,14 +1,75 @@
 import React, { useState, useEffect } from 'react';
 import { Language, Car, SpecialOffer, ContactInfo, WebsiteSettings, PromoCode } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Eye, EyeOff, Tag, Calendar, Ticket, RefreshCw, Trash2, Copy, Loader2, ImageIcon } from 'lucide-react';
+import { X, Eye, EyeOff, Tag, Calendar, Ticket, RefreshCw, Trash2, Copy, Loader2, ImageIcon, UploadCloud, CheckCircle2, AlertTriangle, Layout } from 'lucide-react';
 import { DatabaseService } from '../services/DatabaseService';
 import { uploadWebsiteImage } from '../services/uploadWebsiteImage';
 import { CarCard } from './CarCard';
+import { SiteLogo } from './website/SiteLogo';
 
 interface WebsiteManagementPageProps {
   lang: Language;
 }
+
+/**
+ * Où le fichier a réellement atterri. Une data URL signifie que le bucket
+ * « website » a refusé l'upload : le logo vit alors dans la ligne de settings,
+ * rechargée à chaque affichage du site public. C'est un état à corriger, pas un
+ * état normal — d'où l'avertissement explicite plutôt qu'un silence.
+ */
+const StorageBadge: React.FC<{ value?: string; lang: Language }> = ({ value, lang }) => {
+  if (!value) return null;
+  return value.startsWith('data:') ? (
+    <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-lg">
+      <AlertTriangle size={12} />
+      {{ fr: 'Stocké en local (bucket indisponible)', ar: 'مخزن محليًا (مساحة التخزين غير متاحة)' }[lang]}
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg">
+      <CheckCircle2 size={12} />
+      {{ fr: 'Enregistré dans le bucket « website »', ar: 'محفوظ في مساحة التخزين «website»' }[lang]}
+    </span>
+  );
+};
+
+/** Zone de dépôt partagée par les deux logos : même comportement, même rendu. */
+const LogoDropzone: React.FC<{
+  busy: boolean;
+  dragOver: boolean;
+  hasValue: boolean;
+  onDragOver: () => void;
+  onDragLeave: () => void;
+  onDrop: (e: React.DragEvent) => void;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  hint: string;
+  lang: Language;
+}> = ({ busy, dragOver, hasValue, onDragOver, onDragLeave, onDrop, onChange, hint, lang }) => (
+  <label
+    onDragOver={e => { e.preventDefault(); onDragOver(); }}
+    onDragLeave={onDragLeave}
+    onDrop={onDrop}
+    className={`flex flex-col items-center justify-center gap-2 py-6 px-4 rounded-2xl border-2 border-dashed cursor-pointer transition-colors duration-200 ${
+      busy ? 'opacity-60 pointer-events-none' : ''
+    } ${
+      dragOver
+        ? 'border-saas-primary-via bg-blue-50'
+        : 'border-saas-border bg-saas-bg hover:border-saas-primary-via hover:bg-blue-50/40'
+    }`}
+  >
+    <input type="file" accept="image/*" onChange={onChange} className="hidden" disabled={busy} />
+    {busy
+      ? <Loader2 size={24} className="animate-spin text-saas-primary-via" />
+      : <UploadCloud size={24} className="text-saas-primary-via" />}
+    <p className="text-sm font-bold text-saas-text-main text-center">
+      {busy
+        ? { fr: 'Téléversement en cours…', ar: 'جارٍ التحميل…' }[lang]
+        : hasValue
+          ? { fr: 'Glissez une image ici ou cliquez pour remplacer', ar: 'اسحب صورة هنا أو انقر للاستبدال' }[lang]
+          : { fr: 'Glissez une image ici ou cliquez pour choisir', ar: 'اسحب صورة هنا أو انقر للاختيار' }[lang]}
+    </p>
+    <p className="text-xs text-saas-text-muted text-center">{hint}</p>
+  </label>
+);
 
 /** Code aléatoire lisible (sans 0/O/1/I) pour les codes promo. */
 const generateRandomPromoCode = (length = 8): string => {
@@ -49,6 +110,7 @@ export const WebsiteManagementPage: React.FC<WebsiteManagementPageProps> = ({ la
     name: '',
     description: '',
     logo: '',
+    navbar_logo: '',
     landing_background: '',
   });
   const [loading, setLoading] = useState(true);
@@ -57,7 +119,10 @@ export const WebsiteManagementPage: React.FC<WebsiteManagementPageProps> = ({ la
 
   // SETTINGS — uploads (logo + image de fond, même bucket "website")
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [uploadingNavbarLogo, setUploadingNavbarLogo] = useState(false);
   const [uploadingBackground, setUploadingBackground] = useState(false);
+  const [logoDragOver, setLogoDragOver] = useState(false);
+  const [navbarLogoDragOver, setNavbarLogoDragOver] = useState(false);
 
   // PROMO CODES STATE
   const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
@@ -351,6 +416,7 @@ export const WebsiteManagementPage: React.FC<WebsiteManagementPageProps> = ({ la
         name: settings.name || '',
         description: settings.description || '',
         logo: settings.logo || '',
+        navbar_logo: settings.navbar_logo || '',
       };
 
       await DatabaseService.updateWebsiteSettings(settingsToSave);
@@ -391,37 +457,115 @@ export const WebsiteManagementPage: React.FC<WebsiteManagementPageProps> = ({ la
     return true;
   };
 
-  // Logo : téléversé dans le bucket "website" (repli base64 si le bucket
-  // n'existe pas encore), puis sauvegarde immédiate des paramètres.
-  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file || !validateImageFile(file)) return;
+  // Le logo part dans le bucket Supabase "website" (le même que l'image de fond)
+  // et c'est son URL publique qui est stockée dans website_settings.logo.
+  //
+  // Repli base64 : uniquement pour les petits fichiers. Une data URL est
+  // relue à CHAQUE affichage du site public depuis la ligne de settings ;
+  // y coller un PNG de plusieurs Mo ralentirait tout le site. Au-delà du seuil
+  // on refuse et on explique quoi corriger, plutôt que de dégrader en silence.
+  const DATA_URL_FALLBACK_MAX = 512 * 1024; // 512 Ko
 
-    setUploadingLogo(true);
+  /** Les deux logos suivent exactement le même chemin : même bucket, même repli. */
+  type LogoField = 'logo' | 'navbar_logo';
+
+  const saveLogo = async (file: File, field: LogoField) => {
+    if (!validateImageFile(file)) return;
+
+    const setBusy = field === 'logo' ? setUploadingLogo : setUploadingNavbarLogo;
+    setBusy(true);
     try {
-      let logoValue: string | null = null;
-      const uploaded = await uploadWebsiteImage(file, 'logo');
+      let logoValue: string;
+      const uploaded = await uploadWebsiteImage(file, field === 'logo' ? 'logo' : 'navbar-logo');
+
       if (uploaded.success && uploaded.url) {
         logoValue = uploaded.url;
-      } else {
-        // Repli : ancien comportement (data URL) si le bucket manque
+      } else if (file.size <= DATA_URL_FALLBACK_MAX) {
+        console.warn('Bucket "website" indisponible, repli data URL:', uploaded.error);
         logoValue = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = ev => resolve(ev.target?.result as string);
           reader.onerror = () => reject(new Error('read error'));
           reader.readAsDataURL(file);
         });
+      } else {
+        notify(
+          'error',
+          (uploaded.error || (lang === 'fr' ? 'Téléversement refusé' : 'تم رفض التحميل')) +
+            (lang === 'fr'
+              ? ' — image trop lourde pour le repli local. Corrigez le bucket "website", ou réessayez avec une image de moins de 512 Ko.'
+              : ' — الصورة كبيرة جدًا للحفظ المحلي. أصلح مساحة التخزين "website" أو استخدم صورة أقل من 512 كيلوبايت.'),
+          9000,
+        );
+        return;
       }
 
-      setSettings(prev => ({ ...prev, logo: logoValue! }));
-      await DatabaseService.updateWebsiteSettings({ ...settings, logo: logoValue! });
-      notify('success', lang === 'fr' ? 'Logo enregistré avec succès!' : 'تم حفظ الشعار بنجاح!', 3000);
+      const saved = await DatabaseService.updateWebsiteSettings({ ...settings, [field]: logoValue });
+
+      // updateWebsiteSettings retombe sur un upsert SANS la colonne quand celle-ci
+      // n'existe pas encore en base : les autres champs passent, mais la valeur
+      // demandée est silencieusement perdue. On relit donc ce que la base a
+      // réellement gardé — sans ça on afficherait « enregistré » alors que le
+      // logo disparaîtrait au prochain rechargement.
+      if (!saved[field]) {
+        setSettings(prev => ({ ...prev, [field]: '' }));
+        notify(
+          'error',
+          lang === 'fr'
+            ? `La colonne « ${field} » n'existe pas encore dans votre base Supabase : le logo n'a PAS été enregistré. Exécutez supabase/migrations/20260712_website_navbar_logo.sql dans le SQL Editor de Supabase, puis réessayez.`
+            : `العمود «${field}» غير موجود بعد في قاعدة بيانات Supabase: لم يتم حفظ الشعار. نفّذ supabase/migrations/20260712_website_navbar_logo.sql ثم أعد المحاولة.`,
+          14000,
+        );
+        return;
+      }
+
+      setSettings(prev => ({ ...prev, [field]: saved[field] as string }));
+      notify(
+        'success',
+        field === 'navbar_logo'
+          ? (lang === 'fr'
+              ? 'Logo de la barre de navigation enregistré — il apparaît maintenant sur le site.'
+              : 'تم حفظ شعار شريط التنقل — يظهر الآن على الموقع.')
+          : (lang === 'fr'
+              ? 'Logo principal enregistré (barre latérale + documents imprimés).'
+              : 'تم حفظ الشعار الرئيسي (الشريط الجانبي + المستندات المطبوعة).'),
+        4000,
+      );
     } catch (error: any) {
       console.error('Error auto-saving logo:', error);
       notify('error', error.message || (lang === 'fr' ? 'Erreur lors de la sauvegarde du logo' : 'خطأ في حفظ الشعار'));
     } finally {
-      setUploadingLogo(false);
+      setBusy(false);
+    }
+  };
+
+  const handleLogoUpload = (field: LogoField) => async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (file) await saveLogo(file, field);
+  };
+
+  const handleLogoDrop = (field: LogoField) => async (e: React.DragEvent) => {
+    e.preventDefault();
+    (field === 'logo' ? setLogoDragOver : setNavbarLogoDragOver)(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) await saveLogo(file, field);
+  };
+
+  const handleRemoveLogo = async (field: LogoField) => {
+    try {
+      setSettings(prev => ({ ...prev, [field]: '' }));
+      await DatabaseService.updateWebsiteSettings({ ...settings, [field]: '' });
+      notify(
+        'success',
+        field === 'navbar_logo'
+          ? (lang === 'fr'
+              ? 'Logo de navigation retiré — le site réutilise le logo principal.'
+              : 'تمت إزالة شعار التنقل — يعود الموقع إلى الشعار الرئيسي.')
+          : (lang === 'fr' ? 'Logo principal retiré.' : 'تمت إزالة الشعار الرئيسي.'),
+      );
+    } catch (error: any) {
+      notify('error', error.message || (lang === 'fr' ? 'Erreur' : 'خطأ'));
     }
   };
 
@@ -1360,10 +1504,17 @@ export const WebsiteManagementPage: React.FC<WebsiteManagementPageProps> = ({ la
               exit={{ opacity: 0, y: -10 }}
               className="bg-white rounded-[2rem] shadow-lg border border-saas-border overflow-hidden"
             >
-              <div className="p-6 border-b border-saas-border bg-linear-to-r from-purple-500 via-purple-600 to-purple-700 text-white">
+              {/* En-tête aux couleurs de la marque (noir + rouge Car Salam) */}
+              <div
+                className="p-6 border-b border-saas-border text-white"
+                style={{ background: 'linear-gradient(110deg, #08080A 0%, #1C1C22 55%, #8A0A1C 100%)' }}
+              >
                 <h2 className="text-2xl font-black uppercase tracking-tighter flex items-center gap-3">
-                  ⚙️ {{fr: 'Paramètres du Site', ar: 'إعدادات الموقع'}[lang]}
+                  {{fr: 'Paramètres du Site', ar: 'إعدادات الموقع'}[lang]}
                 </h2>
+                <p className="text-xs font-bold uppercase tracking-[0.2em] mt-1" style={{ color: '#FF4D52' }}>
+                  {{fr: 'Identité · Logo · Image de fond', ar: 'الهوية · الشعار · صورة الخلفية'}[lang]}
+                </p>
               </div>
 
               <form onSubmit={handleSaveSettings} className="p-8 space-y-6">
@@ -1389,35 +1540,153 @@ export const WebsiteManagementPage: React.FC<WebsiteManagementPageProps> = ({ la
                   />
                 </div>
 
-                {/* Logo */}
-                <div className="space-y-4">
-                  <label className="label-saas">🖼️ {{fr: 'Logo du site', ar: 'شعار الموقع'}[lang]}</label>
-                  <div className="flex gap-6 items-start">
-                    <div className="w-24 h-24 rounded-lg overflow-hidden border-2 border-saas-border bg-saas-bg flex items-center justify-center flex-shrink-0">
+                {/* ══════════════════════════════════════════════════════════
+                    DEUX LOGOS, DEUX USAGES
+                    ─────────────────────────────────────────────────────────
+                    · logo        → barre latérale de l'admin + documents
+                                    imprimés (contrats, factures). Posé sur du
+                                    BLANC, format compact.
+                    · navbar_logo → barre de navigation du site public. Fond
+                                    NOIR, format large (wordmark).
+
+                    Un même fichier ne peut pas bien rendre sur les deux fonds :
+                    d'où deux champs distincts. navbar_logo vide → le site
+                    retombe sur logo (rien ne casse pour l'existant).
+                    Les deux partent dans le MÊME bucket Supabase « website ».
+                    ══════════════════════════════════════════════════════════ */}
+
+                {/* ─── 1. LOGO PRINCIPAL ─── */}
+                <div className="space-y-4 pt-2">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <label className="label-saas !mb-0 flex items-center gap-2">
+                      <ImageIcon size={15} />
+                      {{fr: 'Logo principal — admin & documents imprimés', ar: 'الشعار الرئيسي — الإدارة والمستندات'}[lang]}
+                    </label>
+                    <StorageBadge value={settings.logo} lang={lang} />
+                  </div>
+
+                  <div className="flex flex-wrap gap-5 items-center">
+                    {/* Aperçu sur fond CLAIR : c'est là que ce logo est réellement posé */}
+                    <div className="w-40 h-24 rounded-xl border-2 border-saas-border bg-white flex items-center justify-center shrink-0 p-3">
                       {settings.logo ? (
-                        <img src={settings.logo} alt="Logo" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        <img src={settings.logo} alt="Logo principal" className="max-w-full max-h-full object-contain" referrerPolicy="no-referrer" />
                       ) : (
-                        <span className="text-4xl">🌐</span>
+                        <ImageIcon size={26} className="text-saas-text-muted opacity-40" />
                       )}
                     </div>
-                    <div className="flex-1">
-                      <label className="block">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleLogoUpload}
-                          className="hidden"
-                          disabled={uploadingLogo}
-                        />
-                        <span className={`btn-saas-primary px-6 py-3 inline-flex items-center gap-2 cursor-pointer ${uploadingLogo ? 'opacity-50 pointer-events-none' : ''}`}>
-                          {uploadingLogo && <Loader2 size={15} className="animate-spin" />}
-                          {{fr: 'Changer le logo', ar: 'تغيير الشعار'}[lang]}
-                        </span>
-                      </label>
-                      <p className="text-xs text-saas-text-muted mt-2">
-                        {{fr: 'Format recommandé: PNG ou JPG (500x500px)', ar: 'الصيغة الموصى بها: PNG أو JPG (500x500px)'}[lang]}
-                      </p>
+                    <div className="flex-1 min-w-[220px]">
+                      <LogoDropzone
+                        busy={uploadingLogo}
+                        dragOver={logoDragOver}
+                        hasValue={!!settings.logo}
+                        onDragOver={() => setLogoDragOver(true)}
+                        onDragLeave={() => setLogoDragOver(false)}
+                        onDrop={handleLogoDrop('logo')}
+                        onChange={handleLogoUpload('logo')}
+                        hint={{fr: 'Logo lisible sur fond blanc · 5 Mo max', ar: 'شعار واضح على خلفية بيضاء · 5 ميغابايت'}[lang]}
+                        lang={lang}
+                      />
+                      {settings.logo && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveLogo('logo')}
+                          className="mt-3 inline-flex items-center gap-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-bold py-2 px-3.5 rounded-xl text-xs transition-colors"
+                        >
+                          <Trash2 size={13} />
+                          {{fr: 'Retirer', ar: 'إزالة'}[lang]}
+                        </button>
+                      )}
                     </div>
+                  </div>
+                </div>
+
+                {/* ─── 2. LOGO DE LA BARRE DE NAVIGATION DU SITE ─── */}
+                <div className="space-y-4 pt-6 border-t border-saas-border">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <label className="label-saas !mb-0 flex items-center gap-2">
+                      <Layout size={15} />
+                      {{fr: 'Logo de la barre de navigation du site', ar: 'شعار شريط تنقل الموقع'}[lang]}
+                    </label>
+                    <StorageBadge value={settings.navbar_logo} lang={lang} />
+                  </div>
+
+                  {/* Aperçu FIDÈLE de la navbar publique : même composant SiteLogo,
+                      même hauteur, même fond noir. Ce qu'on voit ici est
+                      littéralement ce que verra le visiteur. */}
+                  <div className="rounded-2xl overflow-hidden border-2 border-saas-border">
+                    <div
+                      className="flex items-center justify-between px-5 py-4 gap-4"
+                      style={{ background: '#08080A', borderBottom: '1px solid rgba(255,255,255,0.09)' }}
+                    >
+                      <SiteLogo
+                        logo={settings.navbar_logo || settings.logo}
+                        name={settings.name}
+                        lang={lang}
+                        height={44}
+                      />
+                      <div className="hidden sm:flex items-center gap-1">
+                        {['Accueil', 'Offres', 'Spéciales', 'Commander'].map((l, i) => (
+                          <span
+                            key={l}
+                            className="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest"
+                            style={{
+                              fontFamily: 'var(--font-display)',
+                              color: i === 0 ? '#FF4D52' : '#9BA1AB',
+                              background: i === 0 ? 'rgba(200,16,46,0.16)' : 'transparent',
+                              border: i === 0 ? '1px solid rgba(200,16,46,0.35)' : '1px solid transparent',
+                            }}
+                          >
+                            {l}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="px-5 py-2 bg-saas-bg flex items-center justify-between gap-3 flex-wrap">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-saas-text-muted">
+                        {{fr: 'Aperçu réel de la barre de navigation', ar: 'معاينة حقيقية لشريط التنقل'}[lang]}
+                      </p>
+                      {!settings.navbar_logo && (
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-amber-700">
+                          {settings.logo
+                            ? {fr: 'Repli sur le logo principal', ar: 'يعود إلى الشعار الرئيسي'}[lang]
+                            : {fr: 'Monogramme par défaut', ar: 'الشعار الافتراضي'}[lang]}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <LogoDropzone
+                    busy={uploadingNavbarLogo}
+                    dragOver={navbarLogoDragOver}
+                    hasValue={!!settings.navbar_logo}
+                    onDragOver={() => setNavbarLogoDragOver(true)}
+                    onDragLeave={() => setNavbarLogoDragOver(false)}
+                    onDrop={handleLogoDrop('navbar_logo')}
+                    onChange={handleLogoUpload('navbar_logo')}
+                    hint={{
+                      fr: 'Version claire/chrome, fond transparent ou noir · format large (~3:2) · 5 Mo max',
+                      ar: 'نسخة فاتحة، خلفية شفافة أو سوداء · تنسيق عريض (~3:2) · 5 ميغابايت كحد أقصى',
+                    }[lang]}
+                    lang={lang}
+                  />
+
+                  <div className="flex flex-wrap items-center gap-3">
+                    {settings.navbar_logo && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveLogo('navbar_logo')}
+                        className="inline-flex items-center gap-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-bold py-2.5 px-4 rounded-xl text-sm transition-colors"
+                      >
+                        <Trash2 size={14} />
+                        {{fr: 'Retirer le logo de navigation', ar: 'إزالة شعار التنقل'}[lang]}
+                      </button>
+                    )}
+                    <p className="text-xs text-saas-text-muted">
+                      {{
+                        fr: 'Enregistré dans le bucket « website » — le même que le logo principal et l’image de fond.',
+                        ar: 'يُحفظ في مساحة التخزين «website» — نفس مساحة الشعار الرئيسي وصورة الخلفية.',
+                      }[lang]}
+                    </p>
                   </div>
                 </div>
 
