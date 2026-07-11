@@ -1,16 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  Calendar, TrendingUp, DollarSign,
-  ChevronDown, ChevronUp, Printer, Loader2, AlertCircle,
-  Clock, Handshake, Phone, User as UserIcon
+  Calendar, TrendingUp, ChevronDown, Printer, Loader2, AlertCircle,
+  Clock, Handshake, Phone, User as UserIcon, Wallet, Receipt,
+  PieChart, ArrowRight, Gauge,
 } from 'lucide-react';
 import { Language, Car, ReservationDetails, VehicleExpense } from '../types';
 import { DatabaseService } from '../services/DatabaseService';
 import { ReservationsService } from '../services/ReservationsService';
 import { getVehicleExpenses } from '../services/expenseService';
 import { getCarsWithOwners } from '../services/carService';
-import { computeConsignmentSummary, reservationCommission, ownerDeliveryFee } from '../utils/consignmentMath';
+import {
+  calcPaid, inRange, pct, fmtPct, computeVehicleGains, commissionBreakdown,
+} from '../utils/gainsMath';
+import { PctChip, SplitBar, SplitLegend, CalcRow, StatCard } from './gains/GainsUI';
 import { generateReportHTML } from './ReportPrintTemplate';
 import { eurOrUndefined } from '../utils/currency';
 
@@ -18,7 +21,7 @@ interface CarGainsPageProps {
   lang: Language;
 }
 
-const T = (fr: string, ar: string, lang: Language) => lang === 'fr' ? fr : ar;
+const T = (fr: string, ar: string, lang: Language) => (lang === 'fr' ? fr : ar);
 const fmt = (n: number) => Math.round(n || 0).toLocaleString('fr-DZ');
 const fmtD = (d: string) => {
   try {
@@ -28,30 +31,13 @@ const fmtD = (d: string) => {
   }
 };
 
-// Calculate paid amount
-const calcPaid = (r: ReservationDetails): number => {
-  const payments = (r.payments || []) as any[];
-  if (payments.length > 0) {
-    const total = payments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
-    if (total > 0) return total;
-  }
-  return Math.max(0, (Number(r.totalPrice) || 0) - (Number(r.remainingPayment) || 0));
-};
-
-// Helper to check if date is in range
-const inRange = (dateStr: string, startDate: string, endDate: string): boolean => {
-  if (!dateStr) return false;
-  const d = dateStr.substring(0, 10);
-  return (!startDate || d >= startDate) && (!endDate || d <= endDate);
-};
-
 const STATUS_META: Record<string, { fr: string; ar: string; cls: string }> = {
-  pending:   { fr: 'En attente', ar: 'قيد الانتظار', cls: 'bg-yellow-100 text-yellow-700' },
-  accepted:  { fr: 'Acceptée',   ar: 'مقبول',        cls: 'bg-sky-100 text-sky-700' },
-  confirmed: { fr: 'Confirmée',  ar: 'مؤكد',         cls: 'bg-blue-100 text-blue-700' },
-  active:    { fr: 'En cours',   ar: 'جارية',        cls: 'bg-indigo-100 text-indigo-700' },
-  completed: { fr: 'Terminée',   ar: 'منتهية',       cls: 'bg-emerald-100 text-emerald-700' },
-  cancelled: { fr: 'Annulée',    ar: 'ملغاة',        cls: 'bg-gray-200 text-gray-500' },
+  pending:   { fr: 'En attente', ar: 'قيد الانتظار', cls: 'bg-amber-50 text-amber-700 ring-amber-200' },
+  accepted:  { fr: 'Acceptée',   ar: 'مقبول',        cls: 'bg-sky-50 text-sky-700 ring-sky-200' },
+  confirmed: { fr: 'Confirmée',  ar: 'مؤكد',         cls: 'bg-blue-50 text-blue-700 ring-blue-200' },
+  active:    { fr: 'En cours',   ar: 'جارية',        cls: 'bg-indigo-50 text-indigo-700 ring-indigo-200' },
+  completed: { fr: 'Terminée',   ar: 'منتهية',       cls: 'bg-emerald-50 text-emerald-700 ring-emerald-200' },
+  cancelled: { fr: 'Annulée',    ar: 'ملغاة',        cls: 'bg-slate-100 text-slate-500 ring-slate-200' },
 };
 
 export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
@@ -69,10 +55,9 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
   const [reservations, setReservations] = useState<ReservationDetails[]>([]);
   const [expenses, setExpenses] = useState<VehicleExpense[]>([]);
   const [expandedRes, setExpandedRes] = useState<string | null>(null);
-  const [expandedExp, setExpandedExp] = useState<string | null>(null);
 
-  // Load cars on mount — WITH owner info so conciergerie commissions can be
-  // computed with the real barème (page admin uniquement).
+  // Chargement AVEC les propriétaires : sans le barème, aucune commission de
+  // conciergerie ne peut être calculée (page réservée à l'admin).
   useEffect(() => {
     const loadCars = async () => {
       try {
@@ -114,9 +99,7 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
               : null,
           }));
           setCars(mapped);
-          if (mapped.length > 0) {
-            setSelectedCarId(mapped[0].id);
-          }
+          if (mapped.length > 0) setSelectedCarId(mapped[0].id);
         }
       } catch (err) {
         console.error('Error loading cars:', err);
@@ -125,7 +108,6 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
     loadCars();
   }, []);
 
-  // Generate report on button click
   const handleGenerate = async () => {
     if (!selectedCarId || !startDate || !endDate) {
       alert(T('Veuillez sélectionner un véhicule et les dates.', 'يرجى تحديد المركبة والتواريخ.', lang));
@@ -139,16 +121,17 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
         (async () => {
           const res = await getVehicleExpenses();
           return res.expenses || [];
-        })()
+        })(),
       ]);
 
       const carRes = resList.filter(
-        r => (r.carId || r.car?.id) === selectedCarId && inRange(r.step1?.departureDate || r.createdAt || '', startDate, endDate)
+        r => (r.carId || r.car?.id) === selectedCarId
+          && inRange(r.step1?.departureDate || r.createdAt || '', startDate, endDate),
       );
 
-      const carExp = expList.filter(
-        e => e.carId === selectedCarId && inRange(e.date, startDate, endDate)
-      ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      const carExp = expList
+        .filter(e => e.carId === selectedCarId && inRange(e.date, startDate, endDate))
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
       setReservations(carRes);
       setExpenses(carExp);
@@ -161,53 +144,30 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
     }
   };
 
-  // ── Metrics ────────────────────────────────────────────────────────────────
   const selectedCar = cars.find(c => c.id === selectedCarId);
-  const isConsignment = selectedCar?.ownershipType === 'consignment' && !!selectedCar?.ownerInfo;
-  const ownerInfo = selectedCar?.ownerInfo || null;
 
-  const nonCancelledRes = reservations.filter(r => r.status !== 'cancelled');
-  const totalPaid = nonCancelledRes.reduce((s, r) => s + calcPaid(r), 0);
-  const totalInvoiced = nonCancelledRes.reduce((s, r) => s + (Number(r.totalPrice) || 0), 0);
-  const totalRemaining = reservations
-    .filter(r => !['completed', 'cancelled'].includes(r.status))
-    .reduce((s, r) => s + (Number(r.remainingPayment) || 0), 0);
-  const totalExpenses = expenses.reduce((s, e) => s + (Number(e.cost) || 0), 0);
-  const totalDaysRented = nonCancelledRes.reduce((s, r) => s + (Number(r.totalDays) || 0), 0);
-  const periodDays = Math.max(1, Math.round(
-    (new Date(endDate).getTime() - new Date(startDate).getTime()) / 86400000
-  ) + 1);
-  const occupancy = Math.min(100, Math.round((totalDaysRented / periodDays) * 100));
+  // Tous les agrégats viennent du socle partagé : la page « Rapports » applique
+  // exactement les mêmes formules sur les mêmes données.
+  const g = useMemo(
+    () => computeVehicleGains(selectedCar, reservations, expenses),
+    [selectedCar, reservations, expenses],
+  );
+  const { consignment, owner } = g;
 
-  // Conciergerie : mêmes formules que la vue DB `consignment_earnings`.
-  const consignment = isConsignment && ownerInfo
-    ? computeConsignmentSummary(nonCancelledRes, ownerInfo)
-    : null;
+  const periodDays = Math.max(
+    1,
+    Math.round((new Date(endDate).getTime() - new Date(startDate).getTime()) / 86400000) + 1,
+  );
+  const occupancy = Math.min(100, pct(g.daysRented, periodDays));
 
-  // Bénéfice net : pour une voiture d'agence, tout l'encaissé revient à l'agence.
-  // Pour une conciergerie, seule la commission (+ livraison propriétaire) est un gain.
-  const netBenefit = consignment
-    ? consignment.agencyGain - totalExpenses
-    : totalPaid - totalExpenses;
-
-  // Print function
   const handlePrint = async () => {
     if (!selectedCar) return;
-
     try {
       const agencySettings = await DatabaseService.getAgencyBranding();
-
       const html = generateReportHTML(
-        selectedCar,
-        reservations,
-        expenses,
-        startDate,
-        endDate,
-        agencySettings,
-        lang
+        selectedCar, reservations, expenses, startDate, endDate, agencySettings, lang,
       );
 
-      // Use iframe for better print handling
       const iframe = document.createElement('iframe');
       iframe.id = '__print_iframe__';
       iframe.style.display = 'none';
@@ -218,186 +178,207 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
         iframeDoc.open();
         iframeDoc.write(html);
         iframeDoc.close();
-
         setTimeout(() => {
           iframe.contentWindow?.print();
-          // Clean up after print
-          setTimeout(() => {
-            document.body.removeChild(iframe);
-          }, 100);
+          setTimeout(() => document.body.removeChild(iframe), 100);
         }, 250);
       }
     } catch (err) {
       console.error('Error printing report:', err);
-      alert(T('Erreur lors de l\'impression.', 'خطأ في الطباعة.', lang));
+      alert(T("Erreur lors de l'impression.", 'خطأ في الطباعة.', lang));
     }
   };
 
+  /** Le barème du propriétaire, écrit tel qu'il s'applique. */
+  const scaleLabel = owner
+    ? owner.commissionType === 'percentage'
+      ? `${owner.commissionValue.toLocaleString('fr-FR')} %`
+      : `${fmt(owner.commissionValue)} DA`
+    : '';
+
+  // ── KPI : véhicule confié vs véhicule de l'agence ───────────────────────────
   const kpis = consignment
     ? [
         {
-          label: T('Chiffre d\'affaires', 'رقم الأعمال', lang),
-          value: fmt(totalPaid),
-          subtext: `${nonCancelledRes.length} ${T('location(s)', 'إيجار', lang)}`,
-          gradient: 'from-blue-500 to-blue-600',
-          icon: '📋'
+          label: T('CA encaissé (brut)', 'المحصّل الإجمالي', lang),
+          value: g.collected,
+          share: g.collectionRate,
+          shareLabel: T('du facturé', 'من المفوتر', lang),
+          tone: 'slate' as const,
+          icon: <Wallet size={15} />,
         },
         {
-          label: T('Commission agence', 'عمولة الوكالة', lang),
-          value: fmt(consignment.commissionEarned + consignment.ownerDeliveryFees),
-          subtext: consignment.commissionPending > 0
-            ? `+${fmt(consignment.commissionPending)} ${T('à venir', 'قادمة', lang)}`
-            : T('Locations terminées', 'إيجارات منتهية', lang),
-          gradient: 'from-amber-500 to-orange-600',
-          icon: '🤝'
+          label: T('Revenu agence', 'إيراد الوكالة', lang),
+          value: g.agencyRevenue,
+          share: g.agencyShare,
+          shareLabel: T('du CA terminé', 'من رقم الأعمال المنتهي', lang),
+          tone: 'amber' as const,
+          icon: <Handshake size={15} />,
         },
         {
           label: T('Reversement propriétaire', 'مستحقات المالك', lang),
-          value: fmt(consignment.ownerPayout),
-          subtext: `${consignment.completedCount} ${T('location(s) terminée(s)', 'إيجار منتهي', lang)}`,
-          gradient: 'from-slate-500 to-slate-700',
-          icon: '👤'
+          value: g.ownerPayout,
+          share: g.ownerShare,
+          shareLabel: T('du CA terminé', 'من رقم الأعمال المنتهي', lang),
+          tone: 'slate' as const,
+          icon: <UserIcon size={15} />,
         },
         {
           label: T('Dépenses', 'المصاريف', lang),
-          value: fmt(totalExpenses),
-          subtext: `${expenses.length} ${T('item(s)', 'عناصر', lang)}`,
-          gradient: 'from-red-500 to-rose-600',
-          icon: '💰'
+          value: g.expenses,
+          share: g.expenseRatio,
+          shareLabel: T('du revenu agence', 'من إيراد الوكالة', lang),
+          tone: 'rose' as const,
+          icon: <Receipt size={15} />,
         },
         {
-          label: T('Bénéfice Net Agence', 'صافي ربح الوكالة', lang),
-          value: fmt(netBenefit),
-          subtext: netBenefit >= 0 ? T('Profit', 'ربح', lang) : T('Perte', 'خسارة', lang),
-          gradient: netBenefit >= 0 ? 'from-green-500 to-emerald-600' : 'from-orange-500 to-red-600',
-          icon: netBenefit >= 0 ? '📈' : '📉'
-        }
+          label: T('Bénéfice net agence', 'صافي ربح الوكالة', lang),
+          value: g.netBenefit,
+          share: g.margin,
+          shareLabel: T('de marge', 'هامش', lang),
+          tone: g.netBenefit >= 0 ? ('indigo' as const) : ('rose' as const),
+          icon: <TrendingUp size={15} />,
+        },
       ]
     : [
         {
-          label: T('Total Facturé', 'الإجمالي المفوتر', lang),
-          value: fmt(totalInvoiced),
-          subtext: `${nonCancelledRes.length} ${T('location(s)', 'إيجار', lang)}`,
-          gradient: 'from-blue-500 to-blue-600',
-          icon: '📋'
+          label: T('Total facturé', 'الإجمالي المفوتر', lang),
+          value: g.invoiced,
+          hint: `${g.rentals} ${T('location(s)', 'إيجار', lang)}`,
+          tone: 'slate' as const,
+          icon: <Receipt size={15} />,
         },
         {
           label: T('Encaissé', 'المحصّل', lang),
-          value: fmt(totalPaid),
-          subtext: T('Reçu', 'تم الحصول عليه', lang),
-          gradient: 'from-emerald-500 to-teal-600',
-          icon: '✓'
+          value: g.collected,
+          share: g.collectionRate,
+          shareLabel: T('du facturé', 'من المفوتر', lang),
+          tone: 'emerald' as const,
+          icon: <Wallet size={15} />,
         },
         {
           label: T('Dépenses', 'المصاريف', lang),
-          value: fmt(totalExpenses),
-          subtext: `${expenses.length} ${T('item(s)', 'عناصر', lang)}`,
-          gradient: 'from-red-500 to-rose-600',
-          icon: '💰'
+          value: g.expenses,
+          share: g.expenseRatio,
+          shareLabel: T("de l'encaissé", 'من المحصّل', lang),
+          tone: 'rose' as const,
+          icon: <Receipt size={15} />,
         },
         {
-          label: T('Bénéfice Net', 'صافي الأرباح', lang),
-          value: fmt(netBenefit),
-          subtext: netBenefit >= 0 ? T('Profit', 'ربح', lang) : T('Perte', 'خسارة', lang),
-          gradient: netBenefit >= 0 ? 'from-green-500 to-emerald-600' : 'from-orange-500 to-red-600',
-          icon: netBenefit >= 0 ? '📈' : '📉'
-        }
+          label: T('Bénéfice net', 'صافي الأرباح', lang),
+          value: g.netBenefit,
+          share: g.margin,
+          shareLabel: T('de marge', 'هامش', lang),
+          tone: g.netBenefit >= 0 ? ('indigo' as const) : ('rose' as const),
+          icon: <TrendingUp size={15} />,
+        },
       ];
 
+  const fieldCls =
+    'w-full rounded-xl border border-white/15 bg-white/10 px-3.5 py-2.5 text-sm font-medium text-white outline-none backdrop-blur-sm transition focus:border-white/40 focus:bg-white/15 focus:ring-2 focus:ring-white/20';
+
   return (
-    <div className="space-y-7 pb-8">
-      {/* Header with Premium Design */}
+    <div className="space-y-6 pb-10">
+      {/* ── En-tête + filtres ── */}
       <motion.div
-        initial={{ opacity: 0, y: 18 }}
+        initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
-        className="relative overflow-hidden rounded-3xl text-white shadow-2xl"
+        className="relative overflow-hidden rounded-3xl bg-slate-900 text-white shadow-xl ring-1 ring-slate-900/10"
       >
-        <div className="absolute inset-0 bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-500" />
-        <div className="absolute inset-0 opacity-[0.08]"
-          style={{ backgroundImage: 'repeating-linear-gradient(45deg,#fff 0,#fff 1px,transparent 0,transparent 50%)', backgroundSize: '12px 12px' }}
+        <div className="absolute inset-0 bg-gradient-to-br from-indigo-700 via-slate-900 to-slate-900" />
+        <div
+          className="absolute inset-0 opacity-[0.06]"
+          style={{
+            backgroundImage:
+              'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)',
+            backgroundSize: '28px 28px',
+          }}
         />
-        <div className="relative p-8">
-          <div className="flex items-center gap-4 mb-6">
-            <div className="w-16 h-16 rounded-2xl bg-white/20 flex items-center justify-center text-4xl">
-              💰
+        <div className="relative p-6 sm:p-8">
+          <div className="mb-6 flex items-center gap-3.5">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/20">
+              <PieChart size={22} />
             </div>
             <div>
-              <h1 className="text-4xl font-black tracking-tighter uppercase">
-                {T('Gains par Véhicule', 'الأرباح حسب المركبة', lang)}
+              <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">
+                {T('Gains par véhicule', 'الأرباح حسب المركبة', lang)}
               </h1>
-              <p className="text-purple-100 text-sm mt-1 font-semibold">
-                {T('Analysez vos revenus, commissions et dépenses en détail', 'حلل إيراداتك وعمولاتك ونفقاتك بالتفصيل', lang)}
+              <p className="mt-0.5 text-sm text-slate-300">
+                {T(
+                  'Revenus, commissions et dépenses — avec le détail de chaque calcul',
+                  'الإيرادات والعمولات والمصاريف — مع تفصيل كل عملية حسابية',
+                  lang,
+                )}
               </p>
             </div>
           </div>
 
-          {/* Filters */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Car Selection */}
-            <div>
-              <label className="block text-xs font-bold text-purple-100 mb-2 uppercase tracking-wide">
-                {T('Sélectionner un véhicule', 'اختر مركبة', lang)}
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
+            <div className="lg:col-span-1">
+              <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-300">
+                {T('Véhicule', 'المركبة', lang)}
               </label>
               <select
                 value={selectedCarId}
-                onChange={(e) => { setSelectedCarId(e.target.value); setGenerated(false); }}
-                className="w-full bg-white/15 border border-white/30 rounded-xl px-4 py-2.5 text-white placeholder-white/60 focus:ring-2 focus:ring-white/50 outline-none text-sm font-semibold backdrop-blur-sm hover:bg-white/20 transition-all"
+                onChange={e => {
+                  setSelectedCarId(e.target.value);
+                  setGenerated(false);
+                }}
+                className={fieldCls}
               >
-                <option value="" className="bg-gray-800">
+                <option value="" className="bg-slate-800">
                   {T('-- Choisir une voiture --', '-- اختر سيارة --', lang)}
                 </option>
                 {cars.map(car => (
-                  <option key={car.id} value={car.id} className="bg-gray-800">
-                    {car.ownershipType === 'consignment' ? '🤝 ' : ''}{car.brand} {car.model} ({car.registration})
+                  <option key={car.id} value={car.id} className="bg-slate-800">
+                    {car.ownershipType === 'consignment' ? '🤝 ' : ''}
+                    {car.brand} {car.model} ({car.registration})
                   </option>
                 ))}
               </select>
             </div>
 
-            {/* Start Date */}
             <div>
-              <label className="block text-xs font-bold text-purple-100 mb-2 uppercase tracking-wide">
+              <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-300">
                 {T('Date de début', 'تاريخ البداية', lang)}
               </label>
               <input
                 type="date"
                 value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="w-full bg-white/15 border border-white/30 rounded-xl px-4 py-2.5 text-white placeholder-white/60 focus:ring-2 focus:ring-white/50 outline-none text-sm font-semibold backdrop-blur-sm hover:bg-white/20 transition-all"
+                onChange={e => { setStartDate(e.target.value); setGenerated(false); }}
+                className={fieldCls}
               />
             </div>
 
-            {/* End Date */}
             <div>
-              <label className="block text-xs font-bold text-purple-100 mb-2 uppercase tracking-wide">
+              <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-300">
                 {T('Date de fin', 'تاريخ النهاية', lang)}
               </label>
               <input
                 type="date"
                 value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="w-full bg-white/15 border border-white/30 rounded-xl px-4 py-2.5 text-white placeholder-white/60 focus:ring-2 focus:ring-white/50 outline-none text-sm font-semibold backdrop-blur-sm hover:bg-white/20 transition-all"
+                onChange={e => { setEndDate(e.target.value); setGenerated(false); }}
+                className={fieldCls}
               />
             </div>
 
-            {/* Generate Button */}
             <div className="flex items-end">
               <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
                 onClick={handleGenerate}
                 disabled={loading || !selectedCarId}
-                className="w-full bg-white text-purple-700 font-black py-2.5 px-4 rounded-xl shadow-xl hover:shadow-2xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 text-sm uppercase tracking-wide"
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-slate-900 shadow-lg transition hover:bg-slate-100 disabled:opacity-50"
               >
                 {loading ? (
                   <>
                     <Loader2 size={16} className="animate-spin" />
-                    {T('Génération...', 'جاري...', lang)}
+                    {T('Génération…', 'جاري…', lang)}
                   </>
                 ) : (
                   <>
                     <TrendingUp size={16} />
-                    {T('Générer', 'إنشاء', lang)}
+                    {T('Analyser', 'تحليل', lang)}
                   </>
                 )}
               </motion.button>
@@ -406,295 +387,509 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
         </div>
       </motion.div>
 
-      {/* Empty State - Before Generation */}
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {!generated && !loading && (
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
+            key="empty"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             className="flex items-center justify-center py-24"
           >
-            <div className="text-center max-w-md">
-              <div className="text-7xl mb-4 opacity-20">📊</div>
-              <p className="text-lg font-bold text-gray-600 mb-2">
+            <div className="max-w-md text-center">
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 text-slate-300">
+                <PieChart size={30} />
+              </div>
+              <p className="mb-1.5 text-base font-bold text-slate-700">
                 {T('Prêt à analyser vos gains ?', 'هل أنت مستعد لتحليل أرباحك؟', lang)}
               </p>
-              <p className="text-sm text-gray-400">
-                {T('Sélectionnez un véhicule et une plage de dates, puis cliquez sur Générer pour voir vos statistiques détaillées.', 'اختر مركبة ونطاق تاريخ، ثم انقر على إنشاء لرؤية إحصائياتك المفصلة.', lang)}
+              <p className="text-sm text-slate-400">
+                {T(
+                  'Choisissez un véhicule et une période, puis lancez l’analyse pour voir le détail des calculs.',
+                  'اختر مركبة وفترة، ثم ابدأ التحليل لعرض تفاصيل الحسابات.',
+                  lang,
+                )}
               </p>
             </div>
           </motion.div>
         )}
 
-        {/* Results - After Generation */}
         {generated && !loading && selectedCar && (
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            key="report"
+            initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
             className="space-y-5"
           >
-            {/* Car card */}
-            <motion.div
-              whileHover={{ y: -4 }}
-              className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden"
-            >
-              <div className="flex flex-col sm:flex-row items-center gap-4 p-6">
-                <div className="w-32 h-24 rounded-xl overflow-hidden flex-shrink-0 bg-gray-100 border border-gray-200">
+            {/* ── Identité du véhicule ── */}
+            <div className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200">
+              <div className="flex flex-col items-center gap-5 p-5 sm:flex-row">
+                <div className="h-24 w-32 shrink-0 overflow-hidden rounded-xl bg-slate-100 ring-1 ring-slate-200">
                   <img
                     src={selectedCar.images?.[0] || 'https://picsum.photos/seed/car/400/300'}
                     alt={`${selectedCar.brand} ${selectedCar.model}`}
-                    className="w-full h-full object-cover"
+                    className="h-full w-full object-cover"
                   />
                 </div>
                 <div className="flex-1 text-center sm:text-left">
-                  <div className="flex items-center justify-center sm:justify-start gap-3 flex-wrap">
-                    <h2 className="text-2xl font-black text-gray-900 uppercase tracking-tighter">
+                  <div className="flex flex-wrap items-center justify-center gap-2.5 sm:justify-start">
+                    <h2 className="text-xl font-extrabold tracking-tight text-slate-900">
                       {selectedCar.brand} {selectedCar.model}
                     </h2>
-                    {isConsignment && (
-                      <span className="text-xs font-black bg-amber-100 text-amber-800 border border-amber-200 px-3 py-1 rounded-full flex items-center gap-1">
-                        <Handshake size={12} />
+                    {g.isConsignment && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700 ring-1 ring-amber-200">
+                        <Handshake size={11} />
                         {T('Conciergerie', 'أمانة', lang)}
                       </span>
                     )}
                   </div>
-                  <p className="text-emerald-600 font-bold text-sm">{selectedCar.registration}</p>
-                  <div className="flex flex-wrap justify-center sm:justify-start gap-3 mt-3">
-                    <span className="text-xs font-bold bg-blue-100 text-blue-700 px-3 py-1 rounded-full">
-                      📅 {selectedCar.year}
-                    </span>
-                    <span className="text-xs font-bold bg-purple-100 text-purple-700 px-3 py-1 rounded-full">
-                      ⛽ {selectedCar.energy}
-                    </span>
-                    <span className="text-xs font-bold bg-gray-100 text-gray-700 px-3 py-1 rounded-full">
-                      🎯 {selectedCar.mileage.toLocaleString()} KM
-                    </span>
-                    <span className="text-xs font-bold bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full">
-                      📆 {totalDaysRented} {T('jours loués', 'أيام مؤجرة', lang)} ({occupancy}%)
-                    </span>
+                  <p className="mt-0.5 text-sm font-semibold text-indigo-600">{selectedCar.registration}</p>
+                  <div className="mt-3 flex flex-wrap justify-center gap-1.5 sm:justify-start">
+                    {[
+                      `${selectedCar.year}`,
+                      selectedCar.energy,
+                      `${selectedCar.mileage.toLocaleString('fr-FR')} km`,
+                    ].map(chip => (
+                      <span
+                        key={chip}
+                        className="rounded-md bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-600"
+                      >
+                        {chip}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Taux d'occupation — le seul % qui parle d'exploitation, pas d'argent. */}
+                <div className="w-full shrink-0 rounded-xl bg-slate-50 p-4 ring-1 ring-slate-200 sm:w-48">
+                  <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    <Gauge size={12} />
+                    {T('Taux d’occupation', 'معدل الإشغال', lang)}
+                  </div>
+                  <p className="text-2xl font-extrabold tabular-nums text-slate-900">{fmtPct(occupancy)}</p>
+                  <p className="mt-0.5 text-[11px] font-medium text-slate-400 tabular-nums">
+                    {g.daysRented} / {periodDays} {T('jours', 'يوم', lang)}
+                  </p>
+                  <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${occupancy}%` }}
+                      transition={{ duration: 0.6 }}
+                      className="h-full rounded-full bg-indigo-500"
+                    />
                   </div>
                 </div>
               </div>
 
-              {/* Bandeau propriétaire (conciergerie) */}
-              {isConsignment && ownerInfo && (
-                <div className="border-t border-amber-100 bg-amber-50/70 px-6 py-4 flex flex-wrap items-center gap-x-6 gap-y-2">
-                  <span className="flex items-center gap-2 text-sm font-bold text-amber-900">
-                    <UserIcon size={15} />
-                    {ownerInfo.ownerName}
-                    {ownerInfo.internalRef && (
-                      <span className="text-[11px] font-black bg-amber-200/70 px-2 py-0.5 rounded-md" dir="ltr">
-                        {ownerInfo.internalRef}
+              {g.isConsignment && owner && (
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-amber-100 bg-amber-50/60 px-5 py-3">
+                  <span className="flex items-center gap-1.5 text-sm font-bold text-amber-900">
+                    <UserIcon size={14} />
+                    {owner.ownerName}
+                    {owner.internalRef && (
+                      <span className="rounded bg-amber-200/70 px-1.5 py-0.5 text-[11px] font-bold" dir="ltr">
+                        {owner.internalRef}
                       </span>
                     )}
                   </span>
-                  {ownerInfo.ownerPhone && (
-                    <span className="flex items-center gap-1.5 text-xs font-bold text-amber-800" dir="ltr">
-                      <Phone size={13} />
-                      {ownerInfo.ownerPhone}
+                  {owner.ownerPhone && (
+                    <span className="flex items-center gap-1.5 text-xs font-semibold text-amber-800" dir="ltr">
+                      <Phone size={12} />
+                      {owner.ownerPhone}
                     </span>
                   )}
-                  <span className="text-xs font-black text-amber-900 bg-amber-200/70 px-3 py-1 rounded-full">
-                    {T('Commission', 'العمولة', lang)} : {ownerInfo.commissionValue.toLocaleString()}
-                    {ownerInfo.commissionType === 'percentage' ? ' %' : ' DA'} / {T('location', 'إيجار', lang)}
+                  <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-bold text-amber-800 ring-1 ring-amber-200">
+                    {T('Barème', 'الاتفاق', lang)} : {scaleLabel} / {T('location', 'إيجار', lang)}
                   </span>
                 </div>
               )}
-            </motion.div>
+            </div>
 
-            {/* KPI Cards */}
-            <div className={`grid grid-cols-2 md:grid-cols-4 ${consignment ? 'xl:grid-cols-5' : ''} gap-3`}>
-              {kpis.map((kpi, i) => (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: i * 0.08 }}
-                  whileHover={{ scale: 1.03, y: -2 }}
-                  className={`bg-gradient-to-br ${kpi.gradient} rounded-2xl p-4 text-white shadow-lg`}
-                >
-                  <div className="flex items-start justify-between mb-2">
-                    <p className="text-[10px] font-bold text-white/70 uppercase tracking-widest leading-tight">
-                      {kpi.label}
-                    </p>
-                    <span className="text-2xl">{kpi.icon}</span>
-                  </div>
-                  <p className="text-xl font-black leading-tight">{kpi.value}</p>
-                  <p className="text-white/60 text-[10px] mt-0.5 font-semibold">{kpi.subtext} — DZD</p>
-                </motion.div>
+            {/* ── KPI ── */}
+            <div className={`grid grid-cols-2 gap-3 lg:grid-cols-4 ${consignment ? 'xl:grid-cols-5' : ''}`}>
+              {kpis.map((k, i) => (
+                <StatCard key={k.label} index={i} {...k} />
               ))}
             </div>
 
-            {/* Détail conciergerie : la répartition réelle du chiffre d'affaires */}
-            {consignment && ownerInfo && (
+            {/* ── 🤝 Détail du calcul — conciergerie ── */}
+            {consignment && owner && (
               <motion.div
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="bg-white rounded-2xl border border-amber-200 shadow-sm overflow-hidden"
+                className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-amber-200"
               >
-                <div className="bg-amber-50 border-b border-amber-100 px-6 py-4 flex items-center justify-between">
-                  <h3 className="text-lg font-black text-amber-800 uppercase tracking-tighter flex items-center gap-2">
-                    <Handshake size={18} />
-                    {T('Répartition Conciergerie', 'توزيع أرباح الأمانة', lang)}
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-100 bg-amber-50 px-5 py-3.5">
+                  <h3 className="flex items-center gap-2 text-sm font-extrabold uppercase tracking-wide text-amber-800">
+                    <Handshake size={16} />
+                    {T('Détail du calcul — conciergerie', 'تفصيل الحساب — الأمانة', lang)}
                   </h3>
-                  <span className="text-[11px] font-bold text-amber-700 bg-amber-100 px-3 py-1 rounded-full">
-                    {T('Calculé sur les locations terminées', 'محسوب على الإيجارات المنتهية', lang)}
+                  <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-amber-700 ring-1 ring-amber-200">
+                    {consignment.completedCount} {T('location(s) terminée(s)', 'إيجار منتهي', lang)}
                   </span>
                 </div>
-                <div className="p-6 space-y-3 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-gray-600">
-                      {T('CA locations terminées', 'رقم أعمال الإيجارات المنتهية', lang)}
-                      {' '}({consignment.completedCount})
-                    </span>
-                    <span className="font-black text-gray-900">{fmt(consignment.grossCompleted)} DZD</span>
+
+                <div className="p-5">
+                  <div className="divide-y divide-slate-100">
+                    <CalcRow
+                      label={T('CA des locations terminées', 'رقم أعمال الإيجارات المنتهية', lang)}
+                      formula={`${consignment.completedCount} × ${T('locations clôturées', 'إيجارات مغلقة', lang)}`}
+                      amount={consignment.grossCompleted}
+                      share={100}
+                      tone="slate"
+                    />
+                    <CalcRow
+                      sign="−"
+                      label={T('Commission agence', 'عمولة الوكالة', lang)}
+                      formula={
+                        owner.commissionType === 'percentage'
+                          ? `${fmt(consignment.grossCompleted)} × ${scaleLabel} = ${fmt(consignment.commissionEarned)}`
+                          : `${consignment.completedCount} × ${scaleLabel} = ${fmt(consignment.commissionEarned)}`
+                      }
+                      amount={consignment.commissionEarned}
+                      share={g.effectiveCommissionRate}
+                      tone="amber"
+                    />
+                    <CalcRow
+                      sign="−"
+                      label={T('Livraison à charge du propriétaire (≥ 10 jours)', 'التوصيل على حساب المالك (≥ 10 أيام)', lang)}
+                      amount={consignment.ownerDeliveryFees}
+                      share={pct(consignment.ownerDeliveryFees, consignment.grossCompleted)}
+                      tone="amber"
+                    />
+                    <CalcRow
+                      sign="="
+                      label={T('À reverser au propriétaire', 'المستحق للمالك', lang)}
+                      amount={consignment.ownerPayout}
+                      share={g.ownerShare}
+                      tone="slate"
+                      strong
+                    />
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-gray-600">
-                      − {T('Commission agence', 'عمولة الوكالة', lang)}
-                      {' '}({ownerInfo.commissionValue.toLocaleString()}{ownerInfo.commissionType === 'percentage' ? ' %' : ' DA'})
-                    </span>
-                    <span className="font-black text-amber-700">{fmt(consignment.commissionEarned)} DZD</span>
+
+                  {/* Répartition visuelle du CA clôturé */}
+                  <div className="mt-5 rounded-xl bg-slate-50 p-4 ring-1 ring-slate-200">
+                    <div className="mb-2.5 flex items-center justify-between">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                        {T('Répartition du CA terminé', 'توزيع رقم الأعمال المنتهي', lang)}
+                      </p>
+                      <p className="text-[11px] font-bold tabular-nums text-slate-500">
+                        {fmt(consignment.grossCompleted)} DZD
+                      </p>
+                    </div>
+                    <SplitBar
+                      segments={[
+                        { value: consignment.commissionEarned, label: T('Commission', 'العمولة', lang), cls: 'bg-amber-500' },
+                        { value: consignment.ownerDeliveryFees, label: T('Livraison', 'التوصيل', lang), cls: 'bg-amber-300' },
+                        { value: consignment.ownerPayout, label: T('Propriétaire', 'المالك', lang), cls: 'bg-slate-400' },
+                      ]}
+                    />
+                    <SplitLegend
+                      items={[
+                        { label: T('Agence', 'الوكالة', lang), cls: 'bg-amber-500', pct: g.agencyShare, tone: 'amber' },
+                        { label: T('Propriétaire', 'المالك', lang), cls: 'bg-slate-400', pct: g.ownerShare, tone: 'slate' },
+                      ]}
+                    />
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-gray-600">
-                      − {T('Livraison à charge du propriétaire (≥ 10 jours)', 'التوصيل على حساب المالك (≥ 10 أيام)', lang)}
-                    </span>
-                    <span className="font-black text-amber-700">{fmt(consignment.ownerDeliveryFees)} DZD</span>
-                  </div>
-                  <div className="border-t border-dashed border-amber-200 pt-3 flex items-center justify-between">
-                    <span className="font-black text-gray-800">
-                      = {T('À reverser au propriétaire', 'المستحق للمالك', lang)}
-                    </span>
-                    <span className="text-xl font-black text-slate-800">{fmt(consignment.ownerPayout)} DZD</span>
-                  </div>
+
+                  {/* Le taux constaté peut s'écarter du barème : les commissions
+                      sont figées à la clôture, un barème modifié après coup ne
+                      recalcule pas le passé. */}
+                  {owner.commissionType === 'percentage'
+                    && consignment.completedCount > 0
+                    && Math.abs(g.effectiveCommissionRate - owner.commissionValue) > 0.5 && (
+                      <p className="mt-3 rounded-xl bg-amber-50 px-4 py-2.5 text-[11px] font-semibold text-amber-800 ring-1 ring-amber-200">
+                        ℹ️ {T(
+                          `Taux constaté ${fmtPct(g.effectiveCommissionRate)} contre ${scaleLabel} au barème — les commissions sont figées à la clôture de chaque location.`,
+                          `النسبة الفعلية ${fmtPct(g.effectiveCommissionRate)} مقابل ${scaleLabel} في الاتفاق — تُثبَّت العمولات عند إنهاء كل إيجار.`,
+                          lang,
+                        )}
+                      </p>
+                    )}
+
                   {consignment.pendingCount > 0 && (
-                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-4 py-2.5 font-semibold">
-                      ⏳ {consignment.pendingCount} {T('location(s) non terminée(s) dans la période — commission estimée', 'إيجار غير منتهي في الفترة — عمولة مقدرة', lang)} : {fmt(consignment.commissionPending)} DZD
+                    <p className="mt-3 flex items-center gap-2 rounded-xl bg-slate-50 px-4 py-2.5 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200">
+                      <Clock size={13} className="shrink-0 text-slate-400" />
+                      {consignment.pendingCount}{' '}
+                      {T(
+                        'location(s) en cours — commission estimée non encore acquise',
+                        'إيجار جارٍ — عمولة مقدرة غير مكتسبة بعد',
+                        lang,
+                      )}{' '}
+                      : <strong className="tabular-nums">+{fmt(consignment.commissionPending)} DZD</strong>
                     </p>
                   )}
                 </div>
               </motion.div>
             )}
 
-            {/* Reservations Section */}
+            {/* ── Détail du calcul — véhicule de l'agence ── */}
+            {!consignment && (
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200"
+              >
+                <div className="border-b border-slate-100 bg-slate-50 px-5 py-3.5">
+                  <h3 className="flex items-center gap-2 text-sm font-extrabold uppercase tracking-wide text-slate-700">
+                    <PieChart size={16} />
+                    {T('Détail du calcul', 'تفصيل الحساب', lang)}
+                  </h3>
+                </div>
+                <div className="p-5">
+                  <div className="divide-y divide-slate-100">
+                    <CalcRow
+                      label={T('Total facturé', 'الإجمالي المفوتر', lang)}
+                      formula={`${g.rentals} ${T('location(s)', 'إيجار', lang)}`}
+                      amount={g.invoiced}
+                      share={100}
+                      tone="slate"
+                    />
+                    <CalcRow
+                      sign="+"
+                      label={T('Encaissé', 'المحصّل', lang)}
+                      amount={g.collected}
+                      share={g.collectionRate}
+                      tone="emerald"
+                    />
+                    <CalcRow
+                      sign="−"
+                      label={T('Reste à encaisser', 'المتبقي للتحصيل', lang)}
+                      amount={g.outstanding}
+                      share={pct(g.outstanding, g.invoiced)}
+                      tone="amber"
+                    />
+                    <CalcRow
+                      sign="−"
+                      label={T('Dépenses véhicule', 'مصاريف المركبة', lang)}
+                      formula={`${expenses.length} ${T('poste(s)', 'بند', lang)}`}
+                      amount={g.expenses}
+                      share={g.expenseRatio}
+                      tone="rose"
+                    />
+                    <CalcRow
+                      sign="="
+                      label={T('Bénéfice net', 'صافي الأرباح', lang)}
+                      amount={g.netBenefit}
+                      share={g.margin}
+                      tone={g.netBenefit >= 0 ? 'indigo' : 'rose'}
+                      strong
+                    />
+                  </div>
+
+                  <div className="mt-5 rounded-xl bg-slate-50 p-4 ring-1 ring-slate-200">
+                    <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                      {T('Répartition de l’encaissé', 'توزيع المحصّل', lang)}
+                    </p>
+                    <SplitBar
+                      segments={[
+                        { value: Math.max(0, g.netBenefit), label: T('Bénéfice net', 'صافي الأرباح', lang), cls: 'bg-indigo-500' },
+                        { value: g.expenses, label: T('Dépenses', 'المصاريف', lang), cls: 'bg-rose-400' },
+                      ]}
+                    />
+                    <SplitLegend
+                      items={[
+                        { label: T('Bénéfice net', 'صافي الأرباح', lang), cls: 'bg-indigo-500', pct: g.margin, tone: 'indigo' },
+                        { label: T('Dépenses', 'المصاريف', lang), cls: 'bg-rose-400', pct: g.expenseRatio, tone: 'rose' },
+                      ]}
+                    />
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* ── Locations ── */}
             {reservations.length > 0 && (
               <motion.div
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden"
+                className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200"
               >
-                <div className="bg-emerald-50 border-b border-emerald-100 px-6 py-4 flex items-center justify-between">
-                  <h3 className="text-lg font-black text-emerald-700 uppercase tracking-tighter flex items-center gap-2">
-                    <Calendar size={18} />
-                    {T('Locations', 'الإيجارات', lang)} ({reservations.length})
+                <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-5 py-3.5">
+                  <h3 className="flex items-center gap-2 text-sm font-extrabold uppercase tracking-wide text-slate-700">
+                    <Calendar size={16} />
+                    {T('Locations', 'الإيجارات', lang)}
+                    <span className="rounded-md bg-white px-1.5 py-0.5 text-[11px] font-bold text-slate-500 ring-1 ring-slate-200">
+                      {reservations.length}
+                    </span>
                   </h3>
-                  <span className="text-sm font-bold text-emerald-600">
-                    +{fmt(totalPaid)} DZD
+                  <span className="text-sm font-bold tabular-nums text-emerald-700">
+                    +{fmt(g.collected)} <span className="text-[10px] text-slate-400">DZD</span>
                   </span>
                 </div>
 
-                <div className="divide-y divide-gray-100">
-                  {reservations.map((res) => {
+                <div className="divide-y divide-slate-100">
+                  {reservations.map(res => {
                     const paid = calcPaid(res);
                     const debt = Number(res.remainingPayment) || 0;
                     const total = Number(res.totalPrice) || 0;
                     const isOpen = expandedRes === res.id;
                     const st = STATUS_META[res.status] || STATUS_META.pending;
-                    const commission = isConsignment && ownerInfo ? reservationCommission(res, ownerInfo) : 0;
-                    const delivOwner = ownerDeliveryFee(res);
+                    const cb = owner ? commissionBreakdown(res, owner) : null;
+                    // Poids de cette location dans le CA de la période.
+                    const weight = res.status === 'cancelled' ? 0 : pct(total, g.invoiced);
 
                     return (
                       <div key={res.id}>
                         <button
                           onClick={() => setExpandedRes(isOpen ? null : res.id)}
-                          className="w-full text-left px-6 py-4 hover:bg-gray-50 transition-colors flex items-center justify-between"
+                          className="flex w-full items-center gap-3 px-5 py-3.5 text-left transition hover:bg-slate-50"
                         >
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <p className="font-bold text-gray-800">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="truncate text-sm font-bold text-slate-800">
                                 {res.client?.firstName} {res.client?.lastName}
                               </p>
-                              <span className={`text-[10px] font-black px-2 py-0.5 rounded-md ${st.cls}`}>
+                              <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ring-1 ${st.cls}`}>
                                 {T(st.fr, st.ar, lang)}
                               </span>
+                              {weight > 0 && <PctChip value={weight} tone="slate" />}
                             </div>
-                            <p className="text-sm text-gray-500 flex items-center gap-2 mt-1">
-                              <Clock size={14} />
-                              {fmtD(res.step1?.departureDate)} → {fmtD(res.step1?.returnDate)}
-                              <span className="font-bold">({res.totalDays}j)</span>
+                            <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-500">
+                              <Clock size={12} />
+                              <span className="tabular-nums" dir="ltr">
+                                {fmtD(res.step1?.departureDate)} → {fmtD(res.step1?.returnDate)}
+                              </span>
+                              <span className="font-semibold text-slate-600">({res.totalDays}j)</span>
                             </p>
                           </div>
-                          <div className="flex-shrink-0 text-right ml-4 space-y-1">
-                            <p className="font-black text-emerald-600">✓ {fmt(paid)}</p>
+
+                          <div className="shrink-0 space-y-0.5 text-right">
+                            <p className="text-sm font-bold tabular-nums text-emerald-700">{fmt(paid)}</p>
                             {debt > 0 && res.status !== 'cancelled' && (
-                              <p className="text-sm font-bold text-orange-500">⏳ {fmt(debt)}</p>
+                              <p className="text-xs font-semibold tabular-nums text-amber-600">
+                                {T('reste', 'متبقي', lang)} {fmt(debt)}
+                              </p>
                             )}
-                            {isConsignment && res.status !== 'cancelled' && (
-                              <p className="text-xs font-bold text-amber-600">🤝 {fmt(commission)}</p>
+                            {cb && res.status !== 'cancelled' && (
+                              <p className="flex items-center justify-end gap-1 text-xs font-semibold tabular-nums text-amber-700">
+                                <Handshake size={10} />
+                                {fmt(cb.agencyPart)}
+                              </p>
                             )}
                           </div>
-                          {isOpen ? (
-                            <ChevronUp size={18} className="text-gray-400 ml-2" />
-                          ) : (
-                            <ChevronDown size={18} className="text-gray-400 ml-2" />
-                          )}
+
+                          <ChevronDown
+                            size={16}
+                            className={`shrink-0 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                          />
                         </button>
 
-                        <AnimatePresence>
+                        <AnimatePresence initial={false}>
                           {isOpen && (
                             <motion.div
                               initial={{ height: 0, opacity: 0 }}
                               animate={{ height: 'auto', opacity: 1 }}
                               exit={{ height: 0, opacity: 0 }}
-                              className="overflow-hidden bg-emerald-50/40 border-t border-emerald-100"
+                              transition={{ duration: 0.22 }}
+                              className="overflow-hidden border-t border-slate-100 bg-slate-50/70"
                             >
-                              <div className={`px-6 py-4 grid grid-cols-2 sm:grid-cols-4 ${isConsignment ? 'lg:grid-cols-6' : ''} gap-2 text-sm`}>
-                                <div className="bg-white rounded-lg border border-gray-200 p-3">
-                                  <p className="text-gray-500 text-xs font-semibold">{T('Total', 'الإجمالي', lang)}</p>
-                                  <p className="font-black text-gray-800 mt-1">{fmt(total)} DZD</p>
+                              <div className="space-y-3 p-5">
+                                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                                  {[
+                                    { l: T('Total', 'الإجمالي', lang), v: total, c: 'text-slate-900', p: weight },
+                                    { l: T('Avance', 'الدفعة الأولى', lang), v: Number(res.advancePayment) || 0, c: 'text-blue-700', p: pct(Number(res.advancePayment) || 0, total) },
+                                    { l: T('Payé', 'المدفوع', lang), v: paid, c: 'text-emerald-700', p: pct(paid, total) },
+                                    { l: T('Reste', 'المتبقي', lang), v: debt, c: debt > 0 ? 'text-amber-700' : 'text-emerald-700', p: pct(debt, total) },
+                                  ].map(item => (
+                                    <div key={item.l} className="rounded-xl bg-white p-3 ring-1 ring-slate-200">
+                                      <p className="text-[11px] font-semibold text-slate-500">{item.l}</p>
+                                      <p className={`mt-1 text-sm font-extrabold tabular-nums ${item.c}`}>
+                                        {fmt(item.v)}
+                                        <span className="ml-1 text-[10px] font-semibold text-slate-400">DZD</span>
+                                      </p>
+                                      <p className="mt-1 text-[10px] font-semibold tabular-nums text-slate-400">
+                                        {fmtPct(item.p)}
+                                      </p>
+                                    </div>
+                                  ))}
                                 </div>
-                                <div className="bg-white rounded-lg border border-gray-200 p-3">
-                                  <p className="text-gray-500 text-xs font-semibold">{T('Avance', 'الدفعة الأولى', lang)}</p>
-                                  <p className="font-black text-blue-600 mt-1">{fmt(Number(res.advancePayment) || 0)} DZD</p>
-                                </div>
-                                <div className="bg-white rounded-lg border border-gray-200 p-3">
-                                  <p className="text-gray-500 text-xs font-semibold">{T('Payé', 'المدفوع', lang)}</p>
-                                  <p className="font-black text-emerald-600 mt-1">{fmt(paid)} DZD</p>
-                                </div>
-                                <div className="bg-white rounded-lg border border-gray-200 p-3">
-                                  <p className="text-gray-500 text-xs font-semibold">{T('Reste', 'المتبقي', lang)}</p>
-                                  <p className={`font-black mt-1 ${debt > 0 ? 'text-orange-600' : 'text-green-600'}`}>
-                                    {fmt(debt)} DZD
-                                  </p>
-                                </div>
-                                {isConsignment && ownerInfo && (
-                                  <>
-                                    <div className="bg-white rounded-lg border border-amber-200 p-3">
-                                      <p className="text-amber-700 text-xs font-semibold">
-                                        {T('Commission agence', 'عمولة الوكالة', lang)}
-                                        {res.status !== 'completed' && (
-                                          <span className="text-[9px]"> ({T('estimée', 'مقدرة', lang)})</span>
+
+                                {/* Le calcul de commission, location par location. */}
+                                {cb && owner && res.status !== 'cancelled' && (
+                                  <div className="rounded-xl bg-white p-4 ring-1 ring-amber-200">
+                                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                                      <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-amber-800">
+                                        <Handshake size={12} />
+                                        {T('Calcul de la commission', 'حساب العمولة', lang)}
+                                      </p>
+                                      <span
+                                        className={`rounded-md px-2 py-0.5 text-[10px] font-bold ring-1 ${
+                                          cb.locked
+                                            ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+                                            : 'bg-slate-100 text-slate-500 ring-slate-200'
+                                        }`}
+                                      >
+                                        {cb.locked
+                                          ? T('Figée à la clôture', 'مثبتة عند الإغلاق', lang)
+                                          : T('Estimée (en cours)', 'مقدرة (جارية)', lang)}
+                                      </span>
+                                    </div>
+
+                                    <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 font-mono text-xs font-semibold tabular-nums text-amber-900" dir="ltr">
+                                      <span>{fmt(cb.base)}</span>
+                                      <span className="text-amber-400">×</span>
+                                      <span>{scaleLabel}</span>
+                                      <ArrowRight size={12} className="text-amber-400" />
+                                      <span className="font-extrabold">{fmt(cb.commission)} DZD</span>
+                                    </div>
+
+                                    <div className="divide-y divide-slate-100">
+                                      <CalcRow
+                                        label={T('Base (total location)', 'الأساس (إجمالي الإيجار)', lang)}
+                                        amount={cb.base}
+                                        share={100}
+                                        tone="slate"
+                                      />
+                                      <CalcRow
+                                        sign="−"
+                                        label={T('Commission agence', 'عمولة الوكالة', lang)}
+                                        amount={cb.commission}
+                                        share={cb.rate}
+                                        tone="amber"
+                                      />
+                                      {cb.ownerDelivery > 0 && (
+                                        <CalcRow
+                                          sign="−"
+                                          label={T('Livraison (propriétaire)', 'التوصيل (المالك)', lang)}
+                                          formula={`${res.totalDays} ${T('jours ≥ 10', 'أيام ≥ 10', lang)}`}
+                                          amount={cb.ownerDelivery}
+                                          share={pct(cb.ownerDelivery, cb.base)}
+                                          tone="amber"
+                                        />
+                                      )}
+                                      <CalcRow
+                                        sign="="
+                                        label={T('Part propriétaire', 'حصة المالك', lang)}
+                                        amount={cb.ownerPart}
+                                        share={pct(cb.ownerPart, cb.base)}
+                                        tone="slate"
+                                        strong
+                                      />
+                                    </div>
+
+                                    <div className="mt-3">
+                                      <SplitBar
+                                        segments={[
+                                          { value: cb.agencyPart, label: T('Agence', 'الوكالة', lang), cls: 'bg-amber-500' },
+                                          { value: cb.ownerPart, label: T('Propriétaire', 'المالك', lang), cls: 'bg-slate-400' },
+                                        ]}
+                                      />
+                                    </div>
+
+                                    {cb.differsFromScale && (
+                                      <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-500">
+                                        {T(
+                                          'Commission figée à la clôture — le barème actuel du propriétaire a été modifié depuis.',
+                                          'العمولة مثبتة عند الإغلاق — تم تعديل اتفاق المالك منذ ذلك الحين.',
+                                          lang,
                                         )}
                                       </p>
-                                      <p className="font-black text-amber-700 mt-1">{fmt(commission)} DZD</p>
-                                    </div>
-                                    <div className="bg-white rounded-lg border border-amber-200 p-3">
-                                      <p className="text-amber-700 text-xs font-semibold">{T('Part propriétaire', 'حصة المالك', lang)}</p>
-                                      <p className="font-black text-slate-700 mt-1">
-                                        {fmt(Math.max(0, total - commission - delivOwner))} DZD
-                                      </p>
-                                    </div>
-                                  </>
+                                    )}
+                                  </div>
                                 )}
                               </div>
-                              {delivOwner > 0 && (
-                                <p className="px-6 pb-4 text-xs font-semibold text-amber-700">
-                                  🚚 {T('Livraison à charge du propriétaire', 'التوصيل على حساب المالك', lang)} : {fmt(delivOwner)} DZD
-                                </p>
-                              )}
                             </motion.div>
                           )}
                         </AnimatePresence>
@@ -703,216 +898,137 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
                   })}
                 </div>
 
-                {nonCancelledRes.length > 0 && (
-                  <div className="bg-emerald-50 border-t border-emerald-100 px-6 py-3 flex items-center justify-between text-sm">
-                    <span className="font-bold text-emerald-700">
-                      {T('Total Locations', 'إجمالي الإيجارات', lang)}
-                    </span>
-                    <span className="font-black text-emerald-700">{fmt(totalInvoiced)} DZD</span>
-                  </div>
-                )}
+                <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50 px-5 py-3 text-sm">
+                  <span className="font-semibold text-slate-600">
+                    {T('Total facturé', 'الإجمالي المفوتر', lang)}
+                  </span>
+                  <span className="font-extrabold tabular-nums text-slate-900">
+                    {fmt(g.invoiced)} <span className="text-[10px] font-semibold text-slate-400">DZD</span>
+                  </span>
+                </div>
               </motion.div>
             )}
 
-            {/* Expenses Section */}
+            {/* ── Dépenses ── */}
             {expenses.length > 0 && (
               <motion.div
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-                className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden"
+                className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200"
               >
-                <div className="bg-red-50 border-b border-red-100 px-6 py-4 flex items-center justify-between">
-                  <h3 className="text-lg font-black text-red-700 uppercase tracking-tighter flex items-center gap-2">
-                    <DollarSign size={18} />
-                    {T('Dépenses', 'المصاريف', lang)} ({expenses.length})
+                <div className="flex items-center justify-between border-b border-rose-100 bg-rose-50 px-5 py-3.5">
+                  <h3 className="flex items-center gap-2 text-sm font-extrabold uppercase tracking-wide text-rose-700">
+                    <Receipt size={16} />
+                    {T('Dépenses', 'المصاريف', lang)}
+                    <span className="rounded-md bg-white px-1.5 py-0.5 text-[11px] font-bold text-rose-600 ring-1 ring-rose-200">
+                      {expenses.length}
+                    </span>
                   </h3>
-                  <span className="text-sm font-bold text-red-600">
-                    -{fmt(totalExpenses)} DZD
+                  <span className="text-sm font-bold tabular-nums text-rose-700">
+                    −{fmt(g.expenses)} <span className="text-[10px] text-rose-400">DZD</span>
                   </span>
                 </div>
 
-                <div className="divide-y divide-gray-100">
-                  {expenses.map((exp) => {
-                    const isOpen = expandedExp === exp.id;
-
+                <div className="divide-y divide-slate-100">
+                  {expenses.map(exp => {
+                    const cost = Number(exp.cost) || 0;
                     return (
-                      <div key={exp.id}>
-                        <button
-                          onClick={() => setExpandedExp(isOpen ? null : exp.id)}
-                          className="w-full text-left px-6 py-4 hover:bg-gray-50 transition-colors flex items-center justify-between"
-                        >
-                          <div className="flex-1 min-w-0">
-                            <p className="font-bold text-gray-800">
-                              {exp.expenseName || exp.type.toUpperCase()}
-                            </p>
-                            <p className="text-sm text-gray-500 flex items-center gap-2 mt-1">
-                              <Calendar size={14} />
+                      <div
+                        key={exp.id}
+                        className="flex items-center gap-3 px-5 py-3 transition hover:bg-slate-50"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-slate-800">
+                            {exp.expenseName || exp.type}
+                          </p>
+                          <p className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                            <span className="flex items-center gap-1">
+                              <Calendar size={11} />
                               {fmtD(exp.date)}
-                            </p>
-                          </div>
-                          <div className="flex-shrink-0 text-right ml-4">
-                            <p className="font-black text-red-600">-{fmt(Number(exp.cost) || 0)} DZD</p>
-                          </div>
-                          {isOpen ? (
-                            <ChevronUp size={18} className="text-gray-400 ml-2" />
-                          ) : (
-                            <ChevronDown size={18} className="text-gray-400 ml-2" />
-                          )}
-                        </button>
-
-                        <AnimatePresence>
-                          {isOpen && (
-                            <motion.div
-                              initial={{ height: 0, opacity: 0 }}
-                              animate={{ height: 'auto', opacity: 1 }}
-                              exit={{ height: 0, opacity: 0 }}
-                              className="overflow-hidden bg-red-50/40 border-t border-red-100"
-                            >
-                              <div className="px-6 py-4 space-y-2 text-sm">
-                                <div className="flex justify-between">
-                                  <span className="text-gray-600">{T('Type', 'النوع', lang)}:</span>
-                                  <span className="font-bold text-gray-800">{exp.type}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-gray-600">{T('Montant', 'المبلغ', lang)}:</span>
-                                  <span className="font-black text-red-600">{fmt(Number(exp.cost) || 0)} DZD</span>
-                                </div>
-                                {exp.note && (
-                                  <div className="flex justify-between">
-                                    <span className="text-gray-600">{T('Note', 'ملاحظة', lang)}:</span>
-                                    <span className="text-gray-800">{exp.note}</span>
-                                  </div>
-                                )}
-                                {exp.currentMileage && (
-                                  <div className="flex justify-between">
-                                    <span className="text-gray-600">{T('Kilométrage', 'المسافة', lang)}:</span>
-                                    <span className="text-gray-800">{exp.currentMileage} KM</span>
-                                  </div>
-                                )}
-                              </div>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
+                            </span>
+                            {exp.currentMileage ? <span>{fmt(exp.currentMileage)} km</span> : null}
+                            {exp.note ? <span className="truncate">{exp.note}</span> : null}
+                          </p>
+                        </div>
+                        <PctChip value={pct(cost, g.expenses)} tone="rose" />
+                        <span className="shrink-0 text-sm font-bold tabular-nums text-rose-700">
+                          −{fmt(cost)}
+                        </span>
                       </div>
                     );
                   })}
                 </div>
 
-                <div className="bg-red-50 border-t border-red-100 px-6 py-3 flex items-center justify-between text-sm">
-                  <span className="font-bold text-red-700">
-                    {T('Total Dépenses', 'إجمالي المصاريف', lang)}
+                <div className="flex items-center justify-between border-t border-rose-100 bg-rose-50 px-5 py-3 text-sm">
+                  <span className="font-semibold text-rose-700">
+                    {T('Total dépenses', 'إجمالي المصاريف', lang)}
                   </span>
-                  <span className="font-black text-red-700">-{fmt(totalExpenses)} DZD</span>
+                  <span className="font-extrabold tabular-nums text-rose-700">
+                    −{fmt(g.expenses)} <span className="text-[10px] font-semibold text-rose-400">DZD</span>
+                  </span>
                 </div>
               </motion.div>
             )}
 
-            {/* Summary Section */}
+            {/* ── Résultat ── */}
             <motion.div
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.15 }}
-              className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden"
+              className={`overflow-hidden rounded-2xl p-5 text-white shadow-lg ${
+                g.netBenefit >= 0
+                  ? 'bg-gradient-to-br from-indigo-600 to-indigo-800'
+                  : 'bg-gradient-to-br from-rose-600 to-rose-800'
+              }`}
             >
-              <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border-b border-indigo-100 px-6 py-4">
-                <h3 className="text-lg font-black text-indigo-700 uppercase tracking-tighter">
-                  {T('Résumé Financier', 'الملخص المالي', lang)}
-                </h3>
-              </div>
-
-              <div className="p-6 grid grid-cols-2 md:grid-cols-4 gap-4">
-                {[
-                  {
-                    label: T('Facturé', 'المفوتر', lang),
-                    value: fmt(totalInvoiced),
-                    color: 'text-blue-600'
-                  },
-                  {
-                    label: T('Encaissé', 'المحصّل', lang),
-                    value: fmt(totalPaid),
-                    color: 'text-emerald-600'
-                  },
-                  {
-                    label: T('Reste', 'المتبقي', lang),
-                    value: fmt(totalRemaining),
-                    color: 'text-orange-600'
-                  },
-                  {
-                    label: T('Dépenses', 'المصاريف', lang),
-                    value: fmt(totalExpenses),
-                    color: 'text-red-600'
-                  }
-                ].map((item, i) => (
-                  <div key={i} className="text-center">
-                    <p className="text-xs font-bold text-gray-500 uppercase mb-2">{item.label}</p>
-                    <p className={`text-2xl font-black ${item.color}`}>{item.value}</p>
-                    <p className="text-xs text-gray-400 mt-1">DZD</p>
-                  </div>
-                ))}
-              </div>
-
-              {consignment && (
-                <div className="px-6 pb-2 grid grid-cols-2 gap-4">
-                  <div className="text-center bg-amber-50 border border-amber-100 rounded-xl py-3">
-                    <p className="text-xs font-bold text-amber-700 uppercase mb-1">
-                      🤝 {T('Commission agence', 'عمولة الوكالة', lang)}
-                    </p>
-                    <p className="text-xl font-black text-amber-800">{fmt(consignment.agencyGain)} DZD</p>
-                  </div>
-                  <div className="text-center bg-slate-50 border border-slate-200 rounded-xl py-3">
-                    <p className="text-xs font-bold text-slate-600 uppercase mb-1">
-                      👤 {T('Reversement propriétaire', 'مستحقات المالك', lang)}
-                    </p>
-                    <p className="text-xl font-black text-slate-800">{fmt(consignment.ownerPayout)} DZD</p>
-                  </div>
-                </div>
-              )}
-
-              <div className={`border-t border-gray-200 px-6 py-4 bg-gradient-to-r ${netBenefit >= 0 ? 'from-green-50 to-emerald-50' : 'from-orange-50 to-red-50'}`}>
-                <div className="flex items-center justify-between">
-                  <span className={`text-lg font-black ${netBenefit >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+              <div className="flex flex-wrap items-end justify-between gap-4">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-white/60">
                     {consignment
-                      ? T('Bénéfice Net Agence', 'صافي ربح الوكالة', lang)
-                      : T('Bénéfice Net', 'صافي الأرباح', lang)}
-                  </span>
-                  <span className={`text-3xl font-black ${netBenefit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {netBenefit >= 0 ? '+' : ''}{fmt(netBenefit)} DZD
-                  </span>
-                </div>
-                {consignment && (
-                  <p className="text-xs text-gray-500 font-semibold mt-1">
-                    = {T('Commission + livraison propriétaire − dépenses', 'العمولة + توصيل المالك − المصاريف', lang)}
+                      ? T('Bénéfice net agence', 'صافي ربح الوكالة', lang)
+                      : T('Bénéfice net', 'صافي الأرباح', lang)}
                   </p>
-                )}
+                  <p className="mt-1 text-4xl font-extrabold tabular-nums leading-none">
+                    {g.netBenefit >= 0 ? '+' : ''}
+                    {fmt(g.netBenefit)}
+                    <span className="ml-1.5 text-base font-semibold text-white/50">DZD</span>
+                  </p>
+                  <p className="mt-2 font-mono text-[11px] text-white/60 tabular-nums" dir="ltr">
+                    {consignment
+                      ? `${fmt(consignment.commissionEarned)} + ${fmt(consignment.ownerDeliveryFees)} − ${fmt(g.expenses)}`
+                      : `${fmt(g.collected)} − ${fmt(g.expenses)}`}
+                  </p>
+                </div>
+                <div className="rounded-xl bg-white/10 px-4 py-3 text-right ring-1 ring-white/20">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-white/60">
+                    {T('Marge', 'الهامش', lang)}
+                  </p>
+                  <p className="mt-0.5 text-2xl font-extrabold tabular-nums">{fmtPct(g.margin)}</p>
+                  <p className="mt-0.5 text-[10px] font-medium text-white/50">
+                    {T('du revenu agence', 'من إيراد الوكالة', lang)}
+                  </p>
+                </div>
               </div>
             </motion.div>
 
-            {/* Empty States */}
             {reservations.length === 0 && expenses.length === 0 && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="bg-blue-50 border border-blue-200 rounded-2xl p-8 text-center"
-              >
-                <AlertCircle className="w-12 h-12 text-blue-600 mx-auto mb-3" />
-                <p className="text-blue-800 font-semibold">
+              <div className="flex items-center gap-3 rounded-2xl bg-slate-50 p-6 ring-1 ring-slate-200">
+                <AlertCircle className="h-5 w-5 shrink-0 text-slate-400" />
+                <p className="text-sm font-semibold text-slate-600">
                   {T('Aucune donnée pour cette période', 'لا توجد بيانات لهذه الفترة', lang)}
                 </p>
-              </motion.div>
+              </div>
             )}
 
-            {/* Print Button */}
-            <div className="flex justify-center pt-4">
+            <div className="flex justify-center pt-1">
               <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
                 onClick={handlePrint}
                 disabled={loading}
-                className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-black py-3 px-8 rounded-xl shadow-lg hover:shadow-xl transition-all flex items-center gap-2 disabled:opacity-50 uppercase tracking-wide"
+                className="flex items-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-sm font-bold text-white shadow-lg transition hover:bg-slate-800 disabled:opacity-50"
               >
-                <Printer size={18} />
-                {T('Imprimer le Rapport', 'طباعة التقرير', lang)}
+                <Printer size={16} />
+                {T('Imprimer le rapport', 'طباعة التقرير', lang)}
               </motion.button>
             </div>
           </motion.div>
