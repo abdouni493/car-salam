@@ -209,55 +209,107 @@ export const ConditionsPersonalizer: React.FC<ConditionsPersonalizerProps> = ({
                 </p>
               </div>
 
-              {/* Conditions List — full-document style like the scanned images */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+              {/* Conditions List — two columns, mirrors the printed sheet */}
+              <div style={{ columnCount: 2, columnGap: '30px' }}>
                 {template.conditions.map((condition, index) => (
-                  <div
+                  <section
                     key={index}
                     style={{
-                      padding: '10px 0',
-                      borderBottom: index < template.conditions.length - 1 ? '1px solid #eef0f7' : 'none',
+                      breakInside: 'avoid',
+                      marginBottom: '14px',
                     }}
                   >
-                    <p
+                    <h3
                       style={{
-                        margin: 0,
-                        fontSize: '14px',
-                        color: '#222',
-                        lineHeight: '1.7',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '7px',
+                        margin: '0 0 5px',
+                        fontSize: '13.5px',
+                        fontWeight: 800,
+                        color: '#003399',
                         textAlign: textAlign as 'left' | 'right',
                       }}
                     >
                       <span
                         style={{
-                          fontWeight: 800,
-                          color: '#003399',
-                          marginInlineEnd: '6px',
+                          flexShrink: 0,
+                          width: '19px',
+                          height: '19px',
+                          borderRadius: '5px',
+                          background: 'linear-gradient(135deg, #003399 0%, #0047b2 100%)',
+                          color: '#fff',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
                         }}
                       >
-                        {index + 1}- {condition.title}
+                        {index + 1}
                       </span>
-                      <span style={{ color: '#111', fontWeight: 600 }}>{condition.content}</span>
-                    </p>
-                  </div>
+                      {condition.title}
+                    </h3>
+                    <ul style={{ listStyle: 'none', margin: 0, paddingInlineStart: '26px' }}>
+                      {condition.bullets.map((bullet, bulletIndex) => (
+                        <li
+                          key={bulletIndex}
+                          style={{
+                            position: 'relative',
+                            paddingInlineStart: '12px',
+                            marginBottom: '3px',
+                            fontSize: '12.5px',
+                            color: '#111',
+                            fontWeight: 600,
+                            lineHeight: '1.55',
+                            textAlign: textAlign as 'left' | 'right',
+                          }}
+                        >
+                          <span
+                            style={{
+                              position: 'absolute',
+                              insetInlineStart: 0,
+                              top: '7px',
+                              width: '5px',
+                              height: '5px',
+                              borderRadius: '50%',
+                              background: '#003399',
+                            }}
+                          />
+                          {bullet}
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
                 ))}
               </div>
 
               {/* Acceptance Statement */}
               <div
                 style={{
-                  marginTop: '20px',
+                  marginTop: '8px',
                   padding: '10px 14px',
                   background: '#f0f4ff',
                   borderRadius: '6px',
                   border: '1px solid #b8ccee',
+                  color: '#003399',
                   textAlign: textAlign as 'left' | 'right',
                 }}
               >
-                <p style={{ fontSize: '13.5px', color: '#003399', fontWeight: 600, margin: 0 }}>
-                  {isArabic
-                    ? 'يُقرّ المستأجر بأنه اطّلع على شروط الإيجار هذه وقبولها دون أي تحفظ، ويتعهد بتوقيع هذا العقد.'
-                    : "Le client déclare avoir pris connaissance et accepter sans réserve les présentes conditions de location et s'engage à signer ce contrat."}
+                <p style={{ fontSize: '13.5px', fontWeight: 700, margin: 0 }}>
+                  <span style={{ fontWeight: 800, marginInlineEnd: '6px' }}>✓</span>
+                  {template.acceptance}
+                </p>
+                <p
+                  style={{
+                    fontSize: '12.5px',
+                    fontWeight: 600,
+                    fontStyle: 'italic',
+                    margin: '5px 0 0',
+                    opacity: 0.85,
+                  }}
+                >
+                  {template.thanks}
                 </p>
               </div>
 

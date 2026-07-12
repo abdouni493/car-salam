@@ -6,7 +6,7 @@
 
 export interface ConditionItem {
   title: string;
-  content: string;
+  bullets: string[];
 }
 
 export interface ConditionsTemplate {
@@ -14,6 +14,9 @@ export interface ConditionsTemplate {
   title: string;
   subtitle: string;
   conditions: ConditionItem[];
+  /** Closing statement: taking the vehicle means accepting these conditions. */
+  acceptance: string;
+  thanks: string;
   clientSignatureLabel: string;
   agencySignatureLabel: string;
 }
@@ -24,78 +27,96 @@ export interface ConditionsTemplate {
  */
 export const ARABIC_CONDITIONS_TEMPLATE: ConditionsTemplate = {
   language: 'ar',
-  title: 'شروط الإيجار',
-  subtitle: 'يمكنك قراءة شروط العقد في الأسفل ومصادقة عليها',
+  title: 'الشروط العامة لإيجار المركبة',
+  subtitle: 'يمكنكم قراءة شروط الإيجار، وهي تظهر في عقد الإيجار',
   conditions: [
     {
-      title: 'السن',
-      content: 'يجب أن يكون السائق يبلغ من العمر 20 عامًا على الأقل، وأن يكون حاصلًا على رخصة قيادة منذ سنتين على الأقل'
+      title: 'وضع المركبة تحت التصرف',
+      bullets: [
+        'توضع المركبة تحت تصرفكم طيلة المدة المتفق عليها.',
+        'يجب أن يكون المستأجر حاملاً لرخصة قيادة سارية المفعول.'
+      ]
     },
     {
-      title: 'جواز السفر',
-      content: 'إيداع جواز السفر البيومتري إلزامي، بالإضافة إلى دفع تأمين ابتدائي حسب فئة المركبة، ويُعدّ هذا بمثابة ضمان تطلبه'
+      title: 'حالة المركبة',
+      bullets: [
+        'تُسلَّم المركبة في حالة جيدة من حيث التشغيل والنظافة.',
+        'يجب إرجاعها في نفس الحالة (باستثناء الاستعمال العادي).',
+        'كل تلف أو ضياع أو ضرر يكون على عاتق المستأجر.',
+        'يجب إرجاع المركبة نظيفة من الداخل ومن الخارج.'
+      ]
+    },
+    {
+      title: 'التسعيرة',
+      bullets: [
+        'يُتفق على السعر قبل بداية الإيجار.',
+        'يشمل السعر 250 كلم في اليوم.',
+        'كل كيلومتر إضافي يُفوتر بـ 40 دج/كلم.'
+      ]
+    },
+    {
+      title: 'الضمان (الكفالة)',
+      bullets: [
+        'يُشترط دفع ضمان قدره 200 أورو قبل تسليم المركبة.',
+        'يُسترجع الضمان بعد فحص المركبة، شريطة عدم بقاء أي مبلغ مستحق.',
+        'لا يشكّل الضمان حدًّا للمسؤولية. وإذا تجاوزت الأضرار قيمته، يبقى المستأجر ملزمًا بدفع الفارق.'
+      ]
+    },
+    {
+      title: 'الوثائق الإلزامية',
+      bullets: [
+        'تقديم رخصة قيادة سارية المفعول إلزامي.',
+        'يمكن طلب نسخة من رخصة القيادة ومن وثيقة الهوية.'
+      ]
+    },
+    {
+      title: 'استعمال المركبة',
+      bullets: [
+        'لا يُسمح بقيادة المركبة إلا للسائق المذكور في العقد.',
+        'يُمنع تأجير المركبة من الباطن.',
+        'يُمنع التدخين داخل المركبة.',
+        'يُمنع استعمال المركبة في أنشطة غير قانونية أو في السباقات أو في أي استعمال غير مرخَّص.',
+        'يُمنع الخروج من التراب الجزائري دون إذن كتابي من CAR SALAM.',
+        'احترام قانون المرور إلزامي.',
+        'جميع الغرامات والمخالفات تبقى على عاتق المستأجر.'
+      ]
     },
     {
       title: 'الوقود',
-      content: 'الوقود يكون على نفقة الزبون'
+      bullets: [
+        'يجب إرجاع المركبة بنفس مستوى الوقود الذي سُلِّمت به.'
+      ]
     },
     {
-      title: 'قانون ونظام',
-      content: 'يتم الدفع نقدًا عند تسليم السيارة'
+      title: 'التأخر في الإرجاع',
+      bullets: [
+        'يجب الإبلاغ عن أي تأخر في أقرب وقت.',
+        'قد يؤدي التأخر الكبير إلى فوترة يوم إيجار إضافي.'
+      ]
     },
     {
-      title: 'النظافة',
-      content: 'تسلم السيارة نظيفة ويجب إرجاعها في نفس الحالة، وفي حال عدم ذلك، سيتم احتساب تكلفة الغسيل بمبلغ 1000 دج'
+      title: 'الحادث أو العطب أو السرقة',
+      bullets: [
+        'في حالة حادث أو عطب أو سرقة أو ضرر، يجب على المستأجر إعلام CAR SALAM فورًا.',
+        'لا يجوز إجراء أي إصلاح دون موافقة مسبقة من المؤجِّر.'
+      ]
     },
     {
-      title: 'مكان التسليم',
-      content: 'يتم تسليم السيارات في موقف السيارات التابع لوكالاتنا'
+      title: 'المفاتيح والملحقات',
+      bullets: [
+        'ضياع المفاتيح أو وثائق المركبة أو الملحقات يُفوتر على المستأجر.'
+      ]
     },
     {
-      title: 'جدول المواعيد',
-      content: 'يجب على الزبون احترام المواعيد المحددة عند الحجز. يجب الإبلاغ مسبقًا عن أي تغيير. لا يمكن للزبون تمديد مدة الإيجار إلا بعد الحصول على إذن من وكالتنا للإيجار، وذلك بإشعار مسبق لا يقل عن 24 ساعة'
-    },
-    {
-      title: 'الأضرار والخسائر',
-      content: 'في حالة السرقة أو تضرر المركبة، يجب تقديم تصريح لدى مصالح الشرطة أو الدرك الوطني. قبل أي تصريح، يجب على الزبون إبلاغ وكالة الكراء بشكل إلزامي'
-    },
-    {
-      title: 'الحادث',
-      content: 'يتحمل الزبون كل نفقات السيارة في حال حادث أو ضرر بالسيارة من الداخل والخارج'
-    },
-    {
-      title: 'تأمين',
-      content: 'يستفيد من التأمين فقط السائقون المذكورون في عقد الكراء. يُمنع منعًا باتًّا إعارة أو تأجير المركبة من الباطن. وتكون جميع الأضرار الناتجة عن مثل هذه الحالات على عاتق الزبون بالكامل'
-    },
-    {
-      title: 'عطل ميكانيكي',
-      content: 'خلال فترة الإيجار، وبناء على عدد الكيلومترات المقطوعة، يجب على الزبون إجراء الفحوصات اللازمة مثل مستوى الزيت، حالة المحرك، ضغط الإطارات، وغيرها. في حال حدوث عطل ميكانيكي بسبب إهمال الزبون في إجراء هذه الفحوصات أو لأي سبب آخر ناتج عن مسؤولية الزبون (مثلاً: كسر حوض الزيت، العارضة السفلية، القفل أو غيرها)، فإن تكاليف الإصلاح والصيانة تكون على عاتق الزبون بالكامل'
-    },
-    {
-      title: 'خسائر إضافية',
-      content: 'الأضرار التي تلحق بالعجلات والإطارات، القيادة بالإطارات المفرغة من الهواء، التدهور، السرقة، نهب الملحقات، أعمال التخريب، الأضرار الميكانيكية الناتجة عن سوء استخدام المركبة، المخالفات المرورية، الأضرار التي تحدث أسفل المركبة (الصدام الأمامي، الجوانب، حوض الزيت، العادم) والأضرار الناتجة عن الاضطرابات والشغب، كلها سيتم تحميل تكلفتها على الزبون'
-    },
-    {
-      title: 'ضريبة التأخر',
-      content: 'مدة الإيجار تُحتسب على فترات كاملة مدتها 24 ساعة غير قابلة للتقسيم، ابتداءً من وقت حجز المركبة وحتى الوقت المذكور في العقد. يجب على الزبون إعادة المركبة في نفس الوقت، وإلا سيتم احتساب تكلفة تأخير مقدارها 800 دينار لكل ساعة تأخير'
-    },
-    {
-      title: 'عدد الأميال',
-      content: 'عدد الكيلومترات محدود لجميع مركباتنا بـ 300 كم يوميًا على حسب نوع السيارة، ويُفرض غرامة قدرها 30 دج عن كل كيلومتر زائد'
-    },
-    {
-      title: 'شروط',
-      content: 'يُقرّ الزبون بأنه اطّلع على شروط الإيجار هذه وقبلها دون أي تحفظ، ويتعهد بتوقيع هذا العقد'
-    },
-    {
-      title: 'المسؤولية القانونية',
-      content: 'في حالة ضبط السيارة بأي شكل من جميع الممنوعات أو أي شيء مخالف للقانون، يتحمل الزبون كل المسؤوليات القانونية لدى مصالح الدرك أو الشرطة أو المحكمة بصفة عامة'
-    },
-    {
-      title: 'المصاريف والمتابعة',
-      content: 'كل المصاريف على عاتق الزبون، وإذا لم يتم دفع مستحقات الوكالة فللوكالة الحق في متابعة الزبون قضائيًا'
+      title: 'المسؤولية',
+      bullets: [
+        'يتحمل المستأجر مسؤولية المركبة طيلة مدة الإيجار وإلى غاية إرجاعها.',
+        'تكاليف الإصلاح أو إعادة المركبة إلى حالتها الأصلية على عاتق المستأجر، إلا إذا ثبتت قانونًا مسؤولية المؤجِّر أو الغير.'
+      ]
     }
   ],
+  acceptance: 'إن الحجز أو استلام المركبة يُعدّ قبولاً للشروط العامة للإيجار المذكورة أعلاه.',
+  thanks: 'نشكركم على ثقتكم.',
   clientSignatureLabel: 'امضاء وبصمة الزبون',
   agencySignatureLabel: 'امضاء صاحب وكالة'
 };
@@ -107,77 +128,95 @@ export const ARABIC_CONDITIONS_TEMPLATE: ConditionsTemplate = {
 export const FRENCH_CONDITIONS_TEMPLATE: ConditionsTemplate = {
   language: 'fr',
   title: 'Les Conditions Générales de location véhicule',
-  subtitle: 'Vous pouvez lire les conditions de location, elles apparaîtront sur le contra de location',
+  subtitle: 'Vous pouvez lire les conditions de location, elles apparaîtront sur le contrat de location',
   conditions: [
     {
-      title: 'Age',
-      content: 'Le conducteur doit être âgé au minimum de 20 ans et être titulaire d\'un permis de conduire d\'au moins 2 ans.'
+      title: 'Mise à disposition du véhicule',
+      bullets: [
+        'Le véhicule est mis à votre disposition pour la durée convenue.',
+        'Le locataire doit être titulaire d\'un permis de conduire valide.'
+      ]
     },
     {
-      title: 'Passeport',
-      content: 'Dépôt obligatoire du passeport biométrique et une caution selon la catégorie du véhicule, qui constitue une garantie que nous demandons.'
+      title: 'État du véhicule',
+      bullets: [
+        'Le véhicule est remis en bon état de fonctionnement et de propreté.',
+        'Il devra être restitué dans le même état (hors usure normale).',
+        'Toute dégradation, perte ou dommage sera à la charge du locataire.',
+        'Le véhicule doit être rendu propre, à l\'intérieur comme à l\'extérieur.'
+      ]
+    },
+    {
+      title: 'Tarification',
+      bullets: [
+        'Le tarif est convenu avant la location.',
+        'Le forfait comprend 250 km par jour.',
+        'Chaque kilomètre supplémentaire est facturé 40 DZD/km.'
+      ]
+    },
+    {
+      title: 'Caution',
+      bullets: [
+        'Une caution de 200 € est exigée avant la remise du véhicule.',
+        'Elle est restituée après vérification du véhicule, sous réserve qu\'aucune somme ne reste due.',
+        'La caution ne constitue pas une limite de responsabilité. Si les dommages dépassent son montant, le locataire reste redevable de la différence.'
+      ]
+    },
+    {
+      title: 'Documents obligatoires',
+      bullets: [
+        'Présentation obligatoire d\'un permis de conduire valide.',
+        'Une copie du permis et d\'une pièce d\'identité pourra être demandée.'
+      ]
+    },
+    {
+      title: 'Utilisation du véhicule',
+      bullets: [
+        'Seul le conducteur inscrit sur le contrat est autorisé à conduire le véhicule.',
+        'Il est interdit de sous-louer le véhicule.',
+        'Il est interdit de fumer à l\'intérieur du véhicule.',
+        'Il est interdit d\'utiliser le véhicule pour des activités illégales, des compétitions ou tout usage non autorisé.',
+        'Toute sortie du territoire algérien est interdite sans autorisation écrite de CAR SALAM.',
+        'Le respect du Code de la route est obligatoire.',
+        'Toutes les amendes, contraventions et infractions restent à la charge du locataire.'
+      ]
     },
     {
       title: 'Carburant',
-      content: 'Le carburant est à la charge du client.'
+      bullets: [
+        'Le véhicule doit être restitué avec le même niveau de carburant que lors de sa remise.'
+      ]
     },
     {
-      title: 'Règlement',
-      content: 'Le paiement se fait à la livraison de la voiture en espèces.'
+      title: 'Retard de restitution',
+      bullets: [
+        'Tout retard doit être signalé au plus tôt.',
+        'Un retard important pourra entraîner la facturation d\'une journée supplémentaire.'
+      ]
     },
     {
-      title: 'Propreté',
-      content: 'Le véhicule est livré propre et doit être restitué dans le même état, faute de quoi le lavage sera facturé au prix de 1000 Da.'
+      title: 'Accident, panne ou vol',
+      bullets: [
+        'En cas d\'accident, de panne, de vol ou de dommage, le locataire doit prévenir immédiatement CAR SALAM.',
+        'Aucune réparation ne doit être effectuée sans l\'accord préalable du loueur.'
+      ]
     },
     {
-      title: 'Lieux de livraisons',
-      content: 'La livraison des voitures s\'effectue sur le parking de nos agences.'
+      title: 'Clés et accessoires',
+      bullets: [
+        'La perte des clés, des documents du véhicule ou des accessoires sera facturée au locataire.'
+      ]
     },
     {
-      title: 'Horaire',
-      content: 'Le client doit respecter les horaires établit à la réservation. Tout changement doit être signalé à l\'avance. Le client ne peut prolonger sa location que sur autorisation de notre agence location avec un préavis de 24 heures.'
-    },
-    {
-      title: 'Cas de sinistre',
-      content: 'Assurance de base : Le client s\'engage à payer tout dégât occasionné sur le véhicule qu\'il soit fautif ou non fautif. Toutes dégats sur le véhicule feras l\'objet d\'un ponctionnement sur la contion de garantie'
-    },
-    {
-      title: 'Accident',
-      content: 'Le client prend en charge tous les frais du véhicule en cas d\'accident ou de dommage au véhicule, à l\'intérieur comme à l\'extérieur.'
-    },
-    {
-      title: 'Assurances',
-      content: 'Seuls les conducteurs mentionnés sur le contrat de location bénéficient de l\'assurance. Le prêt et la sous-location du véhicule sont strictement interdits. L\'intégralité des dommages survenus dans ces circonstances est à la charge du client.'
-    },
-    {
-      title: 'Panne mécanique',
-      content: 'Au cours de la location en fonction du kilométrage parcourus le client doit effectuer les contrôles d\'usage (niveau d\'huile, moteur, pression des pneus, etc....). En cas de panne mécanique due à la négligence du client pour ne pas avoir effectué les contrôles d\'usage ou pour tout autre raisons due à la responsabilité du client (ex: casse carter d\'huile, triangle inférieur, serrure ou autres etc.), la prise en charge du dépannage et de la réparation sont à la charge totale du client.'
-    },
-    {
-      title: 'Dégâts supplémentaire',
-      content: 'Les dégâts aux jantes et pneumatiques, le roulage à plat des pneumatiques, la détérioration, les vols, les pillages d\'accessoires, les actes de vandalisme, les dégâts mécaniques dus à une mauvaise utilisation du véhicule, les procès verbaux, les dégâts survenus en dessous du véhicule (jupe, bas de caisse, carter d\'huile, échappement) et les dommages causés par les troubles et émeutes seront facturés au client.'
-    },
-    {
-      title: 'Pénalité de retard',
-      content: 'La durée de location se calcul par tranche de 24 heure non fractionnable depuis l\'heure de la réservation du véhicule et l\'heure mentionnée sur le contrat. Le client doit restituer le véhicule à la même heure autrement chaque heure de retard sera facturée au prix de 800 dinars/heure.'
-    },
-    {
-      title: 'Kilométrage',
-      content: 'Le kilométrage est limité pour tous nos véhicules a 300Km/Jour, selon le type de véhicule.'
-    },
-    {
-      title: 'Acceptation',
-      content: 'Le client déclare avoir pris connaissance et accepter sans réserve les présentes conditions de location.et s engage a signé ce contrat.'
-    },
-    {
-      title: 'Responsabilité légale',
-      content: 'En cas de constatation d\'objets interdits ou de toute chose contraire à la loi dans le véhicule, le client assume l\'entière responsabilité légale devant les services de la gendarmerie, de la police ou du tribunal, de manière générale.'
-    },
-    {
-      title: 'Frais et poursuites',
-      content: 'Tous les frais sont à la charge du client. À défaut de paiement des sommes dues à l\'agence, celle-ci se réserve le droit de poursuivre le client en justice.'
+      title: 'Responsabilité',
+      bullets: [
+        'Le locataire est responsable du véhicule pendant toute la durée de la location jusqu\'à sa restitution.',
+        'Les frais de réparation ou de remise en état sont à la charge du locataire, sauf si la responsabilité du loueur ou d\'un tiers est légalement établie.'
+      ]
     }
   ],
+  acceptance: 'La réservation ou la prise en charge du véhicule vaut acceptation des présentes conditions générales de location.',
+  thanks: 'Nous vous remercions pour votre confiance.',
   clientSignatureLabel: 'Signature et empreinte du client',
   agencySignatureLabel: 'Signature et scellés de l\'Agence'
 };
@@ -193,8 +232,9 @@ export const getConditionsTemplate = (language: 'ar' | 'fr'): ConditionsTemplate
  * Generate HTML content for printing conditions.
  * Layout summary:
  *   - Blue gradient header  : linear-gradient(135deg, #003399 → #0047b2)
- *   - Condition font        : 12.5px / 600 (bold #003399 prefix)
- *   - Row divider           : 1px solid #eef0f7
+ *   - Conditions            : 2 columns, one numbered section per block
+ *   - Section title         : numbered blue badge + bold #003399 label
+ *   - Bullets               : 11.5px / 600, blue dot marker
  *   - Acceptance box        : bg #f0f4ff, border #b8ccee
  *   - Signatures            : simple empty rectangles with the label below
  *   - Page border           : 2px solid #003399
@@ -206,29 +246,28 @@ export const generateConditionsPrintHTML = (language: 'ar' | 'fr'): string => {
   const textAlign = isArabic ? 'right' : 'left';
 
   /**
-   * The French wording is considerably longer than the Arabic one and used to spill onto a
-   * second A4 sheet. Both languages share one design; French simply renders it at a reduced
-   * scale (fonts + vertical rhythm) so the 17 conditions, the acceptance box and both
-   * signature boxes still fit on a single page. Horizontal gutters stay fixed so the two
-   * languages keep the same page frame.
+   * The 11 sections are laid out on two columns so everything (conditions, acceptance box and
+   * both signature boxes) still fits on a single A4 sheet. `break-inside: avoid` keeps a section
+   * and its bullets together, so a block never splits across the column boundary. The French
+   * wording is longer than the Arabic one, so it renders at a slightly reduced scale (fonts +
+   * vertical rhythm); horizontal gutters stay fixed so both languages keep the same page frame.
    */
-  const scale = isArabic ? 1 : 0.86;
+  const scale = isArabic ? 1 : 0.94;
   const u = (n: number): string => `${Math.round(n * scale * 100) / 100}px`;
 
   const conditionsHTML = template.conditions
     .map(
       (condition, index) => `
-      <div class="condition-item">
-        <p class="condition-text">
-          <span class="condition-title">${index + 1}- ${condition.title} </span>${condition.content}
-        </p>
-      </div>`
+      <section class="condition">
+        <h2 class="condition-title">
+          <span class="condition-num">${index + 1}</span>${condition.title}
+        </h2>
+        <ul class="condition-bullets">
+          ${condition.bullets.map((bullet) => `<li>${bullet}</li>`).join('\n          ')}
+        </ul>
+      </section>`
     )
     .join('');
-
-  const acceptanceText = isArabic
-    ? 'قام المستأجر بالاطلاع على شروط الإيجار هذه وقبلها دون أي تحفظ، ويتعهد بتوقيع هذا العقد وتحمّل جميع المسؤوليات الثانوية.'
-    : "Le locataire déclare avoir pris connaissance des présentes conditions de location et les accepter sans réserve, s'engage à signer ce contrat et à assumer toutes les responsabilités secondaires.";
 
   const printDate = new Date().toLocaleDateString(isArabic ? 'en-US' : 'fr-FR');
 
@@ -291,45 +330,104 @@ export const generateConditionsPrintHTML = (language: 'ar' | 'fr'): string => {
     }
 
     /* ── CONTENT ──
-       No flex-grow: the content takes only the height it needs so the
-       acceptance box + signatures sit directly beneath the conditions
-       instead of being pushed to the bottom of the A4 page. */
+       Two columns, no flex-grow: the content takes only the height it needs so the
+       acceptance box + signatures sit directly beneath the conditions instead of
+       being pushed to the bottom of the A4 page. */
     .content {
       padding: ${u(15)} 47px 0;
+      column-count: 2;
+      column-gap: 26px;
     }
 
-    /* ── CONDITION ROWS ── */
-    .condition-item {
-      padding: ${u(7)} 0;
-      border-bottom: 1px solid #eef0f7;
-    }
-    .condition-item:last-child { border-bottom: none; }
-
-    .condition-text {
-      font-size: ${u(12.5)};
-      color: #111;
-      font-weight: 600;
-      line-height: 1.55;
-      margin: 0;
-      text-align: ${textAlign};
+    /* ── CONDITION BLOCKS ── */
+    .condition {
+      break-inside: avoid;
+      page-break-inside: avoid;
+      -webkit-column-break-inside: avoid;
+      margin-bottom: ${u(11)};
     }
 
     .condition-title {
+      display: flex;
+      align-items: center;
+      gap: ${u(6)};
+      font-size: ${u(12.5)};
       font-weight: 800;
       color: #003399;
+      margin: 0 0 ${u(4)};
+      text-align: ${textAlign};
+    }
+
+    .condition-num {
+      flex-shrink: 0;
+      width: ${u(17)};
+      height: ${u(17)};
+      border-radius: 4px;
+      background: linear-gradient(135deg, #003399 0%, #0047b2 100%);
+      color: #fff;
+      font-size: ${u(10)};
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .condition-bullets {
+      list-style: none;
+      margin: 0;
+      padding-inline-start: ${u(23)};
+    }
+
+    .condition-bullets li {
+      position: relative;
+      padding-inline-start: ${u(10)};
+      margin-bottom: ${u(2)};
+      font-size: ${u(11.5)};
+      color: #111;
+      font-weight: 600;
+      line-height: 1.5;
+      text-align: ${textAlign};
+    }
+
+    .condition-bullets li::before {
+      content: '';
+      position: absolute;
+      inset-inline-start: 0;
+      top: ${u(7)};
+      width: ${u(4)};
+      height: ${u(4)};
+      border-radius: 50%;
+      background: #003399;
     }
 
     /* ── ACCEPTANCE ── */
     .acceptance {
-      margin: ${u(12)} 47px 0;
+      margin: ${u(6)} 47px 0;
       padding: ${u(9)} ${u(12)};
       background: #f0f4ff;
       border-radius: 5px;
       border: 1px solid #b8ccee;
-      font-size: ${u(12.5)};
       color: #003399;
-      font-weight: 700;
       text-align: ${textAlign};
+    }
+
+    .acceptance-main {
+      font-size: ${u(12.5)};
+      font-weight: 700;
+      margin: 0;
+    }
+
+    .acceptance-check {
+      font-weight: 800;
+      margin-inline-end: ${u(5)};
+    }
+
+    .acceptance-thanks {
+      font-size: ${u(11.5)};
+      font-weight: 600;
+      font-style: italic;
+      margin: ${u(4)} 0 0;
+      opacity: 0.85;
     }
 
     /* ── SIGNATURES: simple empty rectangles ── */
@@ -345,7 +443,7 @@ export const generateConditionsPrintHTML = (language: 'ar' | 'fr'): string => {
     .signature-box {
       border: 2px solid #003399;
       border-radius: 4px;
-      height: ${u(100)};
+      height: ${u(95)};
       background: #fff;
       display: flex;
       align-items: flex-start;
@@ -393,7 +491,8 @@ export const generateConditionsPrintHTML = (language: 'ar' | 'fr'): string => {
     </div>
 
     <div class="acceptance">
-      ${acceptanceText}
+      <p class="acceptance-main"><span class="acceptance-check">✓</span>${template.acceptance}</p>
+      <p class="acceptance-thanks">${template.thanks}</p>
     </div>
 
     <div class="signatures-section">
