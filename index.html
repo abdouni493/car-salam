@@ -5,11 +5,13 @@
     <script>
       // Le thème du back-office AVANT le premier pixel : appliqué par React, la
       // page clignoterait en blanc à chaque rechargement avant de virer au noir.
+      // Carbone par défaut : on ne retombe en clair que si l'utilisateur l'a
+      // explicitement choisi via le bouton de la navbar.
       try {
         document.documentElement.dataset.adminTheme =
-          localStorage.getItem('salam:admin-theme') === 'carbon' ? 'carbon' : 'light';
+          localStorage.getItem('salam:admin-theme') === 'light' ? 'light' : 'carbon';
       } catch (e) {
-        document.documentElement.dataset.adminTheme = 'light';
+        document.documentElement.dataset.adminTheme = 'carbon';
       }
     </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />

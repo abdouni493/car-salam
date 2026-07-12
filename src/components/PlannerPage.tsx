@@ -47,6 +47,29 @@ type PlannerStatus = typeof PLANNER_STATUSES[number];
 const isTerminatedStatus = (status: string) => status === 'completed' || status === 'terminated';
 
 /**
+ * Statut → habillage de la carte du planificateur : le liseré du haut, la
+ * pastille posée sur la photo, le libellé. Les trois chaînes de ternaires
+ * qu'il y avait ici pouvaient diverger ; une seule table les tient alignés.
+ *
+ * Les remplissages 400→900 sont laissés intacts par theme-carbon.css : ces
+ * pastilles pleines restent donc vives sur le noir, sans retouche.
+ */
+const RESERVATION_STATUS_STYLE: Record<string, { accent: string; pill: string; label: string }> = {
+  confirmed:  { accent: 'bg-green-500',  pill: 'bg-green-500/90 text-white',  label: '✅ Confirmé' },
+  accepted:   { accent: 'bg-teal-500',   pill: 'bg-teal-500/90 text-white',   label: '✅ Accepté' },
+  active:     { accent: 'bg-blue-500',   pill: 'bg-blue-500/90 text-white',   label: '🔄 Actif' },
+  completed:  { accent: 'bg-purple-500', pill: 'bg-purple-500/90 text-white', label: '🏁 Terminé' },
+  terminated: { accent: 'bg-red-500',    pill: 'bg-red-500/90 text-white',    label: '🛑 Terminée' },
+};
+
+/** 'pending' et tout statut inconnu retombent ici. */
+const PENDING_STATUS_STYLE = {
+  accent: 'bg-amber-400',
+  pill: 'bg-amber-400/95 text-amber-950',
+  label: '⏳ En attente',
+};
+
+/**
  * La liste du planificateur affiche le flux de travail *et* les réservations
  * terminées (elles restent consultables / réactivables). Seules
  * 'website_reservation', 'accepted' et 'cancelled' en sont exclues.
@@ -1067,44 +1090,38 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
             ? reservation.payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
             : (Number(reservation.advancePayment) || 0);
           const remainingAmount = Math.max(0, displayTotalPrice - paidAmount);
+          const statusStyle = RESERVATION_STATUS_STYLE[reservation.status] ?? PENDING_STATUS_STYLE;
 
           return (
           <motion.div
             key={reservation.id}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="group bg-white rounded-2xl shadow-sm hover:shadow-2xl hover:shadow-slate-300/40 hover:-translate-y-1 border border-slate-200/80 flex flex-col relative transition-all duration-300"
+            className="group res-card"
           >
             {/* Car Image */}
             <div className="relative h-44 overflow-hidden rounded-t-2xl">
               <img
                 src={reservation.car.images?.[0] || 'https://picsum.photos/seed/car/400/300'}
                 alt={`${reservation.car.brand} ${reservation.car.model}`}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                 referrerPolicy="no-referrer"
               />
-              {/* Dégradé pour la lisibilité du texte superposé */}
-              <div className="absolute inset-0 bg-gradient-to-t from-slate-900/85 via-slate-900/15 to-slate-900/10" />
+              {/* Dégradé pour la lisibilité du texte superposé. Il descend jusqu'au
+                  noir : en carbone la photo doit fondre dans la carte, pas s'arrêter
+                  net sur une arête claire. */}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-black/5" />
+
+              {/* Liseré de statut, en haut de la carte */}
+              <span className={`absolute inset-x-0 top-0 h-1 ${statusStyle.accent}`} />
 
               {/* Badge de statut */}
-              <span className={`absolute top-3 left-3 px-3 py-1 rounded-full text-[11px] font-black shadow-md backdrop-blur-md border border-white/40 ${
-                reservation.status === 'confirmed' ? 'bg-green-500/90 text-white' :
-                reservation.status === 'accepted' ? 'bg-teal-500/90 text-white' :
-                reservation.status === 'active' ? 'bg-blue-500/90 text-white' :
-                reservation.status === 'completed' ? 'bg-purple-500/90 text-white' :
-                reservation.status === 'terminated' ? 'bg-red-500/90 text-white' :
-                'bg-amber-400/95 text-amber-950'
-              }`}>
-                {reservation.status === 'confirmed' ? '✅ Confirmé' :
-                 reservation.status === 'accepted' ? '✅ Accepté' :
-                 reservation.status === 'active' ? '🔄 Actif' :
-                 reservation.status === 'completed' ? '🏁 Terminé' :
-                 reservation.status === 'terminated' ? '🛑 Terminée' :
-                 '⏳ En attente'}
+              <span className={`absolute top-3 left-3 px-3 py-1 rounded-full text-[11px] font-black shadow-lg backdrop-blur-md border border-white/25 ${statusStyle.pill}`}>
+                {statusStyle.label}
               </span>
 
               {/* Avatar client */}
-              <div className="absolute top-3 right-3 w-14 h-14 rounded-2xl border-2 border-white/80 overflow-hidden shadow-lg bg-slate-100 flex items-center justify-center">
+              <div className="absolute top-3 right-3 w-14 h-14 rounded-2xl border-2 border-white/70 group-hover:border-saas-primary-via overflow-hidden shadow-lg bg-black/40 backdrop-blur-md flex items-center justify-center transition-colors">
                 {reservation.client.profilePhoto ? (
                   <img
                     src={reservation.client.profilePhoto}
@@ -1123,12 +1140,13 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                   <h4 className="font-black text-white text-base leading-tight truncate drop-shadow-md">
                     {reservation.car.brand} {reservation.car.model}
                   </h4>
-                  <span className="inline-block mt-1 px-2 py-0.5 rounded-md bg-white/90 text-slate-800 text-[11px] font-black tracking-wide shadow-sm">
+                  {/* Plaque : lettrage clair sur verre noir, comme une vraie plaque */}
+                  <span className="inline-block mt-1 px-2 py-0.5 rounded-md bg-black/55 backdrop-blur-md border border-white/25 text-white text-[11px] font-black tracking-[0.12em] shadow-sm">
                     {reservation.car.registration}
                   </span>
                 </div>
-                <span className={`flex-shrink-0 px-2.5 py-1 rounded-lg text-[10px] font-black shadow-md backdrop-blur-md border border-white/40 ${
-                  reservation.source === 'website' ? 'bg-indigo-500/90 text-white' : 'bg-white/85 text-slate-700'
+                <span className={`flex-shrink-0 px-2.5 py-1 rounded-lg text-[10px] font-black shadow-md backdrop-blur-md border border-white/25 ${
+                  reservation.source === 'website' ? 'bg-indigo-500/90 text-white' : 'bg-black/55 text-white'
                 }`}>
                   {reservation.source === 'website'
                     ? (lang === 'fr' ? '🌐 Site' : '🌐 موقع')
@@ -1141,40 +1159,40 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
             <div className="p-5 flex flex-col flex-1">
               {/* Client */}
               <div className="mb-3">
-                <h3 className="font-black text-lg text-slate-900 leading-tight truncate">
+                <h3 className="font-black text-lg text-saas-text-main leading-tight truncate">
                   {reservation.client.firstName} {reservation.client.lastName}
                 </h3>
-                <p className="flex items-center gap-1.5 text-sm text-slate-500 mt-0.5">
-                  <Phone className="w-3.5 h-3.5 text-slate-400" /> {reservation.client.phone}
+                <p className="flex items-center gap-1.5 text-sm text-saas-text-muted mt-0.5">
+                  <Phone className="w-3.5 h-3.5 text-saas-text-muted" /> {reservation.client.phone}
                 </p>
               </div>
 
               {/* Dates & durée */}
               <div className="flex flex-wrap gap-2 mb-4">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-100 text-xs font-semibold text-slate-600">
-                  <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-saas-bg border border-saas-border text-xs font-semibold text-saas-text-muted">
+                  <Calendar className="w-3.5 h-3.5 text-saas-primary-via" />
                   {reservation.step1.departureDate} → {reservation.step1.returnDate}
                 </span>
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-100 text-xs font-semibold text-slate-600">
-                  <Clock className="w-3.5 h-3.5 text-slate-400" />
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-saas-bg border border-saas-border text-xs font-semibold text-saas-text-muted">
+                  <Clock className="w-3.5 h-3.5 text-saas-primary-via" />
                   {reservation.totalDays} {lang === 'fr' ? 'jours' : 'أيام'}
                 </span>
               </div>
 
               {/* Bloc financier */}
-              <div className="p-4 rounded-2xl border border-slate-200/70 bg-gradient-to-br from-slate-50 to-white mb-4">
+              <div className="res-well p-4 mb-4">
                 <div className="flex items-center justify-between mb-3">
                   <div>
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{lang === 'fr' ? 'Total Réservation' : 'الإجمالي'}</div>
-                    <div className="text-xl font-black text-slate-900">{displayTotalPrice.toLocaleString()} <span className="text-xs font-bold text-slate-400">{lang === 'fr' ? 'DA' : 'د.ج'}</span></div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-saas-text-muted">{lang === 'fr' ? 'Total Réservation' : 'الإجمالي'}</div>
+                    <div className="text-xl font-black text-saas-text-main">{displayTotalPrice.toLocaleString()} <span className="text-xs font-bold text-saas-text-muted">{lang === 'fr' ? 'DA' : 'د.ج'}</span></div>
                   </div>
                   <div className="text-right">
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{lang === 'fr' ? 'Payé' : 'مدفوع'}</div>
-                    <div className="text-lg font-black text-emerald-600">{paidAmount.toLocaleString()} <span className="text-xs font-bold text-emerald-400">{lang === 'fr' ? 'DA' : 'د.ج'}</span></div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-saas-text-muted">{lang === 'fr' ? 'Payé' : 'مدفوع'}</div>
+                    <div className="text-lg font-black text-emerald-600">{paidAmount.toLocaleString()} <span className="text-xs font-bold text-emerald-600/70">{lang === 'fr' ? 'DA' : 'د.ج'}</span></div>
                   </div>
                 </div>
 
-                <div className="w-full bg-slate-200/70 rounded-full h-1.5 overflow-hidden mb-2">
+                <div className="w-full bg-saas-border rounded-full h-1.5 overflow-hidden mb-2">
                   <div
                     className={`h-1.5 rounded-full transition-all ${remainingAmount === 0 ? 'bg-gradient-to-r from-emerald-400 to-green-500' : 'bg-gradient-to-r from-amber-400 to-orange-500'}`}
                     style={{ width: `${Math.min(100, Math.round((paidAmount / (displayTotalPrice || 1)) * 100))}%` }}
@@ -1182,7 +1200,7 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                 </div>
 
                 <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-slate-500">{lang === 'fr' ? 'Reste à payer' : 'المتبقي'}</span>
+                  <span className="font-semibold text-saas-text-muted">{lang === 'fr' ? 'Reste à payer' : 'المتبقي'}</span>
                   <span className={`font-black ${remainingAmount === 0 ? 'text-emerald-600' : 'text-red-600'}`}>{remainingAmount.toLocaleString()} {lang === 'fr' ? 'DA' : 'د.ج'}</span>
                 </div>
               </div>
@@ -1290,7 +1308,7 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
                       const btn = buttonRefs.current[reservation.id];
                       if (btn) {
                         const rect = btn.getBoundingClientRect();
-                        const card = btn.closest('.bg-white.rounded-2xl');
+                        const card = btn.closest('.res-card');
                         if (card instanceof HTMLElement) {
                           const cardRect = card.getBoundingClientRect();
                           const spaceRight = cardRect.right - rect.right;

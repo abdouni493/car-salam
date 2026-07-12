@@ -291,6 +291,32 @@ html[data-surface="site"] ::-webkit-scrollbar-thumb:hover { background: var(--co
   .glass-card {
     @apply bg-white border border-saas-border rounded-2xl shadow-sm hover:shadow-md transition-shadow;
   }
+
+  /* ── Carte de réservation (planificateur) ──
+     Peinte avec les jetons saas-*, pas avec des utilitaires clairs : elle est
+     donc juste en carbone comme en clair, sans dépendre du remapping de
+     theme-carbon.css (qui ne rattrape ni les variantes d'opacité type
+     `border-slate-200/80`, ni les dégradés `from-slate-50`).
+
+     Pas d'`overflow-hidden` : le menu d'impression est un enfant absolu qui
+     déborde de la carte. Les coins hauts sont arrondis par l'image elle-même. */
+  .res-card {
+    @apply relative flex flex-col rounded-2xl bg-saas-surface
+           border border-saas-border transition-all duration-300;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+  }
+  .res-card:hover {
+    @apply -translate-y-1;
+    border-color: color-mix(in srgb, var(--color-saas-primary-via) 45%, transparent);
+    box-shadow: 0 18px 40px -12px rgba(15, 23, 42, 0.22);
+  }
+
+  /* Le creux d'une carte : plus SOMBRE que la surface en carbone, plus clair
+     qu'elle en mode clair. --color-saas-bg fait les deux. */
+  .res-well {
+    @apply rounded-2xl border border-saas-border bg-saas-bg;
+  }
+
   .input-saas {
     @apply w-full bg-white border border-saas-border rounded-xl px-4 py-2.5 outline-none
            focus:ring-2 focus:ring-saas-primary-via/10 focus:border-saas-primary-via transition-all duration-200
@@ -299,6 +325,18 @@ html[data-surface="site"] ::-webkit-scrollbar-thumb:hover { background: var(--co
   .label-saas {
     @apply text-xs font-semibold text-saas-text-muted mb-1.5 block;
   }
+}
+
+/* En carbone, l'ombre portée noire ne se voit pas sur du noir : c'est le liseré
+   rouge et la lueur de la marque qui portent l'élévation. */
+html[data-admin-theme="carbon"] .res-card {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+html[data-admin-theme="carbon"] .res-card:hover {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 22px 50px -12px rgba(0, 0, 0, 0.7),
+    0 0 24px -6px rgba(200, 16, 46, 0.35);
 }
 
 @keyframes shake {

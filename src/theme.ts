@@ -3,8 +3,10 @@ import { useEffect, useState } from 'react';
 /**
  * Thème du back-office.
  *
- * - `light`  : le SaaS clair d'origine.
  * - `carbon` : la peau noir & rouge du site public (cf. src/styles/theme-carbon.css).
+ *              C'est le DÉFAUT : le back-office est carbone tant que l'utilisateur
+ *              n'a pas demandé le clair.
+ * - `light`  : le SaaS clair d'origine, désormais opt-in via le bouton de la navbar.
  *
  * Le thème vit sur <html data-admin-theme>, pas dans un contexte React : la
  * feuille de style fait tout le travail, donc aucun composant n'a besoin de
@@ -15,12 +17,14 @@ export type AdminTheme = 'light' | 'carbon';
 const STORAGE_KEY = 'salam:admin-theme';
 export const ADMIN_THEME_EVENT = 'salam:admin-theme-change';
 
+// Seul 'light' explicitement stocké fait sortir du carbone : une valeur absente
+// (première visite) ou corrompue retombe sur le thème de la marque.
 const readStoredTheme = (): AdminTheme => {
   try {
-    return localStorage.getItem(STORAGE_KEY) === 'carbon' ? 'carbon' : 'light';
+    return localStorage.getItem(STORAGE_KEY) === 'light' ? 'light' : 'carbon';
   } catch {
-    // Mode privé / stockage bloqué : on retombe sur le thème clair.
-    return 'light';
+    // Mode privé / stockage bloqué : on reste en carbone.
+    return 'carbon';
   }
 };
 
