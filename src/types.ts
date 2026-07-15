@@ -225,6 +225,11 @@ export interface VehicleExpense {
   expirationDate?: string;
   expenseName?: string;
   createdAt: string;
+  // Filtres changés lors d'une vidange (optionnels : anciennes lignes sans donnée).
+  oilFilterChanged?: boolean;
+  airFilterChanged?: boolean;
+  fuelFilterChanged?: boolean;
+  acFilterChanged?: boolean;
 }
 
 export interface ReservationStep1 {

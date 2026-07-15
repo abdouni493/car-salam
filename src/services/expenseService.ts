@@ -4,6 +4,29 @@ import { VehicleExpense, StoreExpense } from '../types'
 // Helper to generate UUID (Supabase will generate it on insert, but we use this for clarity)
 const generateId = () => crypto.randomUUID ? crypto.randomUUID() : ''
 
+// Colonnes « filtres » ajoutées par la migration
+// 20260716_vehicle_expenses_filter_columns.sql. Sur une base pas encore migrée,
+// PostgREST renvoie PGRST204 ("Could not find the '..._filter_changed' column").
+// On détecte ce cas pour réessayer SANS ces colonnes : la dépense s'enregistre
+// quand même (le suivi des filtres reprend dès que la migration est appliquée).
+const FILTER_KEYS = [
+  'oil_filter_changed',
+  'air_filter_changed',
+  'fuel_filter_changed',
+  'ac_filter_changed',
+] as const
+
+const isMissingFilterColumn = (error: any): boolean =>
+  !!error &&
+  (error.code === 'PGRST204' ||
+    (typeof error.message === 'string' && error.message.includes('filter_changed')))
+
+const stripFilterKeys = (row: Record<string, any>): Record<string, any> => {
+  const clone = { ...row }
+  for (const key of FILTER_KEYS) delete clone[key]
+  return clone
+}
+
 // Vehicle Expenses
 export async function getVehicleExpenses(): Promise<{ success: boolean; expenses?: VehicleExpense[]; error?: string }> {
   try {
@@ -44,25 +67,42 @@ export async function getVehicleExpenses(): Promise<{ success: boolean; expenses
 
 export async function addVehicleExpense(expense: Omit<VehicleExpense, 'id' | 'createdAt'>): Promise<{ success: boolean; expense?: VehicleExpense; error?: string }> {
   try {
-    const { data, error } = await supabase
+    // Une dépense = une NOUVELLE ligne dans l'historique du véhicule (jamais un
+    // écrasement de la dépense précédente).
+    const row: Record<string, any> = {
+      car_id: expense.carId,
+      type: expense.type,
+      cost: expense.cost,
+      date: expense.date,
+      note: expense.note || null,
+      current_mileage: expense.currentMileage || null,
+      next_vidange_km: expense.nextVidangeKm || null,
+      expiration_date: expense.expirationDate || null,
+      expense_name: expense.expenseName || null,
+      oil_filter_changed: expense.oilFilterChanged || false,
+      air_filter_changed: expense.airFilterChanged || false,
+      fuel_filter_changed: expense.fuelFilterChanged || false,
+      ac_filter_changed: expense.acFilterChanged || false,
+    }
+
+    let { data, error } = await supabase
       .from('vehicle_expenses')
-      .insert({
-        car_id: expense.carId,
-        type: expense.type,
-        cost: expense.cost,
-        date: expense.date,
-        note: expense.note || null,
-        current_mileage: expense.currentMileage || null,
-        next_vidange_km: expense.nextVidangeKm || null,
-        expiration_date: expense.expirationDate || null,
-        expense_name: expense.expenseName || null,
-        oil_filter_changed: (expense as any).oilFilterChanged || false,
-        air_filter_changed: (expense as any).airFilterChanged || false,
-        fuel_filter_changed: (expense as any).fuelFilterChanged || false,
-        ac_filter_changed: (expense as any).acFilterChanged || false,
-      })
+      .insert(row)
       .select()
       .single()
+
+    // Base pas encore migrée : on réessaie sans les colonnes de filtres.
+    if (error && isMissingFilterColumn(error)) {
+      console.warn(
+        "[expenseService] Colonnes de filtres absentes — appliquez la migration " +
+        "20260716_vehicle_expenses_filter_columns.sql. Enregistrement sans le suivi des filtres."
+      )
+      ;({ data, error } = await supabase
+        .from('vehicle_expenses')
+        .insert(stripFilterKeys(row))
+        .select()
+        .single())
+    }
 
     if (error) {
       console.error('Error adding vehicle expense:', error)
@@ -110,17 +150,31 @@ export async function updateVehicleExpense(
     if (updates.nextVidangeKm !== undefined) updateData.next_vidange_km = updates.nextVidangeKm
     if (updates.expirationDate !== undefined) updateData.expiration_date = updates.expirationDate
     if (updates.expenseName !== undefined) updateData.expense_name = updates.expenseName
-    if ((updates as any).oilFilterChanged !== undefined) updateData.oil_filter_changed = (updates as any).oilFilterChanged
-    if ((updates as any).airFilterChanged !== undefined) updateData.air_filter_changed = (updates as any).airFilterChanged
-    if ((updates as any).fuelFilterChanged !== undefined) updateData.fuel_filter_changed = (updates as any).fuelFilterChanged
-    if ((updates as any).acFilterChanged !== undefined) updateData.ac_filter_changed = (updates as any).acFilterChanged
+    if (updates.oilFilterChanged !== undefined) updateData.oil_filter_changed = updates.oilFilterChanged
+    if (updates.airFilterChanged !== undefined) updateData.air_filter_changed = updates.airFilterChanged
+    if (updates.fuelFilterChanged !== undefined) updateData.fuel_filter_changed = updates.fuelFilterChanged
+    if (updates.acFilterChanged !== undefined) updateData.ac_filter_changed = updates.acFilterChanged
 
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('vehicle_expenses')
       .update(updateData)
       .eq('id', id)
       .select()
       .single()
+
+    // Base pas encore migrée : on réessaie sans les colonnes de filtres.
+    if (error && isMissingFilterColumn(error)) {
+      console.warn(
+        "[expenseService] Colonnes de filtres absentes — appliquez la migration " +
+        "20260716_vehicle_expenses_filter_columns.sql. Mise à jour sans le suivi des filtres."
+      )
+      ;({ data, error } = await supabase
+        .from('vehicle_expenses')
+        .update(stripFilterKeys(updateData))
+        .eq('id', id)
+        .select()
+        .single())
+    }
 
     if (error) {
       console.error('Error updating vehicle expense:', error)

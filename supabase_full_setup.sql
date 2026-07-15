@@ -191,6 +191,10 @@ create table if not exists public.vehicle_expenses (
   next_vidange_km int,
   expiration_date date,
   expense_name    text,
+  oil_filter_changed  boolean not null default false,   -- vidange : filtre à huile changé
+  air_filter_changed  boolean not null default false,   -- vidange : filtre à air changé
+  fuel_filter_changed boolean not null default false,   -- vidange : filtre à carburant changé
+  ac_filter_changed   boolean not null default false,   -- vidange : filtre de climatisation changé
   created_at      timestamptz not null default now()
 );
 

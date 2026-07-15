@@ -633,7 +633,10 @@ export const VehicleExpenseModal: React.FC<VehicleExpenseModalProps> = ({
             onClick={handleSubmit}
             className="flex-1 btn-saas-primary py-3"
           >
-            {{fr: expense ? 'Modifier' : 'Ajouter', ar: expense ? 'تعديل' : 'إضافة'}[lang]}
+            {/* Une dépense pré-remplie depuis la maintenance n'a pas d'id : c'est
+                un AJOUT à l'historique, pas une modification. Seule une dépense
+                existante (avec id, éditée depuis la page Dépenses) affiche « Modifier ». */}
+            {{fr: expense?.id ? 'Modifier' : 'Ajouter', ar: expense?.id ? 'تعديل' : 'إضافة'}[lang]}
           </button>
         </div>
       </motion.div>

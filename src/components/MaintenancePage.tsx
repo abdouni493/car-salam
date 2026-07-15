@@ -211,13 +211,16 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({
   const handleSaveExpense = async (expenseData: any) => {
     try {
       if (selectedCar) {
+        // Toujours un AJOUT : chaque clic sur un bouton de maintenance crée une
+        // nouvelle ligne dans l'historique des dépenses du véhicule, il ne modifie
+        // jamais la dépense précédente. On respecte le type choisi dans le modal.
         const expense = {
           carId: selectedCar.id,
-          type: selectedExpenseType,
+          type: expenseData.type || selectedExpenseType,
           cost: expenseData.cost || 0,
           date: expenseData.date || new Date().toISOString().split('T')[0],
           note: expenseData.note || '',
-          currentMileage: expenseData.currentMileage || selectedCar.mileage,
+          currentMileage: expenseData.currentMileage ?? selectedCar.mileage,
           nextVidangeKm: expenseData.nextVidangeKm || null,
           expirationDate: expenseData.expirationDate || null,
           expenseName: expenseData.expenseName || '',
@@ -229,10 +232,18 @@ export const MaintenancePage: React.FC<MaintenancePageProps> = ({
 
         const result = await addVehicleExpense(expense);
         if (result.success) {
-          // Reload maintenance data
+          // Reload maintenance data so the card shows the newly saved entry.
           await loadCarsData();
           setIsExpenseModalOpen(false);
           setSelectedCar(null);
+          setPrefilledExpense(undefined);
+        } else {
+          console.error('Error saving expense:', result.error);
+          alert(
+            lang === 'fr'
+              ? `Échec de l'enregistrement de la dépense : ${result.error || 'erreur inconnue'}`
+              : `فشل حفظ النفقة: ${result.error || 'خطأ غير معروف'}`
+          );
         }
       }
     } catch (err) {
