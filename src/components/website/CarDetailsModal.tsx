@@ -40,8 +40,8 @@ export const CarDetailsModal: React.FC<CarDetailsModalProps> = ({ lang, car, onC
         className="relative rounded-3xl max-w-3xl w-full max-h-[90vh] overflow-y-auto"
         style={{
           background: 'var(--color-vel-surface)',
-          border: '1px solid rgba(200, 16, 46, 0.2)',
-          boxShadow: '0 0 60px rgba(200, 16, 46, 0.06), 0 25px 50px rgba(0, 0, 0, 0.45)',
+          border: '1px solid rgba(234, 88, 12, 0.2)',
+          boxShadow: '0 0 60px rgba(234, 88, 12, 0.06), 0 25px 50px rgba(0, 0, 0, 0.45)',
         }}
       >
         {/* Close Button */}
@@ -51,8 +51,8 @@ export const CarDetailsModal: React.FC<CarDetailsModalProps> = ({ lang, car, onC
           whileTap={{ scale: 0.9 }}
           className="absolute top-4 right-4 z-20 rounded-xl p-2 transition-all duration-200 text-vel-muted"
           style={{
-            background: 'rgba(255, 255, 255, 0.06)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
+            background: 'rgba(15, 23, 42, 0.06)',
+            border: '1px solid rgba(15, 23, 42, 0.12)',
           }}
           onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = 'var(--color-vel-cta)'; }}
           onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = ''; }}
@@ -82,7 +82,7 @@ export const CarDetailsModal: React.FC<CarDetailsModalProps> = ({ lang, car, onC
               {car.brand}{' '}
               <span style={{ color: 'var(--color-vel-cta-bright)' }}>{car.model}</span>
             </h2>
-            <p className="text-vel-slate mt-1">
+            <p className="text-slate-200 mt-1">
               {car.registration} · {car.year}
               {car.vin && ` · ${car.vin}`}
             </p>
@@ -161,8 +161,8 @@ export const CarDetailsModal: React.FC<CarDetailsModalProps> = ({ lang, car, onC
             {/* Deposit */}
             <div className="rounded-xl p-4 flex items-center justify-between"
               style={{
-                background: 'rgba(200, 16, 46, 0.08)',
-                border: '1px solid rgba(200, 16, 46, 0.25)',
+                background: 'rgba(234, 88, 12, 0.08)',
+                border: '1px solid rgba(234, 88, 12, 0.25)',
               }}>
               <div>
                 <p className="text-xs text-vel-muted mb-0.5">{{ fr: 'Caution requise', ar: 'الكفالة المطلوبة' }[lang]}</p>
@@ -172,14 +172,14 @@ export const CarDetailsModal: React.FC<CarDetailsModalProps> = ({ lang, car, onC
                 <p className="font-bold text-xs mt-0.5" style={{ color: 'var(--color-vel-cta-bright)' }}>{formatMoney(eur.deposit, 'EUR')}</p>
               </div>
               <div className="w-10 h-10 rounded-xl flex items-center justify-center text-vel-gold text-lg"
-                style={{ background: 'rgba(200, 16, 46, 0.12)', border: '1px solid rgba(200, 16, 46, 0.3)' }}>
+                style={{ background: 'rgba(234, 88, 12, 0.12)', border: '1px solid rgba(234, 88, 12, 0.3)' }}>
                 🏦
               </div>
             </div>
           </div>
 
           {/* Action Buttons */}
-          <div className="flex gap-4 pt-2" style={{ borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
+          <div className="flex gap-4 pt-2" style={{ borderTop: '1px solid rgba(15, 23, 42, 0.08)' }}>
             <motion.button
               onClick={onClose}
               whileHover={{ scale: 1.02 }}

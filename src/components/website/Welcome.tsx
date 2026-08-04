@@ -18,8 +18,8 @@ const C = {
   gold:      'var(--color-vel-cta)',
   black:     '#FFFFFF',   // texte posé sur les aplats rouges (5.9:1)
   amber:     'var(--color-vel-cta-deep)',
-  accentDim: 'rgba(200, 16, 46, 0.12)',
-  amberDim:  'rgba(200, 16, 46, 0.08)',
+  accentDim: 'rgba(234, 88, 12, 0.12)',
+  amberDim:  'rgba(234, 88, 12, 0.08)',
   bg:        'var(--color-vel-void)',
   surface:   'var(--color-vel-surface)',
 };
@@ -38,7 +38,7 @@ function HeroVisual() {
         animate={{ rotate: 360 }}
         transition={{ duration: 28, repeat: Infinity, ease: 'linear' }}
         className="absolute w-[400px] h-[400px] rounded-full"
-        style={{ border: '1px solid rgba(200, 16, 46, 0.09)' }}
+        style={{ border: '1px solid rgba(234, 88, 12, 0.09)' }}
       >
         <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full"
           style={{ background: C.accent, boxShadow: `0 0 14px ${C.accent}` }} />
@@ -49,7 +49,7 @@ function HeroVisual() {
         animate={{ rotate: -360 }}
         transition={{ duration: 18, repeat: Infinity, ease: 'linear' }}
         className="absolute w-[290px] h-[290px] rounded-full"
-        style={{ border: '1px dashed rgba(200, 16, 46, 0.2)' }}
+        style={{ border: '1px dashed rgba(234, 88, 12, 0.2)' }}
       >
         <div className="absolute top-0 right-6 w-2 h-2 rounded-full"
           style={{ background: C.amber, boxShadow: `0 0 10px ${C.amber}` }} />
@@ -60,7 +60,7 @@ function HeroVisual() {
         animate={{ scale: [1, 1.07, 1], opacity: [0.35, 0.65, 0.35] }}
         transition={{ duration: 3, repeat: Infinity }}
         className="absolute w-[180px] h-[180px] rounded-full"
-        style={{ border: '1px solid rgba(200, 16, 46, 0.3)' }}
+        style={{ border: '1px solid rgba(234, 88, 12, 0.3)' }}
       />
 
       {/* Corner accent dots */}
@@ -89,7 +89,7 @@ function BookingSearchPanel({ lang, agencies, onSearch, hasBg }: {
 
   const isValid = !!departureAgencyId && !!from && !!to && from <= to && from >= today;
 
-  const fieldBase = "w-full px-4 py-3 rounded-xl border border-vel-border-strong bg-vel-deep text-sm font-medium text-vel-ink outline-none hover:border-vel-cta focus:border-vel-cta focus:ring-4 focus:ring-vel-cta/25 transition-all duration-200";
+  const fieldBase = "w-full px-4 py-3 rounded-xl border border-vel-border-strong bg-white text-sm font-medium text-vel-ink outline-none hover:border-vel-cta focus:border-vel-cta focus:ring-4 focus:ring-vel-cta/15 transition-all duration-200";
   const selectClass = `${fieldBase} cursor-pointer`;
   const inputClass = fieldBase;
 
@@ -143,11 +143,9 @@ function BookingSearchPanel({ lang, agencies, onSearch, hasBg }: {
       transition={{ duration: 0.8, delay: 0.75 }}
       className="relative z-20 rounded-3xl p-6 sm:p-8"
       style={{
-        background: 'rgba(20, 20, 24, 0.72)',
-        border: '1px solid rgba(255, 255, 255, 0.12)',
-        backdropFilter: 'blur(20px) saturate(140%)',
-        WebkitBackdropFilter: 'blur(20px) saturate(140%)',
-        boxShadow: '0 24px 70px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.08)',
+        background: '#FFFFFF',
+        border: '1px solid var(--color-vel-border)',
+        boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.25)',
       }}
     >
       <p className="text-xs font-bold tracking-[0.2em] uppercase mb-5 flex items-center gap-2"
@@ -183,7 +181,7 @@ function BookingSearchPanel({ lang, agencies, onSearch, hasBg }: {
             // (Un dégradé vers le rouge clair ferait tomber le texte sous 3.3:1.)
             background: `linear-gradient(135deg, ${C.gold}, ${C.amber})`,
             color: C.black,
-            boxShadow: isValid ? '0 6px 20px rgba(200, 16, 46, 0.35)' : 'none',
+            boxShadow: isValid ? '0 6px 20px rgba(234, 88, 12, 0.35)' : 'none',
           }}
         >
           {{ fr: 'Suivant', ar: 'التالي' }[lang]} <ArrowRight size={16} />
@@ -308,7 +306,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ lang, websiteSettings, agencie
 
         {/* Filet chrome horizontal (le trait sous le logo) */}
         <div className="absolute top-[48%] left-0 right-0 h-px pointer-events-none" style={{
-          background: 'linear-gradient(90deg, transparent, rgba(200,16,46,0.5), rgba(233,235,238,0.25), transparent)',
+          background: 'linear-gradient(90deg, transparent, rgba(234,88,12,0.5), rgba(233,235,238,0.25), transparent)',
         }} />
 
         <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
@@ -471,8 +469,8 @@ export const Welcome: React.FC<WelcomeProps> = ({ lang, websiteSettings, agencie
                 whileHover={{ y: -6 }}
                 className="relative overflow-hidden rounded-2xl p-7 flex flex-col gap-4 transition-all duration-300 cursor-default"
                 style={{
-                  background: 'rgba(200, 16, 46, 0.04)',
-                  border: '1px solid rgba(200, 16, 46, 0.09)',
+                  background: 'rgba(234, 88, 12, 0.04)',
+                  border: '1px solid rgba(234, 88, 12, 0.09)',
                   backdropFilter: 'blur(12px)',
                 }}
                 onMouseEnter={e => {
@@ -480,7 +478,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ lang, websiteSettings, agencie
                   (e.currentTarget as HTMLElement).style.boxShadow = `0 0 30px ${C.accent}12`;
                 }}
                 onMouseLeave={e => {
-                  (e.currentTarget as HTMLElement).style.borderColor = 'rgba(200, 16, 46, 0.09)';
+                  (e.currentTarget as HTMLElement).style.borderColor = 'rgba(234, 88, 12, 0.09)';
                   (e.currentTarget as HTMLElement).style.boxShadow = 'none';
                 }}
               >
@@ -543,8 +541,8 @@ export const Welcome: React.FC<WelcomeProps> = ({ lang, websiteSettings, agencie
                 transition={{ duration: 0.55, delay: i * 0.1 }}
                 whileHover="hover"
                 className="group relative rounded-2xl p-6 text-center flex flex-col items-center gap-4 cursor-default"
-                style={{ background: C.surface, border: '1px solid rgba(255, 255, 255, 0.06)' }}
-                variants={{ hover: { y: -8, boxShadow: `0 18px 40px rgba(200, 16, 46, 0.14)` } }}
+                style={{ background: C.surface, border: '1px solid var(--color-vel-border)', boxShadow: '0 1px 2px rgba(15,23,42,0.04)' }}
+                variants={{ hover: { y: -8, boxShadow: `0 18px 40px -12px rgba(234, 88, 12, 0.25)` } }}
               >
                 <div className="relative">
                   {/* Halo pulsé derrière l'icône */}
@@ -624,7 +622,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ lang, websiteSettings, agencie
               fontFamily: 'var(--font-display)',
               background: `linear-gradient(135deg, ${C.gold}, ${C.accent})`,
               color: C.black,
-              boxShadow: `0 6px 18px rgba(200, 16, 46, 0.28)`,
+              boxShadow: `0 6px 18px rgba(234, 88, 12, 0.28)`,
             }}
           >
             <CarIcon size={20} /> {{ fr: 'Voir tous les véhicules', ar: 'عرض جميع السيارات' }[lang]}

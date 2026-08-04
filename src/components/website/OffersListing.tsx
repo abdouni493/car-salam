@@ -87,11 +87,11 @@ export const OffersListing: React.FC<OffersListingProps> = ({ lang, cars, specia
                 whileHover={reduceMotion ? {} : { y: -4 }}
                 className="vel-glass rounded-xl overflow-hidden group cursor-pointer transition-shadow duration-300 flex flex-col outline-none focus-visible:ring-2 focus-visible:ring-vel-gold"
                 onMouseEnter={e => {
-                  (e.currentTarget as HTMLElement).style.borderColor = 'rgba(200, 16, 46, 0.25)';
-                  (e.currentTarget as HTMLElement).style.boxShadow = '0 8px 30px rgba(200, 16, 46, 0.09)';
+                  (e.currentTarget as HTMLElement).style.borderColor = 'rgba(234, 88, 12, 0.25)';
+                  (e.currentTarget as HTMLElement).style.boxShadow = '0 8px 30px rgba(234, 88, 12, 0.09)';
                 }}
                 onMouseLeave={e => {
-                  (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.08)';
+                  (e.currentTarget as HTMLElement).style.borderColor = 'rgba(15, 23, 42, 0.08)';
                   (e.currentTarget as HTMLElement).style.boxShadow = 'none';
                 }}
               >
@@ -106,11 +106,11 @@ export const OffersListing: React.FC<OffersListingProps> = ({ lang, cars, specia
                   />
                   <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(8,12,20,0.7), transparent 55%)' }} />
                   <div className="absolute top-2 right-2 px-2 py-0.5 rounded-md text-[10px] font-bold backdrop-blur-sm"
-                    style={{ color: 'var(--color-vel-cta-bright)', background: 'rgba(200, 16, 46, 0.1)', border: '1px solid rgba(200, 16, 46, 0.25)', fontFamily: 'var(--font-display)' }}>
+                    style={{ color: 'var(--color-vel-cta-bright)', background: 'rgba(234, 88, 12, 0.1)', border: '1px solid rgba(234, 88, 12, 0.25)', fontFamily: 'var(--font-display)' }}>
                     {car.year}
                   </div>
                   {promo && (
-                    <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md text-[10px] font-bold text-vel-black shadow"
+                    <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md text-[10px] font-bold text-white shadow"
                       style={{ background: 'var(--color-vel-cta)', fontFamily: 'var(--font-display)' }}>
                       {promo.label || `-${Math.round((1 - promo.newPrice / promo.oldPrice) * 100)}%`}
                     </div>
@@ -137,8 +137,8 @@ export const OffersListing: React.FC<OffersListingProps> = ({ lang, cars, specia
                     {specs.map((s, i) => (
                       <span key={i}
                         className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium text-vel-slate"
-                        style={{ background: 'rgba(255, 255, 255, 0.06)', border: '1px solid rgba(255, 255, 255, 0.07)' }}>
-                        <s.icon size={9} style={{ color: 'rgba(200, 16, 46, 0.55)' }} />
+                        style={{ background: 'rgba(15, 23, 42, 0.06)', border: '1px solid rgba(15, 23, 42, 0.07)' }}>
+                        <s.icon size={9} style={{ color: 'rgba(234, 88, 12, 0.55)' }} />
                         {s.value}
                       </span>
                     ))}
@@ -146,7 +146,7 @@ export const OffersListing: React.FC<OffersListingProps> = ({ lang, cars, specia
 
                   {/* Tous les tarifs, en rangées compactes — dinar puis contre-valeur euro */}
                   <div className="rounded-lg px-2.5 py-2 space-y-1 mt-auto"
-                    style={{ background: 'rgba(200, 16, 46, 0.05)', border: '1px solid rgba(200, 16, 46, 0.1)' }}>
+                    style={{ background: 'rgba(234, 88, 12, 0.05)', border: '1px solid rgba(234, 88, 12, 0.1)' }}>
                     <div className="flex justify-between items-start gap-2 text-[10px]">
                       <span className="text-vel-muted pt-px">{{ fr: 'Jour', ar: 'يوم' }[lang]}</span>
                       <span className="text-right">
@@ -179,7 +179,7 @@ export const OffersListing: React.FC<OffersListingProps> = ({ lang, cars, specia
                         <span className="font-bold text-[9px] block text-vel-muted">{formatMoney(eur.month, 'EUR')}</span>
                       </span>
                     </div>
-                    <div className="flex justify-between items-start gap-2 text-[10px] pt-1" style={{ borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}>
+                    <div className="flex justify-between items-start gap-2 text-[10px] pt-1" style={{ borderTop: '1px solid rgba(15, 23, 42, 0.06)' }}>
                       <span className="text-vel-muted pt-px">{{ fr: 'Caution', ar: 'الكفالة' }[lang]}</span>
                       <span className="text-right">
                         <span className="font-bold block" style={{ color: 'var(--color-vel-cta-bright)' }}>{car.deposit.toLocaleString()} DA</span>

@@ -12,50 +12,51 @@
      Dérivée du logo : fond noir · lettrage chrome · accent cramoisi profond.
      Le rouge est RARE : il signale l'action et l'état actif, jamais le décor. */
 
-  /* Surfaces — échelle de profondeur (noms vel-* historiques conservés) */
-  --color-vel-void:        #08080A;  /* fond de page (pas #000 pur : évite le smearing OLED) */
-  --color-vel-abyss:       #0E0E11;  /* bandes / placeholders d'image */
-  --color-vel-deep:        #121216;  /* creux, pistes de champs */
-  --color-vel-surface:     #151519;  /* cartes */
-  --color-vel-elevated:    #1C1C22;  /* cartes survolées, modales, champs */
+  /* Surfaces — skin clair "orange & ardoise" (cf. site de référence KREYALOC).
+     Le site public est désormais CLAIR : fond blanc, cartes blanches, sections
+     ardoise très claires. Les noms vel-* historiques sont conservés. */
+  --color-vel-void:        #FFFFFF;  /* fond de page (blanc) */
+  --color-vel-abyss:       #F8FAFC;  /* bandes / sections alternées (slate-50) */
+  --color-vel-deep:        #F1F5F9;  /* creux, pistes de champs (slate-100) */
+  --color-vel-surface:     #FFFFFF;  /* cartes (blanches, élévation par l'ombre) */
+  --color-vel-elevated:    #FFFFFF;  /* cartes survolées, modales, champs */
 
-  --color-vel-primary:     #E9EBEE;  /* chrome : titres, nav */
+  --color-vel-primary:     #0F172A;  /* titres, nav (slate-900) */
 
-  /* Rouge — échelle d'accent.
-     -cta        = rouge de REMPLISSAGE (3.4:1 sur le noir → OK composants/grands
-                   titres, texte blanc dessus = 5.9:1). PAS de texte en petit corps.
-     -cta-bright = rouge de TEXTE (6.1:1 sur le noir → AA en petit corps). */
-  --color-vel-cta:         #C8102E;
-  --color-vel-cta-deep:    #8A0A1C;
-  --color-vel-cta-bright:  #FF4D52;
+  /* Orange — échelle d'accent (orange-600/700, cf. site de référence #EA580C).
+     -cta        = orange de REMPLISSAGE (boutons, aplats ; texte blanc dessus).
+     -cta-bright = orange de TEXTE / liens sur fond clair. */
+  --color-vel-cta:         #EA580C;
+  --color-vel-cta-deep:    #C2410C;
+  --color-vel-cta-bright:  #EA580C;
 
-  /* Chrome — le lettrage "CAR" du logo */
-  --color-vel-chrome:      #E9EBEE;
-  --color-vel-silver:      #9AA0AA;
+  /* Chrome — lettrage sombre (ardoise) sur fond clair */
+  --color-vel-chrome:      #0F172A;
+  --color-vel-silver:      #64748B;
 
   /* Alias rétro-compat : les composants qui parlaient encore "gold" pointent
-     désormais vers le rouge/chrome. Évite un rename dans 18 fichiers. */
-  --color-vel-gold:        #FF4D52;  /* ex-or → rouge lisible en texte */
-  --color-vel-gold-light:  #C8102E;  /* ex-or clair → rouge de remplissage */
-  --color-vel-gold-dark:   #8A0A1C;
-  --color-vel-gold-pale:   #FF8A8E;
-  --color-vel-gold-glow:   rgba(200, 16, 46, 0.22);
+     désormais vers l'orange. Évite un rename dans 18 fichiers. */
+  --color-vel-gold:        #EA580C;  /* ex-or → orange de texte/accents */
+  --color-vel-gold-light:  #F97316;  /* ex-or clair → orange-500 */
+  --color-vel-gold-dark:   #C2410C;  /* orange-700 */
+  --color-vel-gold-pale:   #FDBA74;  /* orange-300 */
+  --color-vel-gold-glow:   rgba(234, 88, 12, 0.22);
 
   --color-vel-black:       #08080A;
   --color-vel-black-deep:  #000000;
 
-  /* Texte — les 4 niveaux passent AA en corps de texte sur #08080A */
-  --color-vel-ink:         #F5F6F7;  /* 18.5:1 — titres, texte principal */
-  --color-vel-slate:       #C7CBD2;  /* 12.0:1 — texte secondaire */
-  --color-vel-muted:       #9BA1AB;  /*  8.3:1 — texte tertiaire, labels */
-  --color-vel-dim:         #7A808B;  /*  5.1:1 — méta, copyright, désactivé */
+  /* Texte — ardoise sur fond clair (AA sur blanc) */
+  --color-vel-ink:         #0F172A;  /* slate-900 — titres, texte principal */
+  --color-vel-slate:       #475569;  /* slate-600 — texte secondaire */
+  --color-vel-muted:       #64748B;  /* slate-500 — texte tertiaire, labels */
+  --color-vel-dim:         #94A3B8;  /* slate-400 — méta, copyright, désactivé */
 
-  --color-vel-glass:            rgba(255, 255, 255, 0.03);
-  --color-vel-glass-gold:       rgba(200, 16, 46, 0.10);
-  --color-vel-border:           rgba(255, 255, 255, 0.09);
-  --color-vel-border-strong:    rgba(255, 255, 255, 0.16);
-  --color-vel-border-gold:      rgba(200, 16, 46, 0.35);
-  --color-vel-border-red:       rgba(200, 16, 46, 0.35);
+  --color-vel-glass:            rgba(15, 23, 42, 0.02);
+  --color-vel-glass-gold:       rgba(234, 88, 12, 0.08);
+  --color-vel-border:           #E2E8F0;                  /* slate-200 */
+  --color-vel-border-strong:    #CBD5E1;                  /* slate-300 */
+  --color-vel-border-gold:      rgba(234, 88, 12, 0.35);
+  --color-vel-border-red:       rgba(234, 88, 12, 0.35);
 
   /* Mouvement — rythme global partagé (cf. MASTER.md §5) */
   --ease-enter: cubic-bezier(0.22, 1, 0.36, 1);
@@ -100,21 +101,31 @@ html[data-surface="site"] body {
   color: var(--color-vel-ink);
 }
 
-.font-display { font-family: var(--font-display); }
-
-/* ── Lettrage chrome : le dégradé métallique du "CAR" du logo ── */
-.text-chrome {
-  background: linear-gradient(180deg, var(--color-vel-chrome) 0%, #FFFFFF 42%, var(--color-vel-silver) 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+/* Le site public utilise Barlow / Barlow Condensed (skin de référence) ; le
+   back-office garde DM Sans / Space Grotesk. On surcharge donc les variables de
+   police uniquement sous la surface "site". */
+html[data-surface="site"] {
+  --font-sans: "Barlow", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Barlow Condensed", "Barlow", sans-serif;
 }
 
-/* ── Carte sombre (verre sur noir) ── */
+.font-display { font-family: var(--font-display); }
+/* Alias de la police condensée du site de référence (titres à fort impact). */
+html[data-surface="site"] .font-cond { font-family: "Barlow Condensed", sans-serif; }
+
+/* ── Lettrage titre : ardoise pleine sur fond clair (ex-dégradé chrome) ── */
+.text-chrome {
+  background: none;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  color: var(--color-vel-primary);
+}
+
+/* ── Carte claire (blanche, bord ardoise, ombre douce) ── */
 .vel-glass {
   background: var(--color-vel-surface);
   border: 1px solid var(--color-vel-border);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 12px 32px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 10px 24px -14px rgba(15, 23, 42, 0.18);
 }
 
 .vel-glass-gold {
@@ -122,20 +133,21 @@ html[data-surface="site"] body {
   border: 1px solid var(--color-vel-border-red);
 }
 
-/* ── Encart accent rouge ── */
+/* ── Encart accent orange ── */
 .vel-glass-accent {
-  background: rgba(200, 16, 46, 0.07);
-  border: 1px solid rgba(200, 16, 46, 0.22);
+  background: rgba(234, 88, 12, 0.06);
+  border: 1px solid rgba(234, 88, 12, 0.20);
 }
 
-/* ── Bouton CTA principal (rouge plein, texte blanc — 5.9:1) ── */
+/* ── Bouton CTA principal (orange plein, texte blanc) ── */
 .btn-vel-cta {
   font-family: var(--font-display);
   font-weight: 700;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.02em;
   color: #FFFFFF;
-  border-radius: 0.75rem;
+  border-radius: 0.625rem;
   transition: transform var(--dur-micro) var(--ease-enter),
+              background var(--dur-micro) var(--ease-enter),
               box-shadow var(--dur-micro) var(--ease-enter);
   display: inline-flex;
   align-items: center;
@@ -144,85 +156,88 @@ html[data-surface="site"] body {
   position: relative;
   overflow: hidden;
   cursor: pointer;
-  background: linear-gradient(135deg, var(--color-vel-cta), var(--color-vel-cta-deep));
-  box-shadow: 0 4px 14px rgba(200, 16, 46, 0.30);
+  background: var(--color-vel-cta);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
 }
 .btn-vel-cta:hover {
-  box-shadow: 0 10px 28px rgba(200, 16, 46, 0.42);
-  transform: translateY(-2px);
+  background: var(--color-vel-cta-deep);
+  box-shadow: 0 10px 24px -8px rgba(234, 88, 12, 0.45);
+  transform: translateY(-1px);
 }
 .btn-vel-cta:active { transform: scale(0.97); }
-.btn-vel-cta:focus-visible { outline: 2px solid var(--color-vel-cta-bright); outline-offset: 2px; }
+.btn-vel-cta:focus-visible { outline: 2px solid var(--color-vel-cta); outline-offset: 2px; }
 
-/* ── Bouton contour ── */
+/* ── Bouton contour (blanc, bord ardoise → orange au survol) ── */
 .btn-vel-outline-cyan {
   font-family: var(--font-display);
   font-weight: 700;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.02em;
   color: var(--color-vel-slate);
-  border-radius: 0.75rem;
+  border-radius: 0.625rem;
   transition: all var(--dur-micro) var(--ease-enter);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
   cursor: pointer;
-  background: rgba(255, 255, 255, 0.03);
+  background: #FFFFFF;
   border: 1px solid var(--color-vel-border-strong);
 }
 .btn-vel-outline-cyan:hover {
-  border-color: var(--color-vel-border-red);
-  color: var(--color-vel-cta-bright);
-  background: rgba(200, 16, 46, 0.08);
+  border-color: var(--color-vel-cta);
+  color: var(--color-vel-cta);
+  background: #FFF7ED;
 }
 .btn-vel-outline-cyan:active { transform: scale(0.97); }
-.btn-vel-outline-cyan:focus-visible { outline: 2px solid var(--color-vel-cta-bright); outline-offset: 2px; }
+.btn-vel-outline-cyan:focus-visible { outline: 2px solid var(--color-vel-cta); outline-offset: 2px; }
 
-/* ── Lueur rouge : réservée aux éléments actifs / CTA ── */
+/* ── Anciennes lueurs rouges : neutralisées sur fond clair ── */
 .text-glow-cyan, .text-glow-violet, .text-glow-gold {
-  text-shadow: 0 0 18px rgba(200, 16, 46, 0.45);
+  text-shadow: none;
 }
 
-/* ── Bouton rouge (alias du CTA, conservé pour compat) ── */
+/* ── Bouton orange (alias du CTA, conservé pour compat) ── */
 .btn-vel-gold {
-  @apply relative overflow-hidden font-display font-bold tracking-wider
+  @apply relative overflow-hidden font-display font-bold tracking-wide
          px-8 py-4 rounded-xl transition-all duration-200
          active:scale-95 flex items-center justify-center gap-2 cursor-pointer;
   color: #FFFFFF;
-  background: linear-gradient(135deg, var(--color-vel-cta), var(--color-vel-cta-deep));
-  box-shadow: 0 4px 14px rgba(200, 16, 46, 0.30);
+  background: var(--color-vel-cta);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
 }
 .btn-vel-gold:hover {
-  box-shadow: 0 10px 28px rgba(200, 16, 46, 0.42);
-  transform: translateY(-2px);
+  background: var(--color-vel-cta-deep);
+  box-shadow: 0 10px 24px -8px rgba(234, 88, 12, 0.45);
+  transform: translateY(-1px);
 }
 
-/* ── Bouton chrome (contrepartie du rouge : actions secondaires appuyées) ── */
+/* ── Bouton sombre (actions secondaires appuyées : ardoise nuit) ── */
 .btn-vel-black {
-  @apply relative overflow-hidden font-display font-bold tracking-wider
+  @apply relative overflow-hidden font-display font-bold tracking-wide
          px-8 py-4 rounded-xl transition-all duration-200
          active:scale-95 flex items-center justify-center gap-2 cursor-pointer;
-  color: var(--color-vel-black);
-  background: linear-gradient(135deg, #FFFFFF, var(--color-vel-silver));
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  color: #FFFFFF;
+  background: #1A1A1A;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1);
 }
 .btn-vel-black:hover {
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.6);
-  transform: translateY(-2px);
+  background: #0F172A;
+  box-shadow: 0 10px 24px -10px rgba(15, 23, 42, 0.4);
+  transform: translateY(-1px);
 }
 
-/* ── Bouton fantôme ── */
+/* ── Bouton fantôme (blanc, bord léger → orange au survol) ── */
 .btn-vel-ghost {
-  @apply relative overflow-hidden font-display font-bold tracking-wider
+  @apply relative overflow-hidden font-display font-bold tracking-wide
          text-vel-slate px-8 py-4 rounded-xl transition-all duration-200
          active:scale-95 flex items-center justify-center gap-2 cursor-pointer;
-  background: rgba(255, 255, 255, 0.03);
+  background: #FFFFFF;
   border: 1px solid var(--color-vel-border);
 }
 .btn-vel-ghost:hover {
-  border-color: var(--color-vel-border-red);
-  color: var(--color-vel-cta-bright);
-  background: rgba(200, 16, 46, 0.08);
+  border-color: var(--color-vel-cta);
+  color: var(--color-vel-cta);
+  background: #FFF7ED;
 }
 
 /* ── Focus visible global (site public) ── */
@@ -237,8 +252,8 @@ html[data-surface="site"] body {
 ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 10px; }
 ::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
 
-html[data-surface="site"] ::-webkit-scrollbar-track { background: #0E0E11; }
-html[data-surface="site"] ::-webkit-scrollbar-thumb { background: #2A2A31; }
+html[data-surface="site"] ::-webkit-scrollbar-track { background: #F1F5F9; }
+html[data-surface="site"] ::-webkit-scrollbar-thumb { background: #CBD5E1; }
 html[data-surface="site"] ::-webkit-scrollbar-thumb:hover { background: var(--color-vel-cta); }
 
 /* ── RTL Support ── */
@@ -355,7 +370,7 @@ html[data-admin-theme="carbon"] .res-card:hover {
 /* ── Calendrier du wizard de réservation (react-day-picker, thème sombre) ── */
 .wizard-calendar .rdp-root {
   --rdp-accent-color: var(--color-vel-cta);
-  --rdp-accent-background-color: rgba(200, 16, 46, 0.16);
+  --rdp-accent-background-color: rgba(234, 88, 12, 0.14);
   --rdp-day-height: 42px;
   --rdp-day-width: 42px;
   --rdp-day_button-border-radius: 10px;
@@ -378,21 +393,21 @@ html[data-admin-theme="carbon"] .res-card:hover {
 .wizard-calendar .rdp-chevron { fill: var(--color-vel-cta-bright); }
 .wizard-calendar .rdp-day_button { cursor: pointer; transition: background var(--dur-micro) var(--ease-enter); }
 .wizard-calendar .rdp-day:not(.rdp-disabled) .rdp-day_button:hover {
-  background: rgba(200, 16, 46, 0.18);
+  background: rgba(234, 88, 12, 0.14);
 }
 .wizard-calendar .rdp-disabled { opacity: 0.4; }
 .wizard-calendar .rdp-disabled .rdp-day_button { cursor: not-allowed; text-decoration: line-through; }
-/* Jours déjà réservés : gris barré, distinct du passé et du rouge sélectionné */
+/* Jours déjà réservés : gris barré, distinct du passé et de l'orange sélectionné */
 .wizard-calendar .wizard-day-blocked { opacity: 1; }
 .wizard-calendar .wizard-day-blocked .rdp-day_button {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(15, 23, 42, 0.06);
   color: var(--color-vel-dim);
   text-decoration: line-through;
   cursor: not-allowed;
 }
 /* Plage survolée entre le 1er et le 2e clic */
 .wizard-calendar .wizard-day-preview:not(.rdp-selected):not(.wizard-day-blocked) .rdp-day_button {
-  background: rgba(200, 16, 46, 0.12);
+  background: rgba(234, 88, 12, 0.10);
   border-radius: 0;
 }
 
@@ -417,25 +432,25 @@ html[data-admin-theme="carbon"] .res-card:hover {
 }
 .vel-sheen:hover::after { animation: vel-sheen 850ms var(--ease-enter); }
 
-/* Pulsation de la lueur rouge — points d'état "live" uniquement */
+/* Pulsation de la lueur orange — points d'état "live" uniquement */
 @keyframes vel-pulse-red {
-  0%, 100% { opacity: 1;   box-shadow: 0 0 0 0 rgba(200, 16, 46, 0.5); }
-  50%      { opacity: 0.7; box-shadow: 0 0 0 6px rgba(200, 16, 46, 0); }
+  0%, 100% { opacity: 1;   box-shadow: 0 0 0 0 rgba(234, 88, 12, 0.5); }
+  50%      { opacity: 0.7; box-shadow: 0 0 0 6px rgba(234, 88, 12, 0); }
 }
 .vel-pulse-red { animation: vel-pulse-red 2s var(--ease-enter) infinite; }
 
-/* Grille de fond façon piste — décor de section, très basse opacité */
+/* Grille de fond façon piste — décor de section, très basse opacité (ardoise) */
 .vel-grid-bg {
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+    linear-gradient(rgba(15, 23, 42, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.04) 1px, transparent 1px);
   background-size: 64px 64px;
   mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 40%, transparent 100%);
 }
 
-/* Halo rouge diffus derrière le hero */
+/* Halo orange diffus derrière le hero */
 .vel-halo-red {
-  background: radial-gradient(ellipse 60% 50% at 50% 40%, rgba(200, 16, 46, 0.20), transparent 70%);
+  background: radial-gradient(ellipse 60% 50% at 50% 40%, rgba(234, 88, 12, 0.12), transparent 70%);
 }
 
 /* ── Reduced motion : coupe tout, le contenu reste immédiatement lisible ── */

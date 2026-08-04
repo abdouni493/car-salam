@@ -89,12 +89,21 @@ export const Website: React.FC<WebsiteProps> = ({
       <motion.nav
         className="sticky top-0 z-50"
         animate={{
-          backgroundColor: isScrolled ? 'rgba(8, 8, 10, 0.88)' : 'rgba(8, 8, 10, 0.35)',
-          borderBottomColor: isScrolled ? 'rgba(255, 255, 255, 0.09)' : 'rgba(255, 255, 255, 0)',
-          boxShadow: isScrolled ? '0 10px 30px rgba(0, 0, 0, 0.5)' : '0 0 0 rgba(0, 0, 0, 0)',
+          backgroundColor: isScrolled ? 'rgba(255, 255, 255, 0.95)' : 'rgba(255, 255, 255, 0.85)',
+          borderBottomColor: isScrolled ? 'rgba(226, 232, 240, 1)' : 'rgba(226, 232, 240, 0.6)',
+          boxShadow: isScrolled ? '0 8px 24px -12px rgba(15, 23, 42, 0.18)' : '0 0 0 rgba(0, 0, 0, 0)',
         }}
         transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-        style={{ borderBottomWidth: 1, borderBottomStyle: 'solid', backdropFilter: 'blur(16px)' }}
+        // Fond blanc de base : garantit une navbar opaque même avant que
+        // l'animation de scroll ne s'applique (comme le header bg-white/95 du
+        // site de référence). L'`animate` ci-dessus affine juste l'opacité.
+        style={{
+          borderBottomWidth: 1,
+          borderBottomStyle: 'solid',
+          backdropFilter: 'blur(16px)',
+          backgroundColor: 'rgba(255, 255, 255, 0.9)',
+          borderBottomColor: 'rgba(226, 232, 240, 0.8)',
+        }}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* La barre se resserre au scroll : le logo reste lisible, la page respire */}
@@ -144,7 +153,7 @@ export const Website: React.FC<WebsiteProps> = ({
                       layoutId="nav-pill"
                       className="absolute inset-0 rounded-lg"
                       style={{
-                        background: 'rgba(200, 16, 46, 0.16)',
+                        background: 'rgba(234, 88, 12, 0.12)',
                         border: '1px solid var(--color-vel-border-red)',
                       }}
                       transition={{ type: 'spring', stiffness: 380, damping: 32 }}
@@ -157,7 +166,7 @@ export const Website: React.FC<WebsiteProps> = ({
                       className="absolute -bottom-px left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full"
                       style={{
                         background: 'var(--color-vel-cta)',
-                        boxShadow: '0 0 10px rgba(200, 16, 46, 0.7)',
+                        boxShadow: '0 0 8px rgba(234, 88, 12, 0.5)',
                       }}
                       transition={{ type: 'spring', stiffness: 380, damping: 32 }}
                     />
@@ -177,7 +186,7 @@ export const Website: React.FC<WebsiteProps> = ({
                   style={{
                     fontFamily: 'var(--font-display)',
                     border: '1px solid var(--color-vel-border-red)',
-                    background: 'rgba(200, 16, 46, 0.08)',
+                    background: 'rgba(234, 88, 12, 0.08)',
                   }}
                   aria-label={lang === 'fr' ? 'التبديل إلى العربية' : 'Passer en français'}
                 >
@@ -300,8 +309,22 @@ export const Website: React.FC<WebsiteProps> = ({
       </motion.div>
       </AnimatePresence>
 
-      {/* ── FOOTER ── */}
-      <footer style={{ background: 'var(--color-vel-abyss)', borderTop: '1px solid var(--color-vel-border)' }}>
+      {/* ── FOOTER ──
+          Bande sombre (#1A1A1A) comme le site de référence. On re-scope les
+          jetons de texte vel-* vers des valeurs claires UNIQUEMENT ici, pour
+          que les `text-vel-*` du footer restent lisibles sur le noir. */}
+      <footer
+        style={{
+          background: '#1A1A1A',
+          borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+          '--color-vel-surface': 'rgba(255, 255, 255, 0.06)',
+          '--color-vel-border': 'rgba(255, 255, 255, 0.10)',
+          '--color-vel-ink': '#F8FAFC',
+          '--color-vel-slate': '#CBD5E1',
+          '--color-vel-muted': '#94A3B8',
+          '--color-vel-dim': '#64748B',
+        } as React.CSSProperties}
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-10">
             {/* Brand — le logo téléversé, pas seulement le nom */}
@@ -309,7 +332,7 @@ export const Website: React.FC<WebsiteProps> = ({
               <div className="mb-4">
                 <SiteLogo logo={siteLogo} name={websiteSettings?.name} lang={lang} height={52} />
               </div>
-              <div className="w-12 h-0.5 mb-4" style={{ background: 'var(--color-vel-cta)', boxShadow: '0 0 10px rgba(200, 16, 46, 0.5)' }} />
+              <div className="w-12 h-0.5 mb-4" style={{ background: 'var(--color-vel-cta)', boxShadow: '0 0 10px rgba(234, 88, 12, 0.5)' }} />
               <p className="text-vel-muted text-sm leading-relaxed">{websiteSettings?.description}</p>
             </div>
 

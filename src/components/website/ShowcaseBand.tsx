@@ -42,10 +42,15 @@ export const ShowcaseBand: React.FC<ShowcaseBandProps> = ({ lang, onReserve, ima
       ref={sectionRef}
       className="relative overflow-hidden py-28 px-4 sm:px-6 lg:px-8"
       style={{
-        background: 'var(--color-vel-void)',
-        borderTop: '1px solid var(--color-vel-border)',
-        borderBottom: '1px solid var(--color-vel-border)',
-      }}
+        // Bande sombre (#1A1A1A) : la voiture émerge du noir, comme les bandes
+        // du site de référence. On re-scope les jetons de texte vers du clair.
+        background: '#1A1A1A',
+        borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+        borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+        '--color-vel-ink': '#F8FAFC',
+        '--color-vel-slate': '#CBD5E1',
+        '--color-vel-muted': '#94A3B8',
+      } as React.CSSProperties}
     >
       {/* ── Couche visuelle d'arrière-plan (décorative, non interactive) ── */}
       <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
@@ -77,10 +82,10 @@ export const ShowcaseBand: React.FC<ShowcaseBandProps> = ({ lang, onReserve, ima
             {/* Fondu haut/bas : la bande se raccorde aux sections voisines. */}
             <div className="absolute inset-0" style={{
               background: `linear-gradient(180deg,
-                var(--color-vel-void) 0%,
+                #1A1A1A 0%,
                 rgba(${VOID}, 0) 28%,
                 rgba(${VOID}, 0) 68%,
-                var(--color-vel-void) 100%)`,
+                #1A1A1A 100%)`,
             }} />
           </>
         )}
@@ -90,12 +95,12 @@ export const ShowcaseBand: React.FC<ShowcaseBandProps> = ({ lang, onReserve, ima
 
         {/* Halo rouge diffus derrière le texte (seule grande surface colorée). */}
         <div className="absolute inset-0" style={{
-          background: 'radial-gradient(ellipse 60% 70% at 12% 50%, rgba(200, 16, 46, 0.14), transparent 70%)',
+          background: 'radial-gradient(ellipse 60% 70% at 12% 50%, rgba(234, 88, 12, 0.14), transparent 70%)',
         }} />
 
         {/* Filet rouge → chrome le long du bord haut (signature du hero). */}
         <div className="absolute top-0 left-0 right-0 h-px" style={{
-          background: 'linear-gradient(90deg, transparent, rgba(200, 16, 46, 0.5), rgba(233, 235, 238, 0.25), transparent)',
+          background: 'linear-gradient(90deg, transparent, rgba(234, 88, 12, 0.5), rgba(233, 235, 238, 0.25), transparent)',
         }} />
       </div>
 

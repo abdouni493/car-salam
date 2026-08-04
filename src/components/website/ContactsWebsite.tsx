@@ -109,7 +109,7 @@ export const ContactsWebsite: React.FC<ContactsWebsiteProps> = ({
                 {websiteSettings?.name || 'AutoLocation'}
               </h2>
               <div className="w-10 h-0.5 mb-4"
-                style={{ background: 'var(--color-vel-cta)', boxShadow: '0 0 8px rgba(200, 16, 46, 0.35)' }} />
+                style={{ background: 'var(--color-vel-cta)', boxShadow: '0 0 8px rgba(234, 88, 12, 0.35)' }} />
               {websiteSettings?.description && (
                 <p className="text-vel-muted leading-relaxed">{websiteSettings.description}</p>
               )}
@@ -120,8 +120,8 @@ export const ContactsWebsite: React.FC<ContactsWebsiteProps> = ({
                 const content = (
                   <div className="flex items-center gap-4 p-4 rounded-xl transition-all duration-300 group/item cursor-pointer"
                     style={{
-                      background: 'rgba(200, 16, 46, 0.04)',
-                      border: '1px solid rgba(255, 255, 255, 0.08)',
+                      background: 'rgba(234, 88, 12, 0.04)',
+                      border: '1px solid rgba(15, 23, 42, 0.08)',
                       borderLeftWidth: '2px',
                       borderLeftColor: 'var(--color-vel-cta)',
                     }}
@@ -161,7 +161,7 @@ export const ContactsWebsite: React.FC<ContactsWebsiteProps> = ({
                   className="flex items-center gap-4 p-4 rounded-xl block transition-all duration-300"
                   style={{
                     background: 'rgba(37,211,102,0.05)',
-                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    border: '1px solid rgba(15, 23, 42, 0.08)',
                     borderLeftWidth: '2px',
                     borderLeftColor: '#25D366',
                   }}
@@ -211,7 +211,7 @@ export const ContactsWebsite: React.FC<ContactsWebsiteProps> = ({
                   }}
                   onMouseLeave={e => {
                     (e.currentTarget as HTMLElement).style.boxShadow = 'none';
-                    (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.08)';
+                    (e.currentTarget as HTMLElement).style.borderColor = 'rgba(15, 23, 42, 0.08)';
                   }}
                 >
                   <div className="w-12 h-12 rounded-xl flex items-center justify-center text-lg font-black"
@@ -265,14 +265,14 @@ export const ContactsWebsite: React.FC<ContactsWebsiteProps> = ({
                 <input
                   type={field.type}
                   className="w-full rounded-xl px-4 py-3 outline-none transition-all text-vel-ink placeholder:text-vel-dim font-medium"
-                  style={{ background: 'rgba(255, 255, 255, 0.06)', border: '1px solid rgba(255, 255, 255, 0.08)' }}
+                  style={{ background: 'rgba(15, 23, 42, 0.06)', border: '1px solid rgba(15, 23, 42, 0.08)' }}
                   placeholder={field.placeholder[lang]}
                   onFocus={e => {
                     (e.target as HTMLElement).style.borderColor = 'var(--color-vel-cta)';
-                    (e.target as HTMLElement).style.boxShadow = '0 0 0 1px rgba(200, 16, 46, 0.25)';
+                    (e.target as HTMLElement).style.boxShadow = '0 0 0 1px rgba(234, 88, 12, 0.25)';
                   }}
                   onBlur={e => {
-                    (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.08)';
+                    (e.target as HTMLElement).style.borderColor = 'rgba(15, 23, 42, 0.08)';
                     (e.target as HTMLElement).style.boxShadow = 'none';
                   }}
                 />
@@ -287,14 +287,14 @@ export const ContactsWebsite: React.FC<ContactsWebsiteProps> = ({
               <textarea
                 rows={4}
                 className="w-full rounded-xl px-4 py-3 outline-none transition-all text-vel-ink placeholder:text-vel-dim font-medium resize-none"
-                style={{ background: 'rgba(255, 255, 255, 0.06)', border: '1px solid rgba(255, 255, 255, 0.08)' }}
+                style={{ background: 'rgba(15, 23, 42, 0.06)', border: '1px solid rgba(15, 23, 42, 0.08)' }}
                 placeholder={{ fr: 'Votre message...', ar: 'رسالتك...' }[lang]}
                 onFocus={e => {
                   (e.target as HTMLElement).style.borderColor = 'var(--color-vel-cta)';
-                  (e.target as HTMLElement).style.boxShadow = '0 0 0 1px rgba(200, 16, 46, 0.25)';
+                  (e.target as HTMLElement).style.boxShadow = '0 0 0 1px rgba(234, 88, 12, 0.25)';
                 }}
                 onBlur={e => {
-                  (e.target as HTMLElement).style.borderColor = 'rgba(255, 255, 255, 0.08)';
+                  (e.target as HTMLElement).style.borderColor = 'rgba(15, 23, 42, 0.08)';
                   (e.target as HTMLElement).style.boxShadow = 'none';
                 }}
               />

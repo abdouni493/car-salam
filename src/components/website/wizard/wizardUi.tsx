@@ -44,7 +44,7 @@ export const inputStyle: React.CSSProperties = {
 };
 export const focusInput = (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
   (e.target as HTMLElement).style.borderColor = 'var(--color-vel-cta)';
-  (e.target as HTMLElement).style.boxShadow = '0 0 0 3px rgba(200, 16, 46, 0.22)';
+  (e.target as HTMLElement).style.boxShadow = '0 0 0 3px rgba(234, 88, 12, 0.22)';
 };
 export const blurInput = (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
   (e.target as HTMLElement).style.borderColor = 'var(--color-vel-border-strong)';
@@ -60,7 +60,7 @@ export const SectionCard: React.FC<{ children: React.ReactNode; className?: stri
     style={{
       background: C.surface,
       border: '1px solid var(--color-vel-border)',
-      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04), 0 12px 32px rgba(0,0,0,0.5)',
+      boxShadow: '0 1px 2px rgba(15, 23, 42, 0.05), 0 12px 32px -16px rgba(15, 23, 42, 0.2)',
     }}
   >
     {children}
