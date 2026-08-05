@@ -7,144 +7,14 @@ import {
 } from '../utils/currency';
 import { DeliveryFeeField } from './DeliveryFeeField';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, ArrowRight, Calendar, Clock, MapPin, Car as CarIcon, User, CreditCard, CheckCircle, Plus, Search, X, Camera, Fuel, AlertTriangle, Check, Upload, PenTool } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Calendar, Clock, MapPin, Car as CarIcon, User, CreditCard, CheckCircle, Plus, Search, X, Camera, Fuel, AlertTriangle, Check, Upload } from 'lucide-react';
 import { AGENCIES, CAR_IMAGES } from '../constants';
 import { DatabaseService } from '../services/DatabaseService';
 import { ReservationsService } from '../services/ReservationsService';
 import { uploadInspectionImage } from '../services/uploadInspectionImage';
 import { ClientModal } from './ClientModal';
+import { SignaturePad } from './SignaturePad';
 import { supabase } from '../supabase';
-
-// Signature Pad Component
-const SignaturePad: React.FC<{
-  lang: Language;
-  onSignatureChange: (signature: string) => void;
-  initialSignature?: string;
-}> = ({ lang, onSignatureChange, initialSignature }) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [hasSignature, setHasSignature] = useState(false);
-
-  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    setIsDrawing(true);
-    ctx.beginPath();
-    ctx.moveTo(e.nativeEvent.offsetX, e.nativeEvent.offsetY);
-  };
-
-  const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing) return;
-
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    ctx.lineTo(e.nativeEvent.offsetX, e.nativeEvent.offsetY);
-    ctx.stroke();
-    setHasSignature(true);
-  };
-
-  const stopDrawing = () => {
-    setIsDrawing(false);
-    const canvas = canvasRef.current;
-    if (canvas) {
-      onSignatureChange(canvas.toDataURL());
-    }
-  };
-
-  const clearSignature = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    setHasSignature(false);
-    onSignatureChange('');
-  };
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    // Set canvas size
-    canvas.width = canvas.offsetWidth;
-    canvas.height = canvas.offsetHeight;
-
-    // Set drawing properties
-    ctx.strokeStyle = '#000';
-    ctx.lineWidth = 2;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-
-    // If there is an initial signature, draw it onto the canvas
-    if (initialSignature) {
-      const img = new Image();
-      // allow loading from storage URL (CORS) if possible
-      img.crossOrigin = 'anonymous';
-      img.onload = () => {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        setHasSignature(true);
-        onSignatureChange(initialSignature);
-      };
-      img.src = initialSignature;
-    } else {
-      // clear if no initial signature
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      setHasSignature(false);
-    }
-  }, [initialSignature]);
-
-  return (
-    <div className="space-y-2">
-      <div className="relative">
-        <canvas
-          ref={canvasRef}
-          onMouseDown={startDrawing}
-          onMouseMove={draw}
-          onMouseUp={stopDrawing}
-          onMouseLeave={stopDrawing}
-          className="w-full aspect-square border border-purple-300 rounded-lg cursor-crosshair bg-white"
-          style={{ touchAction: 'none' }}
-        />
-        {!hasSignature && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="text-center text-purple-400">
-              <PenTool className="w-4 h-4 mx-auto mb-1" />
-              <p className="text-xs font-bold">
-                {lang === 'fr' ? 'Signez ici' : 'وقع هنا'}
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="flex justify-between items-center">
-        <p className="text-xs text-purple-700 font-bold">
-          {lang === 'fr' ? 'Signature numérique' : 'التوقيع الرقمي'}
-        </p>
-        <button
-          onClick={clearSignature}
-          className="text-red-600 hover:text-red-800 font-bold text-xs underline"
-        >
-          {lang === 'fr' ? 'Effacer' : 'مسح'}
-        </button>
-      </div>
-    </div>
-  );
-};
 
 interface CreateReservationFormProps {
   lang: Language;
@@ -2103,8 +1973,8 @@ export const Step3DepartureInspection: React.FC<{
         </h4>
 
         <div className="flex flex-col items-center space-y-4">
-            <div className="bg-white border-2 border-dashed border-purple-300 rounded-2xl p-4 shadow-inner">
-            <SignaturePad lang={lang} initialSignature={signature} onSignatureChange={setSignature} />
+            <div className="w-full max-w-2xl bg-white border-2 border-dashed border-purple-300 rounded-2xl p-4 shadow-inner">
+            <SignaturePad lang={lang} accent="purple" heightClass="h-56 sm:h-72" initialSignature={signature} onSignatureChange={setSignature} />
           </div>
           {/* preview raw signature in case canvas doesn't render URL */}
           {signature && !signature.startsWith('data:') && (

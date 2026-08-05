@@ -9,10 +9,11 @@ import { HistoryModal } from './HistoryModal';
 import { CarReportModal } from './CarReportModal';
 import { ConfirmModal } from './ConfirmModal';
 import { CommissionModal } from './CommissionModal';
-import { Plus, Search, Loader2, RefreshCw } from 'lucide-react';
+import { ExchangeRateModal } from './ExchangeRateModal';
+import { Plus, Search, Loader2, RefreshCw, ArrowRightLeft } from 'lucide-react';
 import { motion } from 'motion/react';
-import { getCarsWithOwners, addCar, updateCar, deleteCar, AddCarData, CarOwnerInput } from '../services/carService';
-import { eurOrUndefined } from '../utils/currency';
+import { getCarsWithOwners, addCar, updateCar, deleteCar, applyEurExchangeRate, AddCarData, CarOwnerInput } from '../services/carService';
+import { eurOrUndefined, DEFAULT_EUR_RATE } from '../utils/currency';
 import { addVehicleExpense, getVehicleExpenses } from '../services/expenseService';
 import { ReservationsService } from '../services/ReservationsService';
 import { DatabaseService } from '../services/DatabaseService';
@@ -95,6 +96,12 @@ export const CarsPage: React.FC<CarsPageProps> = ({ lang, isAuthLoading = false,
   const [reportReservations, setReportReservations] = useState<ReservationDetails[]>([]);
   const [isCommissionModalOpen, setIsCommissionModalOpen] = useState(false);
   const [commissionCar, setCommissionCar] = useState<Car | null>(null);
+  const [isExchangeModalOpen, setIsExchangeModalOpen] = useState(false);
+  // Dernier taux DA/€ appliqué, mémorisé localement pour pré-remplir la modale.
+  const [lastEurRate, setLastEurRate] = useState<number>(() => {
+    const saved = Number(localStorage.getItem('carsEurRate'));
+    return Number.isFinite(saved) && saved > 0 ? saved : DEFAULT_EUR_RATE;
+  });
   /**
    * Section active : véhicules de l'agence ou véhicules confiés par des tiers.
    * Le tableau de bord peut pré-sélectionner l'onglet via `location.state.carsTab`.
@@ -231,6 +238,30 @@ export const CarsPage: React.FC<CarsPageProps> = ({ lang, isAuthLoading = false,
   const handleAddCar = () => {
     setSelectedCar(null);
     setIsCarModalOpen(true);
+  };
+
+  /**
+   * Applique un taux DA/€ à TOUTE la flotte : les tarifs euros (jour/semaine/mois)
+   * et la caution sont recalculés depuis les tarifs en dinars de chaque véhicule.
+   */
+  const handleApplyExchangeRate = async (rate: number) => {
+    const result = await applyEurExchangeRate(
+      rate,
+      cars.map(c => ({
+        id: c.id,
+        priceDay: c.priceDay,
+        priceWeek: c.priceWeek,
+        priceMonth: c.priceMonth,
+        deposit: c.deposit,
+      }))
+    );
+    if (!result.success) {
+      setError(result.error || 'Failed to update exchange rate');
+      throw new Error(result.error || 'Failed to update exchange rate');
+    }
+    setLastEurRate(rate);
+    localStorage.setItem('carsEurRate', String(rate));
+    await loadCarsData();
   };
 
   const handleEditCar = (car: Car) => {
@@ -486,6 +517,16 @@ export const CarsPage: React.FC<CarsPageProps> = ({ lang, isAuthLoading = false,
             </span>
           </button>
           <button
+            onClick={() => setIsExchangeModalOpen(true)}
+            className="px-6 py-3.5 group w-full sm:w-auto justify-center flex items-center gap-2 rounded-xl bg-linear-to-r from-amber-500 to-orange-500 text-white font-bold shadow-sm hover:shadow-md transition-all"
+            title={lang === 'fr' ? 'Taux de change Dinar → Euro' : 'سعر الصرف دينار ← يورو'}
+          >
+            <ArrowRightLeft size={20} className="group-hover:rotate-180 transition-transform duration-500" />
+            <span className="font-bold uppercase tracking-widest text-xs">
+              {lang === 'fr' ? 'Taux de change' : 'سعر الصرف'}
+            </span>
+          </button>
+          <button
             onClick={handleAddCar}
             className="btn-saas-primary px-8 py-3.5 group w-full sm:w-auto justify-center"
           >
@@ -607,6 +648,15 @@ export const CarsPage: React.FC<CarsPageProps> = ({ lang, isAuthLoading = false,
         onSaved={loadCarsData}
         car={commissionCar}
         lang={lang}
+      />
+
+      <ExchangeRateModal
+        isOpen={isExchangeModalOpen}
+        onClose={() => setIsExchangeModalOpen(false)}
+        cars={cars}
+        onApply={handleApplyExchangeRate}
+        lang={lang}
+        initialRate={lastEurRate}
       />
 
       <ConfirmModal

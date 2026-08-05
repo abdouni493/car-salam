@@ -373,6 +373,64 @@ export async function getCarsWithOwners(): Promise<{ success: boolean; cars?: Ca
   }
 }
 
+/** Véhicule minimal accepté par `applyEurExchangeRate` (tarifs en dinars). */
+export interface CarEurRateInput {
+  id: string
+  priceDay?: number
+  priceWeek?: number
+  priceMonth?: number
+  deposit?: number
+}
+
+/**
+ * Recalcule et enregistre les tarifs euros de toute une liste de véhicules à partir
+ * d'un taux DA/€ (nombre de dinars pour 1 €).
+ *
+ * Chaque tarif euro est déduit du tarif DZD correspondant : `eur = dzd / taux`,
+ * arrondi au centime. Un tarif DZD nul ou absent donne un tarif euro `NULL`
+ * (« non défini »), jamais 0 — qui signifierait « gratuit ».
+ */
+export async function applyEurExchangeRate(
+  rate: number,
+  cars: CarEurRateInput[]
+): Promise<{ success: boolean; updated: number; error?: string }> {
+  if (!Number.isFinite(rate) || rate <= 0) {
+    return { success: false, updated: 0, error: 'Taux de change invalide' }
+  }
+
+  const toEur = (dzd?: number): number | null => {
+    const n = Number(dzd)
+    return Number.isFinite(n) && n > 0 ? Math.round((n / rate) * 100) / 100 : null
+  }
+
+  try {
+    const results = await Promise.all(
+      cars.map(car =>
+        supabase
+          .from('cars')
+          .update({
+            price_day_eur: toEur(car.priceDay),
+            price_week_eur: toEur(car.priceWeek),
+            price_month_eur: toEur(car.priceMonth),
+            deposit_eur: toEur(car.deposit),
+          })
+          .eq('id', car.id)
+      )
+    )
+
+    const failed = results.find(r => r.error)
+    if (failed?.error) {
+      console.error('Bulk EUR rate update error:', failed.error)
+      return { success: false, updated: 0, error: failed.error.message }
+    }
+
+    return { success: true, updated: cars.length }
+  } catch (error) {
+    console.error('Unexpected error applying EUR rate:', error)
+    return { success: false, updated: 0, error: 'An unexpected error occurred' }
+  }
+}
+
 /**
  * Delete a car
  */

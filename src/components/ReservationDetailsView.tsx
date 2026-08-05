@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Language, ReservationDetails, Payment, VehicleInspection, InspectionItem, Agency } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Calendar, Clock, MapPin, Fuel, Camera, FileText, CreditCard, DollarSign, Printer, AlertTriangle, Check, CheckCircle, XCircle, Plus, Trash2, Edit, Eye, Car as CarIcon, User, Phone, Mail, CreditCard as CardIcon, Shield, Wrench, Sofa, Sparkles, Droplets } from 'lucide-react';
+import { ArrowLeft, Calendar, Clock, MapPin, Fuel, Camera, CreditCard, DollarSign, Printer, AlertTriangle, Check, CheckCircle, XCircle, Plus, Trash2, Edit, Eye, Car as CarIcon, User, Phone, Mail, CreditCard as CardIcon, Shield, Wrench, Sofa, Sparkles, Droplets } from 'lucide-react';
 import { ReservationsService } from '../services/ReservationsService';
 import { DatabaseService } from '../services/DatabaseService';
 import { supabase } from '../supabase';
 import { formatAmount } from '../utils/format';
 import { DEFAULT_EUR_RATE, dzdToEur, formatMoney } from '../utils/currency';
+import { SignaturePad } from './SignaturePad';
 
 interface ReservationDetailsViewProps {
   lang: Language;
@@ -1114,101 +1115,6 @@ const PaymentModal: React.FC<{ lang: Language; reservation: ReservationDetails; 
 
 
 // reusable signature pad component
-const SignaturePad: React.FC<{ lang: Language; onSignatureChange: (signature: string) => void }> = ({ lang, onSignatureChange }) => {
-  const canvasRef = React.useRef<HTMLCanvasElement>(null);
-  const [isDrawing, setIsDrawing] = React.useState(false);
-  const [hasSignature, setHasSignature] = React.useState(false);
-
-  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    setIsDrawing(true);
-    ctx.beginPath();
-    ctx.moveTo(e.nativeEvent.offsetX, e.nativeEvent.offsetY);
-  };
-
-  const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing) return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.lineTo(e.nativeEvent.offsetX, e.nativeEvent.offsetY);
-    ctx.stroke();
-    setHasSignature(true);
-  };
-
-  const stopDrawing = () => {
-    setIsDrawing(false);
-    const canvas = canvasRef.current;
-    if (canvas) {
-      onSignatureChange(canvas.toDataURL());
-    }
-  };
-
-  const clearSignature = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    setHasSignature(false);
-    onSignatureChange('');
-  };
-
-  React.useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    canvas.width = canvas.offsetWidth;
-    canvas.height = canvas.offsetHeight;
-    ctx.strokeStyle = '#000';
-    ctx.lineWidth = 2;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-  }, []);
-
-  return (
-    <div className="space-y-2">
-      <div className="relative">
-        <canvas
-          ref={canvasRef}
-          onMouseDown={startDrawing}
-          onMouseMove={draw}
-          onMouseUp={stopDrawing}
-          onMouseLeave={stopDrawing}
-          className="w-full h-64 border border-indigo-300 rounded-lg cursor-crosshair bg-white"
-          style={{ touchAction: 'none' }}
-        />
-        {!hasSignature && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="text-center text-indigo-400">
-              <FileText className="w-6 h-6 mx-auto mb-1" />
-              <p className="text-xs font-bold">
-                {lang === 'fr' ? 'Signez ici' : 'وقع هنا'}
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
-      <div className="flex justify-between items-center">
-        <p className="text-xs text-indigo-700 font-bold">
-          {lang === 'fr' ? 'Signature numérique' : 'التوقيع الرقمي'}
-        </p>
-        <button
-          onClick={clearSignature}
-          className="text-red-600 hover:text-red-800 font-bold text-xs underline"
-        >
-          {lang === 'fr' ? 'Effacer' : 'مسح'}
-        </button>
-      </div>
-    </div>
-  );
-};
-
 export const ActivationModal: React.FC<{ lang: Language; reservation: ReservationDetails; onClose: () => void; onActivate?: (reservation: ReservationDetails) => void }> = ({ lang, reservation, onClose, onActivate }) => {
   const [mileage, setMileage] = useState(reservation.departureInspection?.mileage?.toString() || '');
   const [location, setLocation] = useState(reservation.step1?.departureLocation || '');
@@ -2102,8 +2008,8 @@ export const CompletionModal: React.FC<{ lang: Language; reservation: Reservatio
             <h4 className="text-lg font-black text-indigo-900 mb-4">
               ✍️ {lang === 'fr' ? 'Signature du Client' : 'توقيع العميل'}
             </h4>
-            <div className="max-w-xs mx-auto">
-            <SignaturePad lang={lang} onSignatureChange={setSignature} />
+            <div className="w-full max-w-2xl mx-auto">
+            <SignaturePad lang={lang} accent="indigo" heightClass="h-56 sm:h-72" onSignatureChange={setSignature} />
           </div>
           </div>
 
