@@ -35,6 +35,7 @@ export const CommissionModal: React.FC<CommissionModalProps> = ({ isOpen, onClos
   if (!isOpen || !car) return null;
 
   const isPercentage = commissionType === 'percentage';
+  const isPerDay = commissionType === 'per_day';
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -73,19 +74,30 @@ export const CommissionModal: React.FC<CommissionModalProps> = ({ isOpen, onClos
         </div>
 
         <div className="p-6 space-y-5">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <label className={`flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-colors ${
-              !isPercentage ? 'bg-amber-50 border-amber-400' : 'border-saas-border hover:border-amber-300'
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <label className={`flex items-center gap-2.5 px-3 py-3 rounded-xl border cursor-pointer transition-colors ${
+              isPerDay ? 'bg-amber-50 border-amber-400' : 'border-saas-border hover:border-amber-300'
             }`}>
               <input
                 type="radio"
-                checked={!isPercentage}
+                checked={isPerDay}
+                onChange={() => setCommissionType('per_day')}
+                className="accent-amber-600"
+              />
+              <span className="text-xs font-bold">{lang === 'fr' ? 'Par jour' : 'حسب اليوم'}</span>
+            </label>
+            <label className={`flex items-center gap-2.5 px-3 py-3 rounded-xl border cursor-pointer transition-colors ${
+              !isPercentage && !isPerDay ? 'bg-amber-50 border-amber-400' : 'border-saas-border hover:border-amber-300'
+            }`}>
+              <input
+                type="radio"
+                checked={!isPercentage && !isPerDay}
                 onChange={() => setCommissionType('amount')}
                 className="accent-amber-600"
               />
-              <span className="text-xs font-bold">{lang === 'fr' ? 'En dinars (DA)' : 'بالدينار (DA)'}</span>
+              <span className="text-xs font-bold">{lang === 'fr' ? 'Fixe / loc.' : 'ثابتة / إيجار'}</span>
             </label>
-            <label className={`flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-colors ${
+            <label className={`flex items-center gap-2.5 px-3 py-3 rounded-xl border cursor-pointer transition-colors ${
               isPercentage ? 'bg-amber-50 border-amber-400' : 'border-saas-border hover:border-amber-300'
             }`}>
               <input
@@ -94,7 +106,7 @@ export const CommissionModal: React.FC<CommissionModalProps> = ({ isOpen, onClos
                 onChange={() => setCommissionType('percentage')}
                 className="accent-amber-600"
               />
-              <span className="text-xs font-bold">{lang === 'fr' ? 'En pourcentage (%)' : 'بالنسبة المئوية (%)'}</span>
+              <span className="text-xs font-bold">{lang === 'fr' ? 'Pourcentage' : 'نسبة مئوية'}</span>
             </label>
           </div>
 
@@ -108,14 +120,21 @@ export const CommissionModal: React.FC<CommissionModalProps> = ({ isOpen, onClos
                 step={isPercentage ? 0.5 : 100}
                 value={commissionValue}
                 onChange={e => setCommissionValue(Math.max(0, Number(e.target.value) || 0))}
-                className="input-saas pe-16"
+                className="input-saas pe-24"
                 dir="ltr"
                 autoFocus
               />
               <span className="absolute end-4 top-1/2 -translate-y-1/2 text-xs font-black text-amber-700">
-                {isPercentage ? '%' : 'DA'}
+                {isPercentage ? '%' : isPerDay ? (lang === 'fr' ? 'DA / jour' : 'دج / يوم') : 'DA'}
               </span>
             </div>
+            {isPerDay && (
+              <p className="text-[11px] font-semibold text-amber-700/90">
+                {lang === 'fr'
+                  ? `L’agence gagne ${(commissionValue || 0).toLocaleString('fr-FR')} DA par jour loué.`
+                  : `تكسب الوكالة ${(commissionValue || 0).toLocaleString('fr-FR')} دج عن كل يوم كراء.`}
+              </p>
+            )}
           </div>
 
           {error && (

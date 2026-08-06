@@ -13,6 +13,7 @@ import { getCarsWithOwners } from '../services/carService';
 import {
   calcPaid, inRange, pct, fmtPct, computeVehicleGains, commissionBreakdown,
 } from '../utils/gainsMath';
+import { normalizeCommissionType } from '../utils/consignmentMath';
 import { PctChip, SplitBar, SplitLegend, CalcRow, StatCard } from './gains/GainsUI';
 import { generateReportHTML } from './ReportPrintTemplate';
 import { eurOrUndefined } from '../utils/currency';
@@ -93,8 +94,13 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
                   ownerName: dbCar.owner.owner_name,
                   ownerPhone: dbCar.owner.owner_phone || undefined,
                   internalRef: dbCar.owner.internal_ref || undefined,
-                  commissionType: dbCar.owner.commission_type === 'amount' ? 'amount' : 'percentage',
+                  commissionType: normalizeCommissionType(dbCar.owner.commission_type),
                   commissionValue: Number(dbCar.owner.commission_value || 0),
+                  deliveryFeeEnabled: dbCar.owner.delivery_fee_enabled ?? true,
+                  deliveryThresholdDays: dbCar.owner.delivery_threshold_days != null
+                    ? Number(dbCar.owner.delivery_threshold_days) : undefined,
+                  deliveryFeeAmount: dbCar.owner.delivery_fee_amount != null
+                    ? Number(dbCar.owner.delivery_fee_amount) : undefined,
                 }
               : null,
           }));
@@ -193,8 +199,27 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
   const scaleLabel = owner
     ? owner.commissionType === 'percentage'
       ? `${owner.commissionValue.toLocaleString('fr-FR')} %`
-      : `${fmt(owner.commissionValue)} DA`
+      : owner.commissionType === 'per_day'
+        ? `${fmt(owner.commissionValue)} ${T('DA/jour', 'دج/يوم', lang)}`
+        : `${fmt(owner.commissionValue)} DA`
     : '';
+
+  /** Comment ce barème s'applique, en toutes lettres (aide à l'écran). */
+  const scaleUnitLabel = owner
+    ? owner.commissionType === 'percentage'
+      ? T('du total de chaque location', 'من إجمالي كل إيجار', lang)
+      : owner.commissionType === 'per_day'
+        ? T('par jour loué', 'لكل يوم كراء', lang)
+        : T('par location', 'لكل إيجار', lang)
+    : '';
+
+  // ── Parts « période » (conciergerie) : sur toutes les locations non annulées ──
+  const agencySharePeriod = consignment ? pct(consignment.agencyGainTotal, consignment.grossAll) : 100;
+  const ownerSharePeriod = consignment ? pct(consignment.ownerPayoutTotal, consignment.grossAll) : 0;
+  const effectiveCommissionRatePeriod = consignment
+    ? pct(consignment.commissionTotal, consignment.grossAll) : 0;
+  const expenseRatioPeriod = pct(g.expenses, g.agencyRevenuePeriod);
+  const marginPeriod = pct(g.netBenefitPeriod, g.agencyRevenuePeriod);
 
   // ── KPI : véhicule confié vs véhicule de l'agence ───────────────────────────
   const kpis = consignment
@@ -208,35 +233,35 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
           icon: <Wallet size={15} />,
         },
         {
-          label: T('Revenu agence', 'إيراد الوكالة', lang),
-          value: g.agencyRevenue,
-          share: g.agencyShare,
-          shareLabel: T('du CA terminé', 'من رقم الأعمال المنتهي', lang),
+          label: T('Revenu agence (période)', 'إيراد الوكالة (الفترة)', lang),
+          value: g.agencyRevenuePeriod,
+          share: agencySharePeriod,
+          shareLabel: T('du CA de la période', 'من رقم أعمال الفترة', lang),
           tone: 'amber' as const,
           icon: <Handshake size={15} />,
         },
         {
           label: T('Reversement propriétaire', 'مستحقات المالك', lang),
-          value: g.ownerPayout,
-          share: g.ownerShare,
-          shareLabel: T('du CA terminé', 'من رقم الأعمال المنتهي', lang),
+          value: g.ownerPayoutPeriod,
+          share: ownerSharePeriod,
+          shareLabel: T('du CA de la période', 'من رقم أعمال الفترة', lang),
           tone: 'slate' as const,
           icon: <UserIcon size={15} />,
         },
         {
           label: T('Dépenses', 'المصاريف', lang),
           value: g.expenses,
-          share: g.expenseRatio,
+          share: expenseRatioPeriod,
           shareLabel: T('du revenu agence', 'من إيراد الوكالة', lang),
           tone: 'rose' as const,
           icon: <Receipt size={15} />,
         },
         {
           label: T('Bénéfice net agence', 'صافي ربح الوكالة', lang),
-          value: g.netBenefit,
-          share: g.margin,
+          value: g.netBenefitPeriod,
+          share: marginPeriod,
           shareLabel: T('de marge', 'هامش', lang),
-          tone: g.netBenefit >= 0 ? ('indigo' as const) : ('rose' as const),
+          tone: g.netBenefitPeriod >= 0 ? ('indigo' as const) : ('rose' as const),
           icon: <TrendingUp size={15} />,
         },
       ]
@@ -500,7 +525,7 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
                     </span>
                   )}
                   <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-bold text-amber-800 ring-1 ring-amber-200">
-                    {T('Barème', 'الاتفاق', lang)} : {scaleLabel} / {T('location', 'إيجار', lang)}
+                    {T('Barème', 'الاتفاق', lang)} : {scaleLabel} · {scaleUnitLabel}
                   </span>
                 </div>
               )}
@@ -523,19 +548,22 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-100 bg-amber-50 px-5 py-3.5">
                   <h3 className="flex items-center gap-2 text-sm font-extrabold uppercase tracking-wide text-amber-800">
                     <Handshake size={16} />
-                    {T('Détail du calcul — conciergerie', 'تفصيل الحساب — الأمانة', lang)}
+                    {T('Ce que l’agence doit toucher — période', 'ما يجب أن تحصل عليه الوكالة — الفترة', lang)}
                   </h3>
                   <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-amber-700 ring-1 ring-amber-200">
-                    {consignment.completedCount} {T('location(s) terminée(s)', 'إيجار منتهي', lang)}
+                    {g.rentals} {T('location(s)', 'إيجار', lang)}
+                    {consignment.completedCount > 0 && (
+                      <> · {consignment.completedCount} {T('terminée(s)', 'منتهي', lang)}</>
+                    )}
                   </span>
                 </div>
 
                 <div className="p-5">
                   <div className="divide-y divide-slate-100">
                     <CalcRow
-                      label={T('CA des locations terminées', 'رقم أعمال الإيجارات المنتهية', lang)}
-                      formula={`${consignment.completedCount} × ${T('locations clôturées', 'إيجارات مغلقة', lang)}`}
-                      amount={consignment.grossCompleted}
+                      label={T('CA des locations de la période', 'رقم أعمال إيجارات الفترة', lang)}
+                      formula={`${g.rentals} ${T('location(s)', 'إيجار', lang)} · ${g.daysRented} ${T('jours loués', 'يوم كراء', lang)}`}
+                      amount={consignment.grossAll}
                       share={100}
                       tone="slate"
                     />
@@ -544,80 +572,109 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
                       label={T('Commission agence', 'عمولة الوكالة', lang)}
                       formula={
                         owner.commissionType === 'percentage'
-                          ? `${fmt(consignment.grossCompleted)} × ${scaleLabel} = ${fmt(consignment.commissionEarned)}`
-                          : `${consignment.completedCount} × ${scaleLabel} = ${fmt(consignment.commissionEarned)}`
+                          ? `${fmt(consignment.grossAll)} × ${scaleLabel} = ${fmt(consignment.commissionTotal)}`
+                          : owner.commissionType === 'per_day'
+                            ? `${g.daysRented} ${T('j', 'ي', lang)} × ${scaleLabel} = ${fmt(consignment.commissionTotal)}`
+                            : `${g.rentals} × ${scaleLabel} = ${fmt(consignment.commissionTotal)}`
                       }
-                      amount={consignment.commissionEarned}
-                      share={g.effectiveCommissionRate}
+                      amount={consignment.commissionTotal}
+                      share={effectiveCommissionRatePeriod}
                       tone="amber"
                     />
                     <CalcRow
                       sign="−"
-                      label={T('Livraison à charge du propriétaire (≥ 10 jours)', 'التوصيل على حساب المالك (≥ 10 أيام)', lang)}
-                      amount={consignment.ownerDeliveryFees}
-                      share={pct(consignment.ownerDeliveryFees, consignment.grossCompleted)}
+                      label={T(
+                        `Livraison à charge du propriétaire (≥ ${owner.deliveryThresholdDays ?? 10} jours)`,
+                        `التوصيل على حساب المالك (≥ ${owner.deliveryThresholdDays ?? 10} أيام)`,
+                        lang,
+                      )}
+                      amount={consignment.ownerDeliveryFeesAll}
+                      share={pct(consignment.ownerDeliveryFeesAll, consignment.grossAll)}
                       tone="amber"
                     />
                     <CalcRow
                       sign="="
                       label={T('À reverser au propriétaire', 'المستحق للمالك', lang)}
-                      amount={consignment.ownerPayout}
-                      share={g.ownerShare}
+                      amount={consignment.ownerPayoutTotal}
+                      share={ownerSharePeriod}
                       tone="slate"
                       strong
                     />
                   </div>
 
-                  {/* Répartition visuelle du CA clôturé */}
+                  {/* Répartition visuelle du CA de la période */}
                   <div className="mt-5 rounded-xl bg-slate-50 p-4 ring-1 ring-slate-200">
                     <div className="mb-2.5 flex items-center justify-between">
                       <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                        {T('Répartition du CA terminé', 'توزيع رقم الأعمال المنتهي', lang)}
+                        {T('Répartition du CA de la période', 'توزيع رقم أعمال الفترة', lang)}
                       </p>
                       <p className="text-[11px] font-bold tabular-nums text-slate-500">
-                        {fmt(consignment.grossCompleted)} DZD
+                        {fmt(consignment.grossAll)} DZD
                       </p>
                     </div>
                     <SplitBar
                       segments={[
-                        { value: consignment.commissionEarned, label: T('Commission', 'العمولة', lang), cls: 'bg-amber-500' },
-                        { value: consignment.ownerDeliveryFees, label: T('Livraison', 'التوصيل', lang), cls: 'bg-amber-300' },
-                        { value: consignment.ownerPayout, label: T('Propriétaire', 'المالك', lang), cls: 'bg-slate-400' },
+                        { value: consignment.commissionTotal, label: T('Commission', 'العمولة', lang), cls: 'bg-amber-500' },
+                        { value: consignment.ownerDeliveryFeesAll, label: T('Livraison', 'التوصيل', lang), cls: 'bg-amber-300' },
+                        { value: consignment.ownerPayoutTotal, label: T('Propriétaire', 'المالك', lang), cls: 'bg-slate-400' },
                       ]}
                     />
                     <SplitLegend
                       items={[
-                        { label: T('Agence', 'الوكالة', lang), cls: 'bg-amber-500', pct: g.agencyShare, tone: 'amber' },
-                        { label: T('Propriétaire', 'المالك', lang), cls: 'bg-slate-400', pct: g.ownerShare, tone: 'slate' },
+                        { label: T('Agence', 'الوكالة', lang), cls: 'bg-amber-500', pct: agencySharePeriod, tone: 'amber' },
+                        { label: T('Propriétaire', 'المالك', lang), cls: 'bg-slate-400', pct: ownerSharePeriod, tone: 'slate' },
                       ]}
                     />
                   </div>
+
+                  {/* Détail terminé vs en cours — la commission des locations en
+                      cours n'est acquise qu'à leur clôture. */}
+                  {consignment.pendingCount > 0 && consignment.completedCount > 0 && (
+                    <div className="mt-3 grid grid-cols-2 gap-3">
+                      <div className="rounded-xl bg-emerald-50 px-4 py-2.5 ring-1 ring-emerald-200">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">
+                          {T('Commission acquise (terminées)', 'عمولة مكتسبة (منتهية)', lang)}
+                        </p>
+                        <p className="mt-0.5 text-sm font-extrabold tabular-nums text-emerald-800">
+                          {fmt(consignment.commissionEarned)} <span className="text-[10px] text-emerald-500">DZD</span>
+                        </p>
+                      </div>
+                      <div className="rounded-xl bg-slate-50 px-4 py-2.5 ring-1 ring-slate-200">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                          {T('Commission estimée (en cours)', 'عمولة مقدرة (جارية)', lang)}
+                        </p>
+                        <p className="mt-0.5 text-sm font-extrabold tabular-nums text-slate-700">
+                          +{fmt(consignment.commissionPending)} <span className="text-[10px] text-slate-400">DZD</span>
+                        </p>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Le taux constaté peut s'écarter du barème : les commissions
                       sont figées à la clôture, un barème modifié après coup ne
                       recalcule pas le passé. */}
                   {owner.commissionType === 'percentage'
                     && consignment.completedCount > 0
-                    && Math.abs(g.effectiveCommissionRate - owner.commissionValue) > 0.5 && (
+                    && Math.abs(effectiveCommissionRatePeriod - owner.commissionValue) > 0.5 && (
                       <p className="mt-3 rounded-xl bg-amber-50 px-4 py-2.5 text-[11px] font-semibold text-amber-800 ring-1 ring-amber-200">
                         ℹ️ {T(
-                          `Taux constaté ${fmtPct(g.effectiveCommissionRate)} contre ${scaleLabel} au barème — les commissions sont figées à la clôture de chaque location.`,
-                          `النسبة الفعلية ${fmtPct(g.effectiveCommissionRate)} مقابل ${scaleLabel} في الاتفاق — تُثبَّت العمولات عند إنهاء كل إيجار.`,
+                          `Taux constaté ${fmtPct(effectiveCommissionRatePeriod)} contre ${scaleLabel} au barème — les commissions terminées sont figées à la clôture de chaque location.`,
+                          `النسبة الفعلية ${fmtPct(effectiveCommissionRatePeriod)} مقابل ${scaleLabel} في الاتفاق — تُثبَّت عمولات الإيجارات المنتهية عند إغلاق كل إيجار.`,
                           lang,
                         )}
                       </p>
                     )}
 
-                  {consignment.pendingCount > 0 && (
+                  {consignment.pendingCount > 0 && consignment.completedCount === 0 && (
                     <p className="mt-3 flex items-center gap-2 rounded-xl bg-slate-50 px-4 py-2.5 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200">
                       <Clock size={13} className="shrink-0 text-slate-400" />
                       {consignment.pendingCount}{' '}
                       {T(
-                        'location(s) en cours — commission estimée non encore acquise',
-                        'إيجار جارٍ — عمولة مقدرة غير مكتسبة بعد',
+                        'location(s) en cours — commission estimée, acquise à la clôture',
+                        'إيجار جارٍ — عمولة مقدرة، تُكتسب عند الإغلاق',
                         lang,
                       )}{' '}
-                      : <strong className="tabular-nums">+{fmt(consignment.commissionPending)} DZD</strong>
+                      : <strong className="tabular-nums">{fmt(consignment.commissionPending)} DZD</strong>
                     </p>
                   )}
                 </div>
@@ -828,9 +885,21 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
                                     </div>
 
                                     <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 font-mono text-xs font-semibold tabular-nums text-amber-900" dir="ltr">
-                                      <span>{fmt(cb.base)}</span>
-                                      <span className="text-amber-400">×</span>
-                                      <span>{scaleLabel}</span>
+                                      {owner.commissionType === 'per_day' ? (
+                                        <>
+                                          <span>{res.totalDays} {T('j', 'ي', lang)}</span>
+                                          <span className="text-amber-400">×</span>
+                                          <span>{scaleLabel}</span>
+                                        </>
+                                      ) : owner.commissionType === 'percentage' ? (
+                                        <>
+                                          <span>{fmt(cb.base)}</span>
+                                          <span className="text-amber-400">×</span>
+                                          <span>{scaleLabel}</span>
+                                        </>
+                                      ) : (
+                                        <span>{scaleLabel}</span>
+                                      )}
                                       <ArrowRight size={12} className="text-amber-400" />
                                       <span className="font-extrabold">{fmt(cb.commission)} DZD</span>
                                     </div>
@@ -853,7 +922,7 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
                                         <CalcRow
                                           sign="−"
                                           label={T('Livraison (propriétaire)', 'التوصيل (المالك)', lang)}
-                                          formula={`${res.totalDays} ${T('jours ≥ 10', 'أيام ≥ 10', lang)}`}
+                                          formula={`${res.totalDays} ${T('jours ≥', 'أيام ≥', lang)} ${owner.deliveryThresholdDays ?? 10}`}
                                           amount={cb.ownerDelivery}
                                           share={pct(cb.ownerDelivery, cb.base)}
                                           tone="amber"
@@ -975,7 +1044,7 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               className={`overflow-hidden rounded-2xl p-5 text-white shadow-lg ${
-                g.netBenefit >= 0
+                (consignment ? g.netBenefitPeriod : g.netBenefit) >= 0
                   ? 'bg-gradient-to-br from-indigo-600 to-indigo-800'
                   : 'bg-gradient-to-br from-rose-600 to-rose-800'
               }`}
@@ -984,17 +1053,17 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-white/60">
                     {consignment
-                      ? T('Bénéfice net agence', 'صافي ربح الوكالة', lang)
+                      ? T('Bénéfice net agence (période)', 'صافي ربح الوكالة (الفترة)', lang)
                       : T('Bénéfice net', 'صافي الأرباح', lang)}
                   </p>
                   <p className="mt-1 text-4xl font-extrabold tabular-nums leading-none">
-                    {g.netBenefit >= 0 ? '+' : ''}
-                    {fmt(g.netBenefit)}
+                    {(consignment ? g.netBenefitPeriod : g.netBenefit) >= 0 ? '+' : ''}
+                    {fmt(consignment ? g.netBenefitPeriod : g.netBenefit)}
                     <span className="ml-1.5 text-base font-semibold text-white/50">DZD</span>
                   </p>
                   <p className="mt-2 font-mono text-[11px] text-white/60 tabular-nums" dir="ltr">
                     {consignment
-                      ? `${fmt(consignment.commissionEarned)} + ${fmt(consignment.ownerDeliveryFees)} − ${fmt(g.expenses)}`
+                      ? `${fmt(consignment.commissionTotal)} + ${fmt(consignment.ownerDeliveryFeesAll)} − ${fmt(g.expenses)}`
                       : `${fmt(g.collected)} − ${fmt(g.expenses)}`}
                   </p>
                 </div>
@@ -1002,7 +1071,9 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-white/60">
                     {T('Marge', 'الهامش', lang)}
                   </p>
-                  <p className="mt-0.5 text-2xl font-extrabold tabular-nums">{fmtPct(g.margin)}</p>
+                  <p className="mt-0.5 text-2xl font-extrabold tabular-nums">
+                    {fmtPct(consignment ? marginPeriod : g.margin)}
+                  </p>
                   <p className="mt-0.5 text-[10px] font-medium text-white/50">
                     {T('du revenu agence', 'من إيراد الوكالة', lang)}
                   </p>

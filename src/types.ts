@@ -20,8 +20,14 @@ export interface SidebarItem {
 
 /** 'personal' = véhicule de l'agence · 'consignment' = véhicule confié par un tiers. */
 export type OwnershipType = 'personal' | 'consignment';
-/** 'amount' = commission fixe en DA · 'percentage' = pourcentage du total de la location. */
-export type CommissionType = 'amount' | 'percentage';
+/**
+ * Barème de commission de l'agence sur un véhicule en conciergerie :
+ *  - 'per_day'    = montant fixe en DA multiplié par le nombre de jours loués
+ *                   (ex. 1 000 DA/jour ⇒ 3 000 DA pour une location de 3 jours) ;
+ *  - 'amount'     = commission fixe en DA, par location, quelle que soit la durée ;
+ *  - 'percentage' = pourcentage du total de la location.
+ */
+export type CommissionType = 'amount' | 'percentage' | 'per_day';
 
 /**
  * Données PRIVÉES du propriétaire d'un véhicule en conciergerie.
@@ -39,6 +45,16 @@ export interface CarOwnerInfo {
   commissionValue: number;
   contractUrl?: string;       // 📄 contrat scanné
   privateNotes?: string;
+  /**
+   * 🚚 Frais de livraison automatiques (conciergerie).
+   * Quand `deliveryFeeEnabled`, toute réservation dont la durée atteint
+   * `deliveryThresholdDays` se voit ajouter automatiquement des frais de livraison
+   * de `deliveryFeeAmount` DA (à la charge du propriétaire — cf. règle des 10 jours).
+   * L'agence peut désactiver ces frais au dernier écran de création de réservation.
+   */
+  deliveryFeeEnabled?: boolean;     // défaut true
+  deliveryThresholdDays?: number;   // défaut 10
+  deliveryFeeAmount?: number;       // défaut 300
   createdAt?: string;
   updatedAt?: string;
 }

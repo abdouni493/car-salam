@@ -2,17 +2,25 @@ import React, { useState } from 'react';
 import { Loader2, FileText, Upload } from 'lucide-react';
 import { CarOwnerInfo, CommissionType, Language, OwnershipType } from '../types';
 import { uploadOwnerContract, getOwnerContractUrl } from '../services/uploadOwnerContract';
+import { DELIVERY_OWNER_THRESHOLD_DAYS, DELIVERY_DEFAULT_FEE_DZD } from '../utils/deliveryFee';
 
-/** Valeurs par défaut d'un nouveau propriétaire (commission en % par convention). */
+/**
+ * Valeurs par défaut d'un nouveau propriétaire.
+ * Commission « par jour » par convention : l'agence gagne un montant fixe pour
+ * chaque jour loué. Les frais de livraison automatiques sont activés par défaut.
+ */
 export const emptyOwnerInfo = (carId = ''): CarOwnerInfo => ({
   carId,
   ownerName: '',
   ownerPhone: '',
   consignmentDate: new Date().toISOString().substring(0, 10),
-  commissionType: 'percentage',
+  commissionType: 'per_day',
   commissionValue: 0,
   contractUrl: '',
   privateNotes: '',
+  deliveryFeeEnabled: true,
+  deliveryThresholdDays: DELIVERY_OWNER_THRESHOLD_DAYS,
+  deliveryFeeAmount: DELIVERY_DEFAULT_FEE_DZD,
 });
 
 interface OwnershipSelectorProps {
@@ -97,6 +105,12 @@ export const CarOwnerFields: React.FC<CarOwnerFieldsProps> = ({ value, onChange,
   };
 
   const isPercentage = value.commissionType === 'percentage';
+  const isPerDay = value.commissionType === 'per_day';
+
+  // Frais de livraison automatiques — valeurs par défaut si le véhicule n'en a pas.
+  const deliveryEnabled = value.deliveryFeeEnabled ?? true;
+  const thresholdDays = value.deliveryThresholdDays ?? DELIVERY_OWNER_THRESHOLD_DAYS;
+  const deliveryAmount = value.deliveryFeeAmount ?? DELIVERY_DEFAULT_FEE_DZD;
 
   return (
     <section className="space-y-6 rounded-2xl border-2 border-amber-300 bg-amber-50/70 p-6">
@@ -162,22 +176,36 @@ export const CarOwnerFields: React.FC<CarOwnerFieldsProps> = ({ value, onChange,
         </div>
       </div>
 
-      {/* 💰 Commission — deux types exclusifs, la saisie est conservée au basculement */}
+      {/* 💰 Commission — trois types exclusifs, la saisie est conservée au basculement */}
       <div className="space-y-3">
         <label className="label-saas">💰 {lang === 'fr' ? 'Commission de l’agence' : 'عمولة الوكالة'}</label>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <label className={`flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-colors ${
-            !isPercentage ? 'bg-white border-amber-400' : 'bg-white/50 border-saas-border hover:border-amber-300'
+            isPerDay ? 'bg-white border-amber-400' : 'bg-white/50 border-saas-border hover:border-amber-300'
           }`}>
             <input
               type="radio"
               name="commissionType"
-              checked={!isPercentage}
+              checked={isPerDay}
+              onChange={() => handleCommissionType('per_day')}
+              className="accent-amber-600"
+            />
+            <span className="text-xs font-bold">
+              {lang === 'fr' ? 'Par jour (DA / jour)' : 'حسب اليوم (دج / يوم)'}
+            </span>
+          </label>
+          <label className={`flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-colors ${
+            !isPercentage && !isPerDay ? 'bg-white border-amber-400' : 'bg-white/50 border-saas-border hover:border-amber-300'
+          }`}>
+            <input
+              type="radio"
+              name="commissionType"
+              checked={!isPercentage && !isPerDay}
               onChange={() => handleCommissionType('amount')}
               className="accent-amber-600"
             />
             <span className="text-xs font-bold">
-              {lang === 'fr' ? 'Commission en dinars (DA)' : 'عمولة بالدينار (DA)'}
+              {lang === 'fr' ? 'Fixe par location (DA)' : 'ثابتة لكل إيجار (DA)'}
             </span>
           </label>
           <label className={`flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-colors ${
@@ -191,7 +219,7 @@ export const CarOwnerFields: React.FC<CarOwnerFieldsProps> = ({ value, onChange,
               className="accent-amber-600"
             />
             <span className="text-xs font-bold">
-              {lang === 'fr' ? 'Commission en pourcentage (%)' : 'عمولة بالنسبة المئوية (%)'}
+              {lang === 'fr' ? 'Pourcentage (%)' : 'نسبة مئوية (%)'}
             </span>
           </label>
         </div>
@@ -204,13 +232,77 @@ export const CarOwnerFields: React.FC<CarOwnerFieldsProps> = ({ value, onChange,
             step={isPercentage ? 0.5 : 100}
             value={value.commissionValue}
             onChange={e => set('commissionValue', Math.max(0, Number(e.target.value) || 0))}
-            className="input-saas pe-16"
+            className="input-saas pe-24"
             dir="ltr"
           />
           <span className="absolute end-4 top-1/2 -translate-y-1/2 text-xs font-black text-amber-700">
-            {isPercentage ? '%' : 'DA'}
+            {isPercentage ? '%' : isPerDay ? (lang === 'fr' ? 'DA / jour' : 'دج / يوم') : 'DA'}
           </span>
         </div>
+
+        {isPerDay && (
+          <p className="text-[11px] font-semibold text-amber-700/90 ms-1">
+            {lang === 'fr'
+              ? `L’agence gagne ${(value.commissionValue || 0).toLocaleString('fr-FR')} DA pour chaque jour loué. Ex. une location de 3 jours ⇒ ${((value.commissionValue || 0) * 3).toLocaleString('fr-FR')} DA.`
+              : `تكسب الوكالة ${(value.commissionValue || 0).toLocaleString('fr-FR')} دج عن كل يوم كراء. مثال: كراء 3 أيام ⇒ ${((value.commissionValue || 0) * 3).toLocaleString('fr-FR')} دج.`}
+          </p>
+        )}
+      </div>
+
+      {/* 🚚 Frais de livraison automatiques */}
+      <div className="space-y-3 rounded-2xl border border-amber-200 bg-white/60 p-4">
+        <label className="flex items-center gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={deliveryEnabled}
+            onChange={e => set('deliveryFeeEnabled', e.target.checked)}
+            className="w-4 h-4 accent-amber-600"
+          />
+          <span className="text-xs font-black uppercase tracking-wider text-amber-800">
+            🚚 {lang === 'fr' ? 'Frais de livraison automatiques' : 'رسوم التوصيل التلقائية'}
+          </span>
+        </label>
+        <p className="text-[11px] text-amber-700/80 ms-1">
+          {lang === 'fr'
+            ? 'Ajoutés automatiquement à la réservation lorsque la durée atteint le seuil. Modifiables ou désactivables au dernier écran de création de réservation.'
+            : 'تُضاف تلقائيًا إلى الحجز عندما تبلغ المدة الحد. قابلة للتعديل أو الإلغاء في الشاشة الأخيرة لإنشاء الحجز.'}
+        </p>
+
+        {deliveryEnabled && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="label-saas">
+                {lang === 'fr' ? 'À partir de (jours)' : 'ابتداءً من (أيام)'}
+              </label>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                value={thresholdDays}
+                onChange={e => set('deliveryThresholdDays', Math.max(1, Math.round(Number(e.target.value) || 1)))}
+                className="input-saas"
+                dir="ltr"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="label-saas">
+                {lang === 'fr' ? 'Montant livraison (DA)' : 'مبلغ التوصيل (دج)'}
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  min={0}
+                  step={50}
+                  value={deliveryAmount}
+                  onChange={e => set('deliveryFeeAmount', Math.max(0, Number(e.target.value) || 0))}
+                  className="input-saas pe-12"
+                  dir="ltr"
+                />
+                <span className="absolute end-4 top-1/2 -translate-y-1/2 text-xs font-black text-amber-700">DA</span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 📄 Contrat scanné */}

@@ -1,6 +1,7 @@
 import { supabase } from '../supabase';
 import { AgencyBranding, Car, CarOwnerInfo, Client, Agency, Worker, WorkerAdvance, WorkerAbsence, WorkerPayment, StoreExpense, VehicleExpense, MaintenanceAlert, WebsiteOrder, ReservationDetails, SpecialOffer, ContactInfo, WebsiteSettings, PromoCode } from '../types';
 import { eurOrUndefined, DEFAULT_EUR_RATE } from '../utils/currency';
+import { normalizeCommissionType } from '../utils/consignmentMath';
 
 /**
  * `website_settings` ne contient qu'une seule ligne, à cet identifiant fixe
@@ -78,10 +79,15 @@ export class DatabaseService {
       ownerPhone: owner.owner_phone || undefined,
       internalRef: owner.internal_ref || undefined,
       consignmentDate: owner.consignment_date || undefined,
-      commissionType: owner.commission_type === 'amount' ? 'amount' : 'percentage',
+      commissionType: normalizeCommissionType(owner.commission_type),
       commissionValue: Number(owner.commission_value || 0),
       contractUrl: owner.contract_url || undefined,
       privateNotes: owner.private_notes || undefined,
+      deliveryFeeEnabled: owner.delivery_fee_enabled ?? true,
+      deliveryThresholdDays: owner.delivery_threshold_days != null
+        ? Number(owner.delivery_threshold_days) : undefined,
+      deliveryFeeAmount: owner.delivery_fee_amount != null
+        ? Number(owner.delivery_fee_amount) : undefined,
       createdAt: owner.created_at,
       updatedAt: owner.updated_at,
     };

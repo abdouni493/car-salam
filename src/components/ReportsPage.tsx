@@ -20,6 +20,7 @@ import {
   computeFleetGains, sumFleetGains, commissionBreakdown,
   VehicleGainsRow,
 } from '../utils/gainsMath';
+import { normalizeCommissionType } from '../utils/consignmentMath';
 import { PctChip, SplitBar, SplitLegend, CalcRow, StatCard, Tone } from './gains/GainsUI';
 import { generateReportHTML } from './ReportPrintTemplate';
 
@@ -133,7 +134,9 @@ const CarBlock: React.FC<{
   const scaleLabel = owner
     ? owner.commissionType === 'percentage'
       ? `${owner.commissionValue.toLocaleString('fr-FR')} %`
-      : `${fmt(owner.commissionValue)} DA`
+      : owner.commissionType === 'per_day'
+        ? `${fmt(owner.commissionValue)} ${lang === 'fr' ? 'DA/j' : 'دج/ي'}`
+        : `${fmt(owner.commissionValue)} DA`
     : '';
 
   return (
@@ -283,7 +286,9 @@ const CarBlock: React.FC<{
                         formula={
                           owner?.commissionType === 'percentage'
                             ? `${fmt(g.consignment.grossCompleted)} × ${scaleLabel}`
-                            : `${g.consignment.completedCount} × ${scaleLabel}`
+                            : owner?.commissionType === 'per_day'
+                              ? `${g.daysRented} ${T('j', 'ي', lang)} × ${scaleLabel}`
+                              : `${g.consignment.completedCount} × ${scaleLabel}`
                         }
                         amount={g.consignment.commissionEarned}
                         share={g.effectiveCommissionRate}
@@ -778,8 +783,13 @@ const ReportsPage: React.FC<{ lang: Language }> = ({ lang }) => {
                       ownerName: dbCar.owner.owner_name,
                       ownerPhone: dbCar.owner.owner_phone || undefined,
                       internalRef: dbCar.owner.internal_ref || undefined,
-                      commissionType: dbCar.owner.commission_type === 'amount' ? 'amount' : 'percentage',
+                      commissionType: normalizeCommissionType(dbCar.owner.commission_type),
                       commissionValue: Number(dbCar.owner.commission_value || 0),
+                      deliveryFeeEnabled: dbCar.owner.delivery_fee_enabled ?? true,
+                      deliveryThresholdDays: dbCar.owner.delivery_threshold_days != null
+                        ? Number(dbCar.owner.delivery_threshold_days) : undefined,
+                      deliveryFeeAmount: dbCar.owner.delivery_fee_amount != null
+                        ? Number(dbCar.owner.delivery_fee_amount) : undefined,
                     }
                   : null,
               } as Car));
@@ -1337,8 +1347,11 @@ const ReportsPage: React.FC<{ lang: Language }> = ({ lang }) => {
                                   <p className="font-bold text-slate-700">{owner.ownerName}</p>
                                   <p className="text-[10px] font-semibold text-slate-400">
                                     {owner.commissionValue.toLocaleString('fr-FR')}
-                                    {owner.commissionType === 'percentage' ? ' %' : ' DA'} /{' '}
-                                    {T('loc.', 'إيجار', lang)}
+                                    {owner.commissionType === 'percentage'
+                                      ? ` % / ${T('loc.', 'إيجار', lang)}`
+                                      : owner.commissionType === 'per_day'
+                                        ? ` DA / ${T('j', 'ي', lang)}`
+                                        : ` DA / ${T('loc.', 'إيجار', lang)}`}
                                     {owner.internalRef ? ` · ${owner.internalRef}` : ''}
                                   </p>
                                 </td>

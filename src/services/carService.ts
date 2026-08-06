@@ -13,10 +13,14 @@ export interface CarOwnerRow {
   /** Généré par un trigger DB (CS-001, CS-002…) — ne jamais l'envoyer à l'insert. */
   internal_ref?: string
   consignment_date?: string
-  commission_type: 'amount' | 'percentage'
+  commission_type: 'amount' | 'percentage' | 'per_day'
   commission_value: number
   contract_url?: string
   private_notes?: string
+  /** Frais de livraison automatiques (voir migration_conciergerie_livraison_v2.sql). */
+  delivery_fee_enabled?: boolean
+  delivery_threshold_days?: number
+  delivery_fee_amount?: number
   created_at?: string
   updated_at?: string
 }

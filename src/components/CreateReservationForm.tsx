@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Language, ReservationDetails, ReservationWizardData, Client, Car, VehicleInspection, Payment, AdditionalService, ProtectionAssurance } from '../types';
-import { getDeliveryFeePayer } from '../utils/deliveryFee';
+import { getDeliveryFeePayer, resolveDeliveryThreshold, DELIVERY_OWNER_THRESHOLD_DAYS, DELIVERY_DEFAULT_FEE_DZD } from '../utils/deliveryFee';
+import { getCarOwner } from '../services/carService';
 import {
   Currency, DEFAULT_EUR_RATE, carUnitPrices, formatMoney, fromDzd, toDzd,
   roundIn, safeRate, currencySymbol, impliedEurRate,
@@ -2968,6 +2969,14 @@ export const Step6FinalPricing: React.FC<{
   // Une saisie manuelle (ou un taux déjà enregistré) fige la valeur.
   const [rateTouched, setRateTouched] = useState(false);
   const [deliveryFee, setDeliveryFee] = useState<number | ''>(formData.step6?.deliveryFee ?? 0);
+  // Réglages de livraison du propriétaire (véhicule en conciergerie uniquement).
+  // Chargés à la volée : la liste des voitures du wizard ne joint pas `car_owners`.
+  const [ownerDelivery, setOwnerDelivery] = useState<
+    { enabled: boolean; thresholdDays: number; amount: number } | null
+  >(null);
+  // La livraison auto n'est pré-remplie qu'une fois par réservation : au-delà,
+  // l'agence reste libre d'ajuster ou de désactiver le montant.
+  const deliveryAutoApplied = React.useRef(false);
 
   // Assurance Serenity : l'éditeur a été retiré de l'étape paiement, mais la valeur
   // enregistrée est conservée telle quelle pour les réservations existantes.
@@ -3079,6 +3088,49 @@ export const Step6FinalPricing: React.FC<{
     ? Math.ceil((new Date(formData.step1.returnDate).getTime() - new Date(formData.step1.departureDate).getTime()) / (1000 * 60 * 60 * 24))
     : 0;
 
+  // ── Frais de livraison automatiques (conciergerie) ──────────────────────────
+  // La fiche véhicule du wizard ne joint pas `car_owners` : on récupère à la
+  // demande les réglages de livraison du propriétaire quand le véhicule choisi
+  // est en conciergerie.
+  const selectedCarId = selectedCar?.id;
+  const isConsignmentCar = selectedCar?.ownershipType === 'consignment';
+  useEffect(() => {
+    let cancelled = false;
+    deliveryAutoApplied.current = false;
+    if (!selectedCarId || !isConsignmentCar) {
+      setOwnerDelivery(null);
+      return;
+    }
+    (async () => {
+      const res = await getCarOwner(selectedCarId);
+      if (cancelled) return;
+      const o = res.owner;
+      if (res.success && o && (o.delivery_fee_enabled ?? true)) {
+        setOwnerDelivery({
+          enabled: true,
+          thresholdDays: resolveDeliveryThreshold(o.delivery_threshold_days),
+          amount: o.delivery_fee_amount != null ? Number(o.delivery_fee_amount) : DELIVERY_DEFAULT_FEE_DZD,
+        });
+      } else {
+        setOwnerDelivery(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedCarId, isConsignmentCar]);
+
+  // Seuil retenu pour cette réservation (celui du véhicule, sinon le défaut).
+  const deliveryThresholdDays = ownerDelivery?.thresholdDays ?? DELIVERY_OWNER_THRESHOLD_DAYS;
+
+  // Pré-remplissage auto (une seule fois) dès que la durée atteint le seuil, tant
+  // que l'agence n'a pas déjà saisi un montant de livraison.
+  useEffect(() => {
+    if (!ownerDelivery || deliveryAutoApplied.current) return;
+    if (days >= ownerDelivery.thresholdDays && (deliveryFee === '' || Number(deliveryFee) === 0)) {
+      deliveryAutoApplied.current = true;
+      setDeliveryFee(ownerDelivery.amount);
+    }
+  }, [ownerDelivery, days, deliveryFee]);
+
   // ── Taux de change déduit du véhicule ───────────────────────────────────────
   // Une agence qui annonce « 5 000 DA ou 35 € la journée » a implicitement convenu
   // d'un taux. On l'applique tant que l'utilisateur n'a pas saisi le sien, sinon le
@@ -3141,7 +3193,7 @@ export const Step6FinalPricing: React.FC<{
   // 10 jours ; au-delà ils sont à la charge du propriétaire du véhicule.
   const deliveryFeeAmountDzd = deliveryFee === '' ? 0 : Number(deliveryFee);
   const deliveryFeeAmount = fromDzd(deliveryFeeAmountDzd, paymentCurrency, rate);
-  const clientDeliveryFee = getDeliveryFeePayer(days) === 'client' ? deliveryFeeAmount : 0;
+  const clientDeliveryFee = getDeliveryFeePayer(days, deliveryThresholdDays) === 'client' ? deliveryFeeAmount : 0;
 
   /** Total calculé, dans la devise de règlement. */
   const computedPrice = Math.max(0, roundIn(subtotal + tvaAmount + clientDeliveryFee, paymentCurrency));
@@ -3685,8 +3737,16 @@ export const Step6FinalPricing: React.FC<{
             </div>
           )}
 
-          {/* Frais de livraison — le payeur découle de la durée (règle des 10 jours) */}
-          <DeliveryFeeField lang={lang} value={deliveryFee} onChange={setDeliveryFee} totalDays={days} />
+          {/* Frais de livraison — le payeur découle de la durée. Pour une
+              conciergerie, la livraison est pré-remplie et désactivable ici. */}
+          <DeliveryFeeField
+            lang={lang}
+            value={deliveryFee}
+            onChange={setDeliveryFee}
+            totalDays={days}
+            thresholdDays={deliveryThresholdDays}
+            autoConfig={ownerDelivery ? { amount: ownerDelivery.amount } : null}
+          />
 
           {/* TVA Section */}
           <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">

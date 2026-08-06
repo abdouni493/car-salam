@@ -69,7 +69,19 @@ export const generateContractHTML = (
     inspectionNote: isFrench
       ? "Avant la réception du véhicule, le locataire a inspecté la voiture de l'intérieur et de l'extérieur. Tout objet en sa possession pendant la période de location contraire à la loi l'expose aux sanctions prévues par la réglementation."
       : 'قبل استلام السيارة قام المستأجر بفحص السيارة من الداخل والخارج، وأي شيء يكون بحوزته في مدة استئجارها يكون مخالفة للقانون والعقوبات',
+    deliveryFee: isFrench ? 'Frais de livraison' : 'رسوم التوصيل',
+    deliveryByOwner: isFrench ? 'À la charge de l\'agence' : 'على عاتق الوكالة',
+    deliveryByClient: isFrench ? 'À la charge du client' : 'على عاتق العميل',
   };
+
+  // Frais de livraison : montant + payeur (déduit du seuil de durée par la DB).
+  const deliveryFeeDzd = Number(reservation?.deliveryFee) || 0;
+  const deliveryPaidByOwner = reservation?.deliveryFeePayer === 'owner';
+  const deliveryFeeText = deliveryFeeDzd > 0
+    ? `${ltr(Math.round(deliveryFeeDzd).toLocaleString('fr-FR'))} DA — ${
+        deliveryPaidByOwner ? labels.deliveryByOwner : labels.deliveryByClient
+      }`
+    : '';
 
   const termsList = isFrench
     ? [
@@ -422,6 +434,13 @@ export const generateContractHTML = (
               <span class="meta-value">${reservation?.totalDays || 0} ${labels.days}</span>
             </div>
           </div>
+          ${deliveryFeeText ? `
+          <div class="period-row" style="grid-template-columns: 1fr; border-top: 1px solid var(--border);">
+            <div class="meta-cell">
+              <span class="meta-label">🚚 ${labels.deliveryFee}</span>
+              <span class="meta-value">${deliveryFeeText}</span>
+            </div>
+          </div>` : ''}
         </div>
 
         <!-- VEHICLE (visual left) / MAIN DRIVER (visual right) -->

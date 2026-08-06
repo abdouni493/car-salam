@@ -87,13 +87,28 @@ export interface VehicleGains {
    * Revenu qui revient réellement à l'agence, AVANT dépenses.
    *  - véhicule agence      → tout l'encaissé ;
    *  - véhicule conciergerie → commission + livraison à charge du propriétaire,
-   *    sur les locations clôturées (mêmes bornes que la vue DB).
+   *    sur les locations CLÔTURÉES (mêmes bornes que la vue DB `consignment_earnings`).
+   *
+   * Utilisé par « Rapports » (vision réalisée).
    */
   agencyRevenue: number;
   /** Part à reverser au propriétaire (0 pour un véhicule de l'agence). */
   ownerPayout: number;
   /** agencyRevenue − expenses. */
   netBenefit: number;
+
+  /**
+   * Revenu agence sur TOUTE la période (locations terminées + en cours), avant
+   * dépenses. Pour un véhicule de l'agence c'est l'encaissé ; pour une
+   * conciergerie c'est la commission + livraison propriétaire de toutes les
+   * locations non annulées de la période. C'est « combien l'agence doit toucher
+   * pour ce véhicule sur la période » — la lecture de « Gains par véhicule ».
+   */
+  agencyRevenuePeriod: number;
+  /** Part propriétaire sur toute la période (0 pour un véhicule de l'agence). */
+  ownerPayoutPeriod: number;
+  /** agencyRevenuePeriod − expenses. */
+  netBenefitPeriod: number;
 
   // ── Pourcentages ──────────────────────────────────────────────────────────
   /** Encaissé / facturé — taux de recouvrement. */
@@ -138,6 +153,12 @@ export const computeVehicleGains = (
   const ownerPayout = consignment ? consignment.ownerPayout : 0;
   const netBenefit = agencyRevenue - expensesTotal;
 
+  // Vision « période » : toutes les locations non annulées comptent, sans
+  // attendre leur clôture (ce que l'agence doit toucher sur la période).
+  const agencyRevenuePeriod = consignment ? consignment.agencyGainTotal : collected;
+  const ownerPayoutPeriod = consignment ? consignment.ownerPayoutTotal : 0;
+  const netBenefitPeriod = agencyRevenuePeriod - expensesTotal;
+
   return {
     isConsignment: consignmentCar,
     owner,
@@ -152,6 +173,9 @@ export const computeVehicleGains = (
     agencyRevenue,
     ownerPayout,
     netBenefit,
+    agencyRevenuePeriod,
+    ownerPayoutPeriod,
+    netBenefitPeriod,
     collectionRate: pct(collected, invoiced),
     expenseRatio: pct(expensesTotal, agencyRevenue),
     margin: pct(netBenefit, agencyRevenue),

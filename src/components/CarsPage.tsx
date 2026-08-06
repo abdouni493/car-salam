@@ -14,6 +14,8 @@ import { Plus, Search, Loader2, RefreshCw, ArrowRightLeft } from 'lucide-react';
 import { motion } from 'motion/react';
 import { getCarsWithOwners, addCar, updateCar, deleteCar, applyEurExchangeRate, AddCarData, CarOwnerInput } from '../services/carService';
 import { eurOrUndefined, DEFAULT_EUR_RATE } from '../utils/currency';
+import { normalizeCommissionType } from '../utils/consignmentMath';
+import { DELIVERY_OWNER_THRESHOLD_DAYS, DELIVERY_DEFAULT_FEE_DZD } from '../utils/deliveryFee';
 import { addVehicleExpense, getVehicleExpenses } from '../services/expenseService';
 import { ReservationsService } from '../services/ReservationsService';
 import { DatabaseService } from '../services/DatabaseService';
@@ -154,10 +156,15 @@ export const CarsPage: React.FC<CarsPageProps> = ({ lang, isAuthLoading = false,
                 ownerPhone: dbCar.owner.owner_phone || undefined,
                 internalRef: dbCar.owner.internal_ref || undefined,
                 consignmentDate: dbCar.owner.consignment_date || undefined,
-                commissionType: dbCar.owner.commission_type === 'amount' ? 'amount' : 'percentage',
+                commissionType: normalizeCommissionType(dbCar.owner.commission_type),
                 commissionValue: Number(dbCar.owner.commission_value || 0),
                 contractUrl: dbCar.owner.contract_url || undefined,
                 privateNotes: dbCar.owner.private_notes || undefined,
+                deliveryFeeEnabled: dbCar.owner.delivery_fee_enabled ?? true,
+                deliveryThresholdDays: dbCar.owner.delivery_threshold_days != null
+                  ? Number(dbCar.owner.delivery_threshold_days) : undefined,
+                deliveryFeeAmount: dbCar.owner.delivery_fee_amount != null
+                  ? Number(dbCar.owner.delivery_fee_amount) : undefined,
               }
             : null,
         }));
@@ -280,6 +287,9 @@ export const CarsPage: React.FC<CarsPageProps> = ({ lang, isAuthLoading = false,
       commission_value: owner.commissionValue,
       contract_url: owner.contractUrl || undefined,
       private_notes: owner.privateNotes || undefined,
+      delivery_fee_enabled: owner.deliveryFeeEnabled ?? true,
+      delivery_threshold_days: owner.deliveryThresholdDays ?? DELIVERY_OWNER_THRESHOLD_DAYS,
+      delivery_fee_amount: owner.deliveryFeeAmount ?? DELIVERY_DEFAULT_FEE_DZD,
     };
   };
 

@@ -4,6 +4,7 @@ import { DashboardStats, MaintenanceAlert, Language, Car, ReservationDetails, Ve
 import { motion, AnimatePresence } from 'motion/react';
 import { AlertTriangle, Bell, Calendar, CarFront, ChevronRight, Gauge, RefreshCw, TrendingUp, Users } from 'lucide-react';
 import { DatabaseService } from '../services/DatabaseService';
+import { normalizeCommissionType } from '../utils/consignmentMath';
 import { getCarsWithOwners } from '../services/carService';
 import { getMonthlyAgencyCommission } from '../services/consignmentService';
 import { getVehicleExpenses } from '../services/expenseService';
@@ -126,7 +127,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ lang, isAuthLoadin
                 ownerName: dbCar.owner.owner_name,
                 ownerPhone: dbCar.owner.owner_phone || undefined,
                 internalRef: dbCar.owner.internal_ref || undefined,
-                commissionType: dbCar.owner.commission_type === 'amount' ? 'amount' : 'percentage',
+                commissionType: normalizeCommissionType(dbCar.owner.commission_type),
                 commissionValue: Number(dbCar.owner.commission_value || 0),
               }
             : null,
@@ -735,7 +736,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ lang, isAuthLoadin
                 </div>
                 {car.ownerInfo && (
                   <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-amber-200/70 text-amber-900 whitespace-nowrap">
-                    {car.ownerInfo.commissionValue.toLocaleString()} {car.ownerInfo.commissionType === 'percentage' ? '%' : 'DA'}
+                    {car.ownerInfo.commissionValue.toLocaleString()} {car.ownerInfo.commissionType === 'percentage' ? '%' : car.ownerInfo.commissionType === 'per_day' ? (lang === 'fr' ? 'DA/j' : 'دج/ي') : 'DA'}
                   </span>
                 )}
               </div>
