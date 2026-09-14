@@ -897,6 +897,19 @@ const FinancialTab: React.FC<{ lang: Language; reservation: ReservationDetails }
             </span>
           </div>
         )}
+        {(reservation.longDurationFee || 0) > 0 && (
+          <div className="flex justify-between items-center py-2 border-b border-slate-200 text-violet-700">
+            <span>
+              ➕ {lang === 'fr' ? 'Frais supplémentaires' : 'رسوم إضافية'}
+              <span className="text-slate-400 text-sm ml-1">
+                {lang === 'fr'
+                  ? `(longue durée — ${reservation.totalDays} jours)`
+                  : `(مدة طويلة — ${reservation.totalDays} يومًا)`}
+              </span>
+            </span>
+            <span>{formatAmount(reservation.longDurationFee || 0)} DA</span>
+          </div>
+        )}
         {reservation.excessMileage > 0 && (
           <div className="flex justify-between items-center py-2 border-b border-slate-200 text-red-600">
             <span>{lang === 'fr' ? 'Kilométrage excédentaire' : 'عداد الكيلومترات الزائد'}</span>

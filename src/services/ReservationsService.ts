@@ -68,6 +68,11 @@ export class ReservationsService {
      * un trigger DB le déduit de `total_days` (>= 10 jours → propriétaire).
      */
     deliveryFee?: number;
+    /**
+     * Supplément « longue durée » (DA) facturé au client à partir de 10 jours.
+     * Déjà inclus dans `totalPrice` — la colonne sert au détail et aux rapports.
+     */
+    longDurationFee?: number;
     createdBy?: string;
     createdByName?: string;
   }): Promise<{ id: string }> {
@@ -107,6 +112,7 @@ export class ReservationsService {
         protection_assurance_name: data.protectionAssuranceName || null,
         protection_assurance_price: data.protectionAssurancePrice || 0,
         delivery_fee: data.deliveryFee || 0,
+        long_duration_fee: data.longDurationFee || 0,
         created_by: data.createdBy || null,
         created_by_name: data.createdByName || null,
         // Réservation créée manuellement depuis le planificateur (agence),
@@ -293,6 +299,7 @@ export class ReservationsService {
       additionalFees: res.additional_fees || 0,
       deliveryFee: Number(res.delivery_fee || 0),
       deliveryFeePayer: res.delivery_fee_payer || undefined,
+      longDurationFee: Number(res.long_duration_fee || 0),
       commissionAmount: res.commission_amount != null ? Number(res.commission_amount) : undefined,
       status: res.status,
       notes: res.notes,
@@ -521,6 +528,7 @@ export class ReservationsService {
       additionalFees: data.additional_fees || 0,
       deliveryFee: Number(data.delivery_fee || 0),
       deliveryFeePayer: data.delivery_fee_payer || undefined,
+      longDurationFee: Number(data.long_duration_fee || 0),
       commissionAmount: data.commission_amount != null ? Number(data.commission_amount) : undefined,
       tvaApplied: data.tva_applied || false,
       deposit: data.deposit,
@@ -639,6 +647,8 @@ export class ReservationsService {
     additionalFees: number;
     /** Le payeur est recalculé par le trigger DB à chaque changement de durée. */
     deliveryFee: number;
+    /** Supplément longue durée (DA), déjà compris dans `totalPrice`. */
+    longDurationFee: number;
     totalPrice: number;
     deposit: number;
     activatedAt?: string;
@@ -679,6 +689,7 @@ export class ReservationsService {
     if (updates.tvaApplied !== undefined) updateData.tva_applied = updates.tvaApplied;
     if (updates.additionalFees !== undefined) updateData.additional_fees = updates.additionalFees;
     if (updates.deliveryFee !== undefined) updateData.delivery_fee = updates.deliveryFee;
+    if (updates.longDurationFee !== undefined) updateData.long_duration_fee = updates.longDurationFee;
     if (updates.totalPrice !== undefined) updateData.total_price = updates.totalPrice;
     if (updates.deposit !== undefined) updateData.deposit = updates.deposit;
     if (updates.activatedAt !== undefined) updateData.activated_at = updates.activatedAt;

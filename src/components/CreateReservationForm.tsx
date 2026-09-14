@@ -6,7 +6,13 @@ import {
   Currency, DEFAULT_EUR_RATE, carUnitPrices, formatMoney, fromDzd, toDzd,
   roundIn, safeRate, currencySymbol, impliedEurRate,
 } from '../utils/currency';
+import {
+  LONG_DURATION_THRESHOLD_DAYS, LONG_DURATION_FEE_DZD,
+  getClientLongDurationFee, isLongDuration,
+} from '../utils/longDurationFee';
+import { computeRentalBasePrice } from '../utils/rentalPricing';
 import { DeliveryFeeField } from './DeliveryFeeField';
+import { LongDurationFeeField } from './LongDurationFeeField';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, ArrowRight, Calendar, Clock, MapPin, Car as CarIcon, User, CreditCard, CheckCircle, Plus, Search, X, Camera, Fuel, AlertTriangle, Check, Upload } from 'lucide-react';
 import { AGENCIES, CAR_IMAGES } from '../constants';
@@ -225,6 +231,9 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
       const totalPrice = step6.totalPrice || 0;
       const advancePayment = step6.advancePayment || 0;
       const deliveryFee = step6.deliveryFee || 0;
+      // Supplément longue durée : déjà compris dans `totalPrice`, persisté à part
+      // pour que les rapports puissent l'isoler.
+      const longDurationFee = step6.longDurationFee || 0;
       const remainingPayment = Math.max(0, totalPrice - advancePayment);
 
       // Create reservation using ReservationsService
@@ -345,6 +354,7 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
             protectionAssurancePrice: formData.protectionAssurance?.pricePerDay ?? null,
             // Frais de livraison — le payeur est déduit de totalDays par un trigger DB.
             deliveryFee,
+            longDurationFee,
             // Creator info - Only save name since User object doesn't have ID
             createdBy: undefined,  // No user ID available in current auth system
             createdByName: workerFullName || undefined,
@@ -2969,6 +2979,12 @@ export const Step6FinalPricing: React.FC<{
   // Une saisie manuelle (ou un taux déjà enregistré) fige la valeur.
   const [rateTouched, setRateTouched] = useState(false);
   const [deliveryFee, setDeliveryFee] = useState<number | ''>(formData.step6?.deliveryFee ?? 0);
+  // Supplément « longue durée » (>= 10 jours) facturé au client, en dinars.
+  // 0 ⇒ désactivé. Pré-rempli automatiquement une seule fois par réservation.
+  const [longDurationFee, setLongDurationFee] = useState<number | ''>(
+    formData.step6?.longDurationFee ?? 0,
+  );
+  const longDurationAutoApplied = React.useRef(false);
   // Réglages de livraison du propriétaire (véhicule en conciergerie uniquement).
   // Chargés à la volée : la liste des voitures du wizard ne joint pas `car_owners`.
   const [ownerDelivery, setOwnerDelivery] = useState<
@@ -3006,6 +3022,11 @@ export const Step6FinalPricing: React.FC<{
       setTvaEnabled(formData.step6.tvaApplied || false);
       setTvaRate(19); // Default
       setPaymentNotes(formData.step6.paymentNotes || '');
+      // Un supplément déjà enregistré fait foi : il ne doit pas être re-proposé.
+      if (formData.step6.longDurationFee !== undefined) {
+        setLongDurationFee(formData.step6.longDurationFee || 0);
+        longDurationAutoApplied.current = true;
+      }
 
       // Devise de règlement + total forcé (le total forcé est stocké en DZD).
       const savedPaymentCurrency: Currency =
@@ -3131,6 +3152,16 @@ export const Step6FinalPricing: React.FC<{
     }
   }, [ownerDelivery, days, deliveryFee]);
 
+  // Pré-remplissage auto (une seule fois) du supplément longue durée dès que la
+  // durée atteint le seuil, tant que l'agence n'a rien saisi elle-même.
+  useEffect(() => {
+    if (longDurationAutoApplied.current) return;
+    if (isLongDuration(days) && (longDurationFee === '' || Number(longDurationFee) === 0)) {
+      longDurationAutoApplied.current = true;
+      setLongDurationFee(LONG_DURATION_FEE_DZD);
+    }
+  }, [days, longDurationFee]);
+
   // ── Taux de change déduit du véhicule ───────────────────────────────────────
   // Une agence qui annonce « 5 000 DA ou 35 € la journée » a implicitement convenu
   // d'un taux. On l'applique tant que l'utilisateur n'a pas saisi le sien, sinon le
@@ -3152,31 +3183,24 @@ export const Step6FinalPricing: React.FC<{
   /** Formate un montant stocké en DZD, converti vers la devise de règlement. */
   const fmtDzd = (dzd: number) => fmt(fromDzd(dzd, paymentCurrency, rate));
 
-  let calculatedBasePrice = 0;
-  let weeklyPrice = 0;
-  let monthlyPrice = 0;
-  let remainingPrice = 0;
-  // Always define weeks and remainingDays for UI
-  let weeks = 0;
-  let remainingDays = 0;
-  if (days === 7) {
-    calculatedBasePrice = unit.week;
-    weeklyPrice = calculatedBasePrice;
-    weeks = 1;
-    remainingDays = 0;
-  } else if (days === 30) {
-    calculatedBasePrice = unit.month;
-    monthlyPrice = calculatedBasePrice;
-    weeks = 0;
-    remainingDays = 0;
-  } else {
-    weeks = Math.floor(days / 7);
-    remainingDays = days % 7;
-    weeklyPrice = unit.week * weeks;
-    remainingPrice = unit.day * remainingDays;
-    calculatedBasePrice = weeklyPrice + remainingPrice;
-  }
-  calculatedBasePrice = roundIn(calculatedBasePrice, paymentCurrency);
+  // Prix de base : décomposition mois → semaines → jours, avec remontée au
+  // forfait supérieur dès qu'un reliquat coûterait plus cher (cf. rentalPricing).
+  // L'ancien calcul n'utilisait le tarif mensuel que pour EXACTEMENT 30 jours :
+  // une location d'un mois et un jour était facturée 4 semaines + 3 jours.
+  const priceBreakdown = computeRentalBasePrice(days, unit);
+  const months = priceBreakdown.months;
+  const weeks = priceBreakdown.weeks;
+  const remainingDays = priceBreakdown.days;
+  const monthlyPrice = priceBreakdown.monthsPrice;
+  const weeklyPrice = priceBreakdown.weeksPrice;
+  const remainingPrice = priceBreakdown.daysPrice;
+  const calculatedBasePrice = roundIn(priceBreakdown.total, paymentCurrency);
+
+  // Décomposition BRUTE de la durée (semaines pleines + jours), indépendante de
+  // la façon dont elle est facturée : c'est elle qu'affiche et qu'édite le bloc
+  // « Semaines / Jours » — un mois facturé au forfait reste 4 semaines + 2 jours.
+  const durationWeeks = Math.floor(days / 7);
+  const durationRemainingDays = days % 7;
 
   // Les extras sont saisis en dinars : on les convertit vers la devise de règlement.
   const servicesTotalDzd = formData.step5?.additionalServices?.reduce((sum, s) => sum + s.price, 0) || 0;
@@ -3195,8 +3219,17 @@ export const Step6FinalPricing: React.FC<{
   const deliveryFeeAmount = fromDzd(deliveryFeeAmountDzd, paymentCurrency, rate);
   const clientDeliveryFee = getDeliveryFeePayer(days, deliveryThresholdDays) === 'client' ? deliveryFeeAmount : 0;
 
+  // Supplément longue durée : saisi en dinars, facturé au client uniquement si
+  // la durée atteint le seuil (repasser sous le seuil l'annule automatiquement).
+  const longDurationFeeInputDzd = longDurationFee === '' ? 0 : Number(longDurationFee) || 0;
+  const longDurationFeeDzd = getClientLongDurationFee(longDurationFeeInputDzd, days);
+  const longDurationFeeAmount = fromDzd(longDurationFeeDzd, paymentCurrency, rate);
+
   /** Total calculé, dans la devise de règlement. */
-  const computedPrice = Math.max(0, roundIn(subtotal + tvaAmount + clientDeliveryFee, paymentCurrency));
+  const computedPrice = Math.max(
+    0,
+    roundIn(subtotal + tvaAmount + clientDeliveryFee + longDurationFeeAmount, paymentCurrency),
+  );
   /** `''` ⇒ l'agence n'a pas forcé le total : il suit le calcul. */
   const isManualTotal = manualTotal !== '';
   /** Total retenu, dans la devise de règlement. */
@@ -3254,6 +3287,8 @@ export const Step6FinalPricing: React.FC<{
         tvaApplied: tvaEnabled,
         tvaAmount: toDzd(tvaAmount, paymentCurrency, rate),
         deliveryFee: deliveryFeeAmountDzd,
+        // Montant réellement facturé (0 sous le seuil), déjà compris dans le total.
+        longDurationFee: longDurationFeeDzd,
         additionalFees: prev.step6?.additionalFees ?? prev.additionalFees,
         advancePayment: advancePaymentDzd,
         remainingPayment: remainingPaymentDzd,
@@ -3282,7 +3317,7 @@ export const Step6FinalPricing: React.FC<{
       deposit: deposit,
       totalPrice: totalPriceDzd
     }));
-  }, [totalPriceDzd, isManualTotal, manualTotal, tvaEnabled, tvaAmount, deliveryFeeAmountDzd, cautionEnabled, cautionCurrency, euroAmount, euroRate, assuranceEnabled, assurancePercentage, assuranceAmount, finalTotal, deposit, editedDeposit, paymentCurrency, advancePaymentDzd, remainingPaymentDzd, paymentNotes]);
+  }, [totalPriceDzd, isManualTotal, manualTotal, tvaEnabled, tvaAmount, deliveryFeeAmountDzd, longDurationFeeDzd, cautionEnabled, cautionCurrency, euroAmount, euroRate, assuranceEnabled, assurancePercentage, assuranceAmount, finalTotal, deposit, editedDeposit, paymentCurrency, advancePaymentDzd, remainingPaymentDzd, paymentNotes]);
 
   return (
     <div className="space-y-8">
@@ -3557,10 +3592,10 @@ export const Step6FinalPricing: React.FC<{
                 <input
                   type="number"
                   min="0"
-                  value={weeks}
+                  value={durationWeeks}
                   onChange={(e) => {
                     const newWeeks = Number(e.target.value) || 0;
-                    const newRemainingDays = remainingDays;
+                    const newRemainingDays = durationRemainingDays;
                     const totalNewDays = (newWeeks * 7) + newRemainingDays;
                     if (totalNewDays > 0 && formData.step1?.departureDate) {
                       const departure = new Date(formData.step1.departureDate);
@@ -3582,10 +3617,10 @@ export const Step6FinalPricing: React.FC<{
                   type="number"
                   min="0"
                   max="6"
-                  value={remainingDays}
+                  value={durationRemainingDays}
                   onChange={(e) => {
                     const newRemainingDays = Math.min(Number(e.target.value) || 0, 6);
-                    const totalNewDays = (weeks * 7) + newRemainingDays;
+                    const totalNewDays = (durationWeeks * 7) + newRemainingDays;
                     if (totalNewDays > 0 && formData.step1?.departureDate) {
                       const departure = new Date(formData.step1.departureDate);
                       const newReturn = new Date(departure);
@@ -3654,27 +3689,23 @@ export const Step6FinalPricing: React.FC<{
               <div className="bg-slate-50 rounded-lg p-4">
                 <h5 className="font-bold text-slate-900 mb-3">{lang === 'fr' ? 'Prix de Base du Véhicule' : 'سعر المركبة الأساسي'}</h5>
                 <div className="space-y-2">
-                  {days === 7 && (
+                  {/* Décomposition réelle appliquée au total : mois, puis semaines,
+                      puis jours — chaque ligne n'apparaît que si elle est facturée. */}
+                  {months > 0 && (
                     <div className="flex justify-between items-center">
-                      <span>1 {lang === 'fr' ? 'semaine' : 'أسبوع'} × {fmt(unit.week)}</span>
-                      <span className="font-bold">{fmt(weeklyPrice)}</span>
-                    </div>
-                  )}
-                  {days === 30 && (
-                    <div className="flex justify-between items-center">
-                      <span>1 {lang === 'fr' ? 'mois' : 'شهر'} × {fmt(unit.month)}</span>
+                      <span>{months} {lang === 'fr' ? (months > 1 ? 'mois' : 'mois') : 'شهر'} × {fmt(unit.month)}</span>
                       <span className="font-bold">{fmt(monthlyPrice)}</span>
                     </div>
                   )}
-                  {days !== 7 && days !== 30 && weeklyPrice > 0 && (
+                  {weeks > 0 && (
                     <div className="flex justify-between items-center">
-                      <span>{Math.floor(days / 7)} {lang === 'fr' ? 'semaine(s)' : 'أسبوع'} × {fmt(unit.week)}</span>
+                      <span>{weeks} {lang === 'fr' ? (weeks > 1 ? 'semaines' : 'semaine') : 'أسبوع'} × {fmt(unit.week)}</span>
                       <span className="font-bold">{fmt(weeklyPrice)}</span>
                     </div>
                   )}
-                  {days !== 7 && days !== 30 && remainingPrice > 0 && (
+                  {remainingDays > 0 && (
                     <div className="flex justify-between items-center">
-                      <span>{days % 7} {lang === 'fr' ? 'jour(s)' : 'يوم'} × {fmt(unit.day)}</span>
+                      <span>{remainingDays} {lang === 'fr' ? (remainingDays > 1 ? 'jours' : 'jour') : 'يوم'} × {fmt(unit.day)}</span>
                       <span className="font-bold">{fmt(remainingPrice)}</span>
                     </div>
                   )}
@@ -3746,6 +3777,17 @@ export const Step6FinalPricing: React.FC<{
             totalDays={days}
             thresholdDays={deliveryThresholdDays}
             autoConfig={ownerDelivery ? { amount: ownerDelivery.amount } : null}
+          />
+
+          {/* Supplément longue durée (>= 10 jours) : facturé au client EN PLUS du
+              prix de la location, désactivable et modifiable à la main ici. */}
+          <LongDurationFeeField
+            lang={lang}
+            value={longDurationFee}
+            onChange={setLongDurationFee}
+            totalDays={days}
+            thresholdDays={LONG_DURATION_THRESHOLD_DAYS}
+            defaultAmount={LONG_DURATION_FEE_DZD}
           />
 
           {/* TVA Section */}
@@ -4018,6 +4060,19 @@ export const Step6FinalPricing: React.FC<{
               </div>
             )}
 
+            {longDurationFeeAmount > 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-indigo-700">
+                  {lang === 'fr' ? 'Frais supplémentaires' : 'رسوم إضافية'}
+                  <span className="ms-1 text-xs font-medium text-violet-700">
+                    ({lang === 'fr' ? `longue durée ≥ ${LONG_DURATION_THRESHOLD_DAYS} j` : `مدة طويلة ≥ ${LONG_DURATION_THRESHOLD_DAYS} أيام`})
+                  </span>
+                  :
+                </span>
+                <span className="font-bold text-violet-700">+{fmt(longDurationFeeAmount)}</span>
+              </div>
+            )}
+
             {tvaEnabled && tvaAmount > 0 && (
               <div className="flex justify-between text-sm">
                 <span className="text-indigo-700">{lang === 'fr' ? 'TVA (' + tvaRate + '%):' : 'TVA (' + tvaRate + '%):'}</span>
@@ -4062,12 +4117,23 @@ export const Step6FinalPricing: React.FC<{
             
             <div className="flex justify-between text-sm">
               <span className="text-indigo-700">{lang === 'fr' ? 'Semaines:' : 'الأسابيع:'}</span>
-              <span className="font-bold text-indigo-900">{weeks}</span>
+              <span className="font-bold text-indigo-900">{durationWeeks}</span>
             </div>
             
             <div className="flex justify-between text-sm">
               <span className="text-indigo-700">{lang === 'fr' ? 'Jours restants:' : 'الأيام المتبقية:'}</span>
-              <span className="font-bold text-indigo-900">{remainingDays}</span>
+              <span className="font-bold text-indigo-900">{durationRemainingDays}</span>
+            </div>
+
+            <div className="flex justify-between text-sm">
+              <span className="text-indigo-700">{lang === 'fr' ? 'Facturation:' : 'الفوترة:'}</span>
+              <span className="font-bold text-indigo-900">
+                {[
+                  months > 0 ? `${months} ${lang === 'fr' ? 'mois' : 'شهر'}` : null,
+                  weeks > 0 ? `${weeks} ${lang === 'fr' ? (weeks > 1 ? 'sem.' : 'sem.') : 'أسبوع'}` : null,
+                  remainingDays > 0 ? `${remainingDays} ${lang === 'fr' ? 'j' : 'ي'}` : null,
+                ].filter(Boolean).join(' + ') || '—'}
+              </span>
             </div>
 
             <div className="border-t border-indigo-200 pt-2">

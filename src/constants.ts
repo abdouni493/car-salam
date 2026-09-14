@@ -19,11 +19,10 @@ export const SIDEBAR_ITEMS: SidebarItem[] = [
   { id: 'clients', label: { fr: 'Clients', ar: 'العملاء' }, icon: '👥' },
   { id: 'agencies', label: { fr: 'Agences', ar: 'الوكالات' }, icon: '🏢' },
   { id: 'team', label: { fr: 'Équipe', ar: 'الفريق' }, icon: '🤝' },
-  { id: 'personalization', label: { fr: 'Personalisation', ar: 'التخصيص' }, icon: '🎨' },
   { id: 'expenses', label: { fr: 'Dépenses', ar: 'المصاريف' }, icon: '📉' },
   { id: 'web-mgmt', label: { fr: 'Website management', ar: 'إدارة الموقع' }, icon: '🌐' },
   { id: 'web-orders', label: { fr: 'Website commandes', ar: 'طلبات الموقع' }, icon: '🛒' },
-  { id: 'car-gains', label: { fr: 'Gains par Véhicule', ar: 'الأرباح حسب المركبة' }, icon: '💰' },
+  { id: 'car-gains', label: { fr: 'Bénéfices par Véhicule', ar: 'أرباح المركبات' }, icon: '💰' },
   { id: 'reports', label: { fr: 'Rapports', ar: 'التقارير' }, icon: '📄' },
   { id: 'config', label: { fr: 'Configuration', ar: 'الإعدادات' }, icon: '🛠️' },
 ];

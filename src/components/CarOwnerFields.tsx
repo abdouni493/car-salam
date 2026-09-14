@@ -190,8 +190,11 @@ export const CarOwnerFields: React.FC<CarOwnerFieldsProps> = ({ value, onChange,
               onChange={() => handleCommissionType('per_day')}
               className="accent-amber-600"
             />
-            <span className="text-xs font-bold">
-              {lang === 'fr' ? 'Par jour (DA / jour)' : 'حسب اليوم (دج / يوم)'}
+            <span className="text-xs font-bold leading-tight">
+              {lang === 'fr' ? 'Par jour loué (DA / jour)' : 'لكل يوم كراء (دج / يوم)'}
+              <span className="block text-[10px] font-semibold text-amber-700/70">
+                {lang === 'fr' ? 'Recommandé' : 'موصى به'}
+              </span>
             </span>
           </label>
           <label className={`flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-colors ${
@@ -241,10 +244,42 @@ export const CarOwnerFields: React.FC<CarOwnerFieldsProps> = ({ value, onChange,
         </div>
 
         {isPerDay && (
+          <div className="rounded-xl border border-amber-200 bg-white/70 p-4 space-y-2.5">
+            <p className="text-[11px] font-black uppercase tracking-wider text-amber-800">
+              {lang === 'fr'
+                ? `L’agence gagne ${(value.commissionValue || 0).toLocaleString('fr-FR')} DA pour CHAQUE jour de location`
+                : `تكسب الوكالة ${(value.commissionValue || 0).toLocaleString('fr-FR')} دج عن كل يوم كراء`}
+            </p>
+            <p className="text-[11px] font-medium text-amber-700/80">
+              {lang === 'fr'
+                ? 'Le montant est multiplié par le nombre de jours de chaque location ; le reste revient au propriétaire.'
+                : 'يُضرب المبلغ في عدد أيام كل إيجار؛ والباقي يعود للمالك.'}
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {[1, 7, 30].map(d => (
+                <div key={d} className="rounded-lg bg-amber-100/70 px-3 py-2 text-center">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-amber-700">
+                    {d} {lang === 'fr' ? (d > 1 ? 'jours' : 'jour') : 'يوم'}
+                  </p>
+                  <p className="text-sm font-black tabular-nums text-amber-900">
+                    {((value.commissionValue || 0) * d).toLocaleString('fr-FR')}
+                    <span className="ms-1 text-[10px] font-bold text-amber-700/70">DA</span>
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {!isPerDay && (
           <p className="text-[11px] font-semibold text-amber-700/90 ms-1">
-            {lang === 'fr'
-              ? `L’agence gagne ${(value.commissionValue || 0).toLocaleString('fr-FR')} DA pour chaque jour loué. Ex. une location de 3 jours ⇒ ${((value.commissionValue || 0) * 3).toLocaleString('fr-FR')} DA.`
-              : `تكسب الوكالة ${(value.commissionValue || 0).toLocaleString('fr-FR')} دج عن كل يوم كراء. مثال: كراء 3 أيام ⇒ ${((value.commissionValue || 0) * 3).toLocaleString('fr-FR')} دج.`}
+            {isPercentage
+              ? (lang === 'fr'
+                  ? `L’agence retient ${(value.commissionValue || 0).toLocaleString('fr-FR')} % du total de chaque location, quelle qu’en soit la durée.`
+                  : `تحتفظ الوكالة بـ ${(value.commissionValue || 0).toLocaleString('fr-FR')} % من إجمالي كل إيجار مهما كانت مدته.`)
+              : (lang === 'fr'
+                  ? `L’agence gagne ${(value.commissionValue || 0).toLocaleString('fr-FR')} DA par location, quelle qu’en soit la durée.`
+                  : `تكسب الوكالة ${(value.commissionValue || 0).toLocaleString('fr-FR')} دج لكل إيجار مهما كانت مدته.`)}
           </p>
         )}
       </div>

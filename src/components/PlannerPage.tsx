@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Calendar, Users, Car as CarIcon, Plus, Search, Filter, Eye, Edit, Trash2, CheckCircle, XCircle, Clock, MapPin, Fuel, Camera, FileText, CreditCard, DollarSign, Printer, AlertTriangle, MoreVertical, Grid3x3, CalendarDays, List, X, Zap, Gauge, Heart, Phone } from 'lucide-react';
 import { ReservationDetailsView } from './ReservationDetailsView';
 import { CreateReservationForm } from './CreateReservationForm';
+import { computeRentalBasePrice } from '../utils/rentalPricing';
 import { EditReservationForm } from './EditReservationForm';
 import { formatAmount } from '../utils/format';
 import { ActivationModal, CompletionModal } from './ReservationDetailsView';
@@ -1070,18 +1071,20 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
             return null;
           }
 
-          // Financial calculations: compute base vehicle price from rates and days
+          // Repli tarifaire pour une réservation sans total enregistré : mêmes
+          // forfaits que l'étape de tarification (mois → semaines → jours).
           const servicesTotal = (reservation.additionalServices || []).reduce((sum, s) => sum + (s.price || 0), 0);
           const days = Number(reservation.totalDays) || 0;
-          const weeks = Math.floor(days / 7);
-          const remainingDays = days % 7;
-          const priceDay = reservation.car?.priceDay || reservation.car?.priceDay || 0;
-          const priceWeek = reservation.car?.priceWeek || (priceDay * 7);
-          const weeklyPrice = priceWeek * weeks;
-          const remainingPrice = priceDay * remainingDays;
-          const basePrice = weeklyPrice + remainingPrice;
+          const basePrice = computeRentalBasePrice(days, {
+            day: reservation.car?.priceDay || 0,
+            week: reservation.car?.priceWeek || 0,
+            month: reservation.car?.priceMonth || 0,
+          }).total;
           const subtotal = basePrice + servicesTotal;
-          const totalCost = subtotal + (Number(reservation.additionalFees) || 0) + (Number((reservation as any).tvaAmount) || 0);
+          const totalCost = subtotal
+            + (Number(reservation.additionalFees) || 0)
+            + (Number(reservation.longDurationFee) || 0)
+            + (Number((reservation as any).tvaAmount) || 0);
           
           // Use the actual totalPrice from database, not the recalculated one
           const displayTotalPrice = reservation.totalPrice || totalCost;

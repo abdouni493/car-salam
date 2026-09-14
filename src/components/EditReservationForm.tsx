@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { InspectionItem, Language, ReservationDetails, ReservationWizardData } from '../types';
 import { getDeliveryFeePayer } from '../utils/deliveryFee';
+import { getClientLongDurationFee } from '../utils/longDurationFee';
+import { computeRentalBasePrice } from '../utils/rentalPricing';
 import { ArrowLeft, ArrowRight, CheckCircle, AlertTriangle, Save, MapPin, CreditCard, Car as CarIcon, Camera, User, Plus, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Step1DatesLocations, Step2VehicleSelection, Step3DepartureInspection, Step4ClientSelection, Step5AdditionalServices, Step6FinalPricing } from './CreateReservationForm';
@@ -76,6 +78,7 @@ export const EditReservationForm: React.FC<EditReservationFormProps> = ({ lang, 
       tvaAmount: 0, // Will be calculated
       additionalFees: reservation.additionalFees,
       deliveryFee: reservation.deliveryFee || 0,
+      longDurationFee: reservation.longDurationFee || 0,
       paymentNotes: reservation.notes,
       advancePayment: reservation.advancePayment,
       remainingPayment: reservation.remainingPayment,
@@ -271,8 +274,16 @@ export const EditReservationForm: React.FC<EditReservationFormProps> = ({ lang, 
       console.log('📊 Total Days - Original:', reservation.totalDays, '→ New:', newTotalDays);
 
       // === PRICING CALCULATION ===
+      // Même décomposition que l'étape de tarification (mois → semaines → jours) :
+      // un simple prix/jour × durée ignorait les forfaits de la fiche véhicule et
+      // faisait diverger le total recalculé de celui affiché à l'écran.
       const pricePerDay = (reservation as any).pricePerDay || reservation.car?.priceDay || 0;
-      const basePrice = pricePerDay * newTotalDays;
+      const carForPricing = formData.step2?.selectedCar || reservation.car;
+      const basePrice = computeRentalBasePrice(newTotalDays, {
+        day: carForPricing?.priceDay || pricePerDay,
+        week: carForPricing?.priceWeek || 0,
+        month: carForPricing?.priceMonth || 0,
+      }).total;
       
       console.log('💰 Price/Day:', pricePerDay, 'DA');
       console.log('💰 Base Price (old):', (pricePerDay * (reservation.totalDays || 0)).toLocaleString(), 'DA');
@@ -289,6 +300,11 @@ export const EditReservationForm: React.FC<EditReservationFormProps> = ({ lang, 
       // ne sont donc pas facturés au client.
       const deliveryFee = formData.step6?.deliveryFee || 0;
       const clientDeliveryFee = getDeliveryFeePayer(newTotalDays) === 'client' ? deliveryFee : 0;
+      // Supplément longue durée : annulé d'office si la durée repasse sous le seuil.
+      const longDurationFee = getClientLongDurationFee(
+        formData.step6?.longDurationFee || 0,
+        newTotalDays,
+      );
 
       console.log('🛒 Services Total:', servicesTotal.toLocaleString(), 'DA', '| Services count:', formData.step5?.additionalServices?.length || 0);
       console.log('💳 Discount Amount:', discountAmount.toLocaleString(), 'DA', '(Type:', formData.discountType, ')');
@@ -305,7 +321,13 @@ export const EditReservationForm: React.FC<EditReservationFormProps> = ({ lang, 
       
       let newTotalPrice: number;
       
-      if (formData.step6?.isManualTotal && formData.step6?.totalPrice) {
+      if (!formData.step6?.isManualTotal && Number(formData.step6?.totalPrice) > 0) {
+        // L'étape de tarification tient `step6.totalPrice` à jour (forfaits,
+        // services, livraison, TVA, supplément longue durée, devise). C'est elle
+        // qui fait foi : la recopier évite tout écart avec ce que l'agent a validé.
+        newTotalPrice = Number(formData.step6.totalPrice);
+        console.log('💰 Total repris de l’étape de tarification:', newTotalPrice.toLocaleString(), 'DA');
+      } else if (formData.step6?.isManualTotal && formData.step6?.totalPrice) {
         // User manually edited the total price - use that value
         newTotalPrice = formData.step6.totalPrice;
         console.log('🔧 MANUAL TOTAL PRICE DETECTED: Using manually edited value', newTotalPrice.toLocaleString(), 'DA');
@@ -316,8 +338,8 @@ export const EditReservationForm: React.FC<EditReservationFormProps> = ({ lang, 
         console.log('🔧 MANUAL TOTAL PRICE (from top-level): Using manually edited value', newTotalPrice.toLocaleString(), 'DA');
       } else {
         // Calculate normally
-        newTotalPrice = basePrice + servicesTotal + additionalFees + tvaAmount + clientDeliveryFee;
-        console.log('💰 Calculation: basePrice (' + basePrice + ') + servicesTotal (' + servicesTotal + ') + additionalFees (' + additionalFees + ') + tvaAmount (' + tvaAmount + ') + livraison client (' + clientDeliveryFee + ') = ' + newTotalPrice);
+        newTotalPrice = basePrice + servicesTotal + additionalFees + tvaAmount + clientDeliveryFee + longDurationFee;
+        console.log('💰 Calculation: basePrice (' + basePrice + ') + servicesTotal (' + servicesTotal + ') + additionalFees (' + additionalFees + ') + tvaAmount (' + tvaAmount + ') + livraison client (' + clientDeliveryFee + ') + frais longue durée (' + longDurationFee + ') = ' + newTotalPrice);
       }
       
       console.log('💰 Subtotal before discount:', newTotalPrice.toLocaleString(), 'DA');
@@ -380,6 +402,7 @@ export const EditReservationForm: React.FC<EditReservationFormProps> = ({ lang, 
         additionalFees: formData.step6?.additionalFees || formData.additionalFees,
         // Le payeur (`delivery_fee_payer`) est recalculé par le trigger DB.
         deliveryFee,
+        longDurationFee,
         totalPrice: newTotalPrice,
 
         // Client (selected in edit mode)

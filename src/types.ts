@@ -525,6 +525,12 @@ export interface ReservationDetails {
    */
   deliveryFeePayer?: 'client' | 'owner';
   /**
+   * Supplément « longue durée » (DA) facturé au client en plus du prix de la
+   * location, à partir de 10 jours. 0 = pas de supplément. Cf.
+   * `utils/longDurationFee`.
+   */
+  longDurationFee?: number;
+  /**
    * CONCIERGERIE — commission de l'agence (DA), figée par trigger DB à la
    * clôture de la location (`commission_amount`). Absente sur les locations
    * non terminées ou les véhicules personnels.
@@ -577,6 +583,8 @@ export interface ReservationWizardPricing {
   additionalFees?: number;
   /** Frais de livraison (DA). Le payeur découle de la durée — cf. utils/deliveryFee. */
   deliveryFee?: number;
+  /** Supplément longue durée (DA) facturé au client — cf. utils/longDurationFee. */
+  longDurationFee?: number;
   advancePayment?: number;
   remainingPayment?: number;
   deposit?: number;
