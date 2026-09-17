@@ -275,6 +275,7 @@ export const Website: React.FC<WebsiteProps> = ({
             websiteSettings={websiteSettings}
             agencies={agencies}
             cars={cars}
+            specialOffers={specialOffers}
             onSelectCar={handleReserveClick}
             onStartRenting={() => setCurrentPage('offers')}
             onReserve={() => { setSelectedCar(null); setCurrentPage('orders'); }}

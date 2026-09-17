@@ -1,11 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Language, Agency, Car } from '../../types';
+import { Language, Agency, Car, SpecialOffer } from '../../types';
 import { motion, useScroll, useTransform } from 'motion/react';
 import {
   ChevronDown, Zap, ArrowRight, Car as CarIcon, MapPin, CalendarDays, Search,
-  Check, ShieldCheck, Headphones, Receipt, Gem, Wallet, Headset, ChevronRight, Loader2,
+  Check, ShieldCheck, Headphones, Receipt, Gem, Wallet, Headset, Loader2,
 } from 'lucide-react';
 import { DatabaseService } from '../../services/DatabaseService';
+import { PublicCarCard, PUBLIC_CAR_GRID_CLASS } from './PublicCarCard';
+import { CarDetailsModal } from './CarDetailsModal';
 import { Hero3D } from './Hero3D';
 import { ShowcaseBand } from './ShowcaseBand';
 import { HERO_SPLINE_SCENE_URL } from '../../constants';
@@ -201,20 +203,23 @@ function BookingSearchPanel({ lang, agencies, onSearch, hasBg }: {
 
 // ─── Voitures disponibles (sous le panneau de recherche) ─────────────────────
 /**
- * Grille des véhicules réellement louables aujourd'hui.
+ * Grille des véhicules réellement louables aujourd'hui, en cartes `PublicCarCard`
+ * — exactement celles de la page « Offres » (photo, caractéristiques, tarifs
+ * jour/semaine/mois/caution en dinar et en euro, bouton Réserver).
  *
  * Le statut porté par `Car` n'est qu'un repli : c'est `get_unavailable_car_ids`
  * qui dit lesquels sont déjà pris. Si la RPC est absente ou échoue, on affiche
  * toute la flotte plutôt qu'une page vide.
  */
-function AvailableCarsSection({ lang, cars, onSelectCar, onSeeAll }: {
+function AvailableCarsSection({ lang, cars, specialOffers, onSelectCar }: {
   lang: Language;
   cars: Car[];
+  specialOffers: SpecialOffer[];
   onSelectCar: (car: Car) => void;
-  onSeeAll: () => void;
 }) {
   const [unavailableIds, setUnavailableIds] = useState<string[] | null>(null);
   const [loading, setLoading] = useState(true);
+  const [detailsCar, setDetailsCar] = useState<Car | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -230,10 +235,8 @@ function AvailableCarsSection({ lang, cars, onSelectCar, onSeeAll }: {
     .filter(c => c.status !== 'maintenance')
     .filter(c => !unavailableIds || !unavailableIds.includes(c.id));
 
-  const shown = available.slice(0, 6);
-
   return (
-    <section id="voitures-disponibles" className="relative py-20 px-4 sm:px-6 lg:px-8" style={{ background: C.bg }}>
+    <section id="voitures-disponibles" className="relative py-20 px-3 sm:px-6 lg:px-8" style={{ background: C.bg }}>
       <div className="absolute inset-0 pointer-events-none" style={{
         background: `radial-gradient(ellipse 70% 50% at 50% 0%, ${C.accentDim}, transparent)`,
       }} />
@@ -266,83 +269,34 @@ function AvailableCarsSection({ lang, cars, onSelectCar, onSeeAll }: {
           <div className="flex items-center justify-center py-16">
             <Loader2 size={30} className="animate-spin" style={{ color: C.accent }} />
           </div>
-        ) : shown.length > 0 && (
-          <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {shown.map((c, i) => (
-                <motion.button
-                  key={c.id}
-                  initial={{ opacity: 0, y: 30 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ duration: 0.5, delay: i * 0.08 }}
-                  whileHover={{ y: -6 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => onSelectCar(c)}
-                  className="text-left rounded-2xl overflow-hidden cursor-pointer group"
-                  style={{ background: C.surface, border: '1px solid var(--color-vel-border)' }}
-                >
-                  <div className="h-44 overflow-hidden relative" style={{ background: 'var(--color-vel-elevated)' }}>
-                    {c.images?.[0] ? (
-                      <img src={c.images[0]} alt={`${c.brand} ${c.model}`} loading="lazy"
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                        referrerPolicy="no-referrer" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-5xl">🚗</div>
-                    )}
-                    <span className="absolute top-3 left-3 px-2.5 py-1 rounded-lg text-[11px] font-bold"
-                      style={{ background: 'rgba(255,255,255,0.92)', color: C.accent, fontFamily: 'var(--font-display)' }}>
-                      {{ fr: 'Disponible', ar: 'متاحة' }[lang]}
-                    </span>
-                  </div>
-
-                  <div className="p-5">
-                    <h3 className="font-black text-vel-ink text-base mb-0.5" style={{ fontFamily: 'var(--font-display)' }}>
-                      {c.brand} <span style={{ color: C.accent }}>{c.model}</span>
-                    </h3>
-                    <p className="text-vel-muted text-xs mb-4">{c.year} · {c.transmission} · {c.seats} {{ fr: 'places', ar: 'مقاعد' }[lang]}</p>
-
-                    {/* Journée, semaine et mois côte à côte : le forfait est visible d'emblée */}
-                    <div className="grid grid-cols-3 gap-2 mb-4">
-                      {[
-                        { l: { fr: 'Jour', ar: 'يوم' }, v: c.priceDay },
-                        { l: { fr: 'Semaine', ar: 'أسبوع' }, v: c.priceWeek || c.priceDay * 7 },
-                        { l: { fr: 'Mois', ar: 'شهر' }, v: c.priceMonth || c.priceDay * 30 },
-                      ].map((t, k) => (
-                        <div key={k} className="rounded-xl px-2 py-2 text-center"
-                          style={{ background: 'rgba(234, 88, 12, 0.06)', border: '1px solid rgba(234, 88, 12, 0.12)' }}>
-                          <p className="text-[10px] font-bold uppercase tracking-wider text-vel-muted">{t.l[lang]}</p>
-                          <p className="font-black text-sm" style={{ color: C.accent, fontFamily: 'var(--font-display)' }}>
-                            {Math.round(t.v).toLocaleString()}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-
-                    <span className="inline-flex items-center gap-1.5 text-sm font-bold" style={{ color: C.accent, fontFamily: 'var(--font-display)' }}>
-                      {{ fr: 'Réserver', ar: 'احجز' }[lang]} <ChevronRight size={15} />
-                    </span>
-                  </div>
-                </motion.button>
-              ))}
-            </div>
-
-            {available.length > shown.length && (
-              <div className="text-center mt-12">
-                <motion.button
-                  onClick={onSeeAll}
-                  whileHover={{ scale: 1.04 }}
-                  whileTap={{ scale: 0.96 }}
-                  className="btn-vel-cta px-8 py-4 text-sm"
-                >
-                  {{ fr: 'Voir les', ar: 'عرض' }[lang]} {available.length} {{ fr: 'voitures disponibles', ar: 'سيارة متاحة' }[lang]}
-                  <ArrowRight size={17} />
-                </motion.button>
-              </div>
-            )}
-          </>
+        ) : (
+          /* Toute la flotte disponible, dans la grille de la page « Offres » :
+             2 cartes par rangée sur téléphone (4 véhicules par écran). */
+          <div className={PUBLIC_CAR_GRID_CLASS}>
+            {available.map((c, i) => (
+              <PublicCarCard
+                key={c.id}
+                lang={lang}
+                car={c}
+                specialOffers={specialOffers}
+                index={i}
+                onOpenDetails={setDetailsCar}
+                onOrder={onSelectCar}
+              />
+            ))}
+          </div>
         )}
       </div>
+
+      {/* Fiche détaillée — même modale que la page « Offres » */}
+      {detailsCar && (
+        <CarDetailsModal
+          lang={lang}
+          car={detailsCar}
+          onClose={() => setDetailsCar(null)}
+          onOrder={onSelectCar}
+        />
+      )}
     </section>
   );
 }
@@ -355,6 +309,8 @@ interface WelcomeProps {
   agencies: Agency[];
   /** Flotte visible du site : alimente la section « Voitures disponibles ». */
   cars: Car[];
+  /** Offres spéciales en cours — badges promo et prix barrés sur les cartes. */
+  specialOffers: SpecialOffer[];
   /** Démarre le wizard sur une voiture précise (clic depuis la grille du landing). */
   onSelectCar: (car: Car) => void;
   /** Ouvre la grille des voitures ("Voir les voitures"). */
@@ -367,7 +323,7 @@ interface WelcomeProps {
   showcaseImage?: string;
 }
 
-export const Welcome: React.FC<WelcomeProps> = ({ lang, websiteSettings, agencies, cars, onSelectCar, onStartRenting, onReserve, onSearch, showcaseImage }) => {
+export const Welcome: React.FC<WelcomeProps> = ({ lang, websiteSettings, agencies, cars, specialOffers, onSelectCar, onStartRenting, onReserve, onSearch, showcaseImage }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll({ target: containerRef });
   const heroOpacity = useTransform(scrollYProgress, [0, 0.4], [1, 0]);
@@ -595,7 +551,7 @@ export const Welcome: React.FC<WelcomeProps> = ({ lang, websiteSettings, agencie
       {/* ══ VOITURES DISPONIBLES ══
           Juste sous le panneau de recherche : en défilant depuis le filtre, le
           visiteur tombe directement sur la flotte réellement disponible. */}
-      <AvailableCarsSection lang={lang} cars={cars} onSelectCar={onSelectCar} onSeeAll={onStartRenting} />
+      <AvailableCarsSection lang={lang} cars={cars} specialOffers={specialOffers} onSelectCar={onSelectCar} />
 
       {/* ══ CONFIANCE & CONFORT — cartes à coche ══ */}
       <section className="relative py-24 px-4 sm:px-6 lg:px-8" style={{
