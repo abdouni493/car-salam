@@ -92,7 +92,10 @@ function BookingSearchPanel({ lang, agencies, onSearch, hasBg }: {
 
   const isValid = !!departureAgencyId && !!from && !!to && from <= to && from >= today;
 
-  const fieldBase = "w-full px-4 py-3 rounded-xl border border-vel-border-strong bg-white text-sm font-medium text-vel-ink outline-none hover:border-vel-cta focus:border-vel-cta focus:ring-4 focus:ring-vel-cta/15 transition-all duration-200";
+  // Champs posés sur le panneau translucide : un fond blanc à 80 % + flou
+  // gardent l'effet verre tout en tenant le contraste du texte (saisies en
+  // `font-bold` sur `vel-ink`, soit >12:1 — lisibles par-dessus le hero).
+  const fieldBase = "w-full px-4 py-3 rounded-xl border border-vel-border-strong bg-white/80 backdrop-blur-sm text-sm font-bold text-vel-ink outline-none hover:border-vel-cta focus:border-vel-cta focus:ring-4 focus:ring-vel-cta/15 transition-all duration-200";
   const selectClass = `${fieldBase} cursor-pointer`;
   const inputClass = fieldBase;
 
@@ -146,11 +149,13 @@ function BookingSearchPanel({ lang, agencies, onSearch, hasBg }: {
       // Premier bloc de la page : il apparaît tout de suite, sans attendre
       // l'entrée du titre et du visuel 3D.
       transition={{ duration: 0.5, delay: 0.05 }}
-      className="relative z-20 rounded-3xl p-6 sm:p-8"
+      // Verre dépoli : le panneau laisse deviner le hero derrière lui, mais le
+      // flou + le voile blanc à 72 % maintiennent le texte au contraste AA.
+      className="relative z-20 rounded-3xl p-6 sm:p-8 backdrop-blur-2xl backdrop-saturate-150"
       style={{
-        background: '#FFFFFF',
-        border: '1px solid var(--color-vel-border)',
-        boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.25)',
+        background: 'linear-gradient(160deg, rgba(255,255,255,0.82), rgba(255,255,255,0.66))',
+        border: '1px solid rgba(255, 255, 255, 0.65)',
+        boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.25), inset 0 1px 0 rgba(255,255,255,0.9)',
       }}
     >
       <p className="text-xs font-bold tracking-[0.2em] uppercase mb-5 flex items-center gap-2"
@@ -162,7 +167,7 @@ function BookingSearchPanel({ lang, agencies, onSearch, hasBg }: {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_1fr_auto] gap-4 items-end">
         {fields.map((f, i) => (
           <div key={i}>
-            <label className="flex items-center gap-1.5 text-[11px] font-bold text-vel-muted uppercase tracking-wider mb-2"
+            <label className="flex items-center gap-1.5 text-[11.5px] font-extrabold text-vel-ink uppercase tracking-wider mb-2"
               style={{ fontFamily: 'var(--font-display)' }}>
               {f.icon} {f.label}
             </label>
@@ -193,7 +198,7 @@ function BookingSearchPanel({ lang, agencies, onSearch, hasBg }: {
         </motion.button>
       </div>
 
-      <p className="text-vel-dim text-[11px] mt-4 font-medium">
+      <p className="text-vel-muted text-[12px] mt-4 font-semibold">
         {{ fr: 'Nous afficherons uniquement les voitures disponibles sur la période choisie.',
            ar: 'سنعرض فقط السيارات المتاحة في الفترة المختارة.' }[lang]}
       </p>
