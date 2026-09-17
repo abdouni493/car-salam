@@ -3,7 +3,7 @@ import { Language, Agency, Car, SpecialOffer } from '../../types';
 import { motion, useScroll, useTransform } from 'motion/react';
 import {
   ChevronDown, Zap, ArrowRight, Car as CarIcon, MapPin, CalendarDays, Search,
-  Check, ShieldCheck, Headphones, Receipt, Gem, Wallet, Headset, Loader2,
+  Check, ShieldCheck, Headphones, Receipt, Gem, Wallet, Headset,
 } from 'lucide-react';
 import { DatabaseService } from '../../services/DatabaseService';
 import { PublicCarCard, PUBLIC_CAR_GRID_CLASS } from './PublicCarCard';
@@ -208,13 +208,17 @@ function BookingSearchPanel({ lang, agencies, onSearch, hasBg }: {
 
 // ─── Voitures disponibles (sous le panneau de recherche) ─────────────────────
 /**
- * Grille des véhicules réellement louables aujourd'hui, en cartes `PublicCarCard`
- * — exactement celles de la page « Offres » (photo, caractéristiques, tarifs
+ * Toute la flotte visible du site, en cartes `PublicCarCard` — exactement
+ * celles de la page « Offres » (photo, caractéristiques, tarifs
  * jour/semaine/mois/caution en dinar et en euro, bouton Réserver).
  *
- * Le statut porté par `Car` n'est qu'un repli : c'est `get_unavailable_car_ids`
- * qui dit lesquels sont déjà pris. Si la RPC est absente ou échoue, on affiche
- * toute la flotte plutôt qu'une page vide.
+ * L'accueil liste les mêmes véhicules que « Offres » : filtrer sur la seule
+ * journée en cours masquait des voitures parfaitement louables la semaine
+ * suivante, et le visiteur croyait le parc à moitié vide. Seules les voitures
+ * en maintenance sortent de la liste ; celles déjà prises aujourd'hui restent
+ * affichées avec un bandeau « Louée aujourd'hui ». `get_unavailable_car_ids`
+ * ne sert plus qu'à ce marquage : RPC absente ou en échec → aucun bandeau, la
+ * grille reste complète.
  */
 function AvailableCarsSection({ lang, cars, specialOffers, onSelectCar }: {
   lang: Language;
@@ -236,9 +240,9 @@ function AvailableCarsSection({ lang, cars, specialOffers, onSelectCar }: {
     return () => { cancelled = true; };
   }, []);
 
-  const available = cars
-    .filter(c => c.status !== 'maintenance')
-    .filter(c => !unavailableIds || !unavailableIds.includes(c.id));
+  const fleet = cars.filter(c => c.status !== 'maintenance');
+  const isBusyToday = (id: string) => !!unavailableIds?.includes(id);
+  const freeToday = fleet.filter(c => !isBusyToday(c.id));
 
   return (
     <section id="voitures-disponibles" className="relative py-20 px-3 sm:px-6 lg:px-8" style={{ background: C.bg }}>
@@ -264,32 +268,39 @@ function AvailableCarsSection({ lang, cars, specialOffers, onSelectCar }: {
           <p className="text-vel-muted mt-3">
             {loading
               ? { fr: 'Vérification des disponibilités…', ar: 'جاري التحقق من التوفر…' }[lang]
-              : available.length > 0
-                ? `${available.length} ${{ fr: 'véhicule(s) prêt(s) à partir', ar: 'سيارة جاهزة للانطلاق' }[lang]}`
-                : { fr: 'Aucun véhicule libre aujourd\u2019hui — choisissez une autre période ci-dessus.', ar: 'لا توجد سيارة متاحة اليوم — اختر فترة أخرى أعلاه.' }[lang]}
+              : fleet.length === 0
+                ? { fr: 'Aucun véhicule au catalogue pour le moment.', ar: 'لا توجد سيارات في الكتالوغ حالياً.' }[lang]
+                : freeToday.length > 0
+                  ? `${freeToday.length}/${fleet.length} ${{ fr: 'véhicule(s) prêt(s) à partir aujourd\u2019hui', ar: 'سيارة جاهزة للانطلاق' }[lang]}`
+                  : { fr: 'Toutes nos voitures sont prises aujourd\u2019hui — choisissez une autre période ci-dessus.', ar: 'لا توجد سيارة متاحة اليوم — اختر فترة أخرى أعلاه.' }[lang]}
           </p>
         </motion.div>
 
-        {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 size={30} className="animate-spin" style={{ color: C.accent }} />
-          </div>
-        ) : (
-          /* Toute la flotte disponible, dans la grille de la page « Offres » :
-             2 cartes par rangée sur téléphone (4 véhicules par écran). */
-          <div className={PUBLIC_CAR_GRID_CLASS}>
-            {available.map((c, i) => (
-              <PublicCarCard
-                key={c.id}
-                lang={lang}
-                car={c}
-                specialOffers={specialOffers}
-                index={i}
-                onOpenDetails={setDetailsCar}
-                onOrder={onSelectCar}
-              />
-            ))}
-          </div>
+        {/* Toute la flotte, dans la grille de la page « Offres » : 2 cartes par
+            rangée sur téléphone (4 véhicules par écran). La grille n'attend pas
+            la RPC de disponibilité — sinon un appel lent laissait la section
+            vide alors que les voitures étaient déjà connues ; les bandeaux
+            « Louée aujourd'hui » se posent à l'arrivée des identifiants. */}
+        <div className={PUBLIC_CAR_GRID_CLASS}>
+          {fleet.map((c, i) => (
+            <PublicCarCard
+              key={c.id}
+              lang={lang}
+              car={c}
+              specialOffers={specialOffers}
+              index={i}
+              busyToday={isBusyToday(c.id)}
+              onOpenDetails={setDetailsCar}
+              onOrder={onSelectCar}
+            />
+          ))}
+        </div>
+
+        {!loading && fleet.length === 0 && (
+          <p className="text-center text-vel-muted py-16 text-lg font-bold"
+            style={{ fontFamily: 'var(--font-display)' }}>
+            {{ fr: 'Aucun véhicule disponible actuellement', ar: 'لا توجد سيارات متاحة حالياً' }[lang]}
+          </p>
         )}
       </div>
 

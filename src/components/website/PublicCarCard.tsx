@@ -24,6 +24,12 @@ interface PublicCarCardProps {
   onOpenDetails: (car: Car) => void;
   /** Clic sur « Réserver » : démarre le wizard sur cette voiture. */
   onOrder: (car: Car) => void;
+  /**
+   * Véhicule déjà loué sur la période consultée (aujourd'hui pour l'accueil).
+   * La carte reste entière et réservable — seul un bandeau le signale, pour
+   * d'autres dates la voiture est parfaitement louable.
+   */
+  busyToday?: boolean;
 }
 
 /**
@@ -39,7 +45,7 @@ interface PublicCarCardProps {
  * avec la voiture présélectionnée (stopPropagation pour ne pas ouvrir les détails).
  */
 export const PublicCarCard: React.FC<PublicCarCardProps> = ({
-  lang, car, specialOffers, index = 0, onOpenDetails, onOrder,
+  lang, car, specialOffers, index = 0, onOpenDetails, onOrder, busyToday = false,
 }) => {
   const reduceMotion = useReducedMotion();
 
@@ -101,6 +107,12 @@ export const PublicCarCard: React.FC<PublicCarCardProps> = ({
           <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md text-[10px] font-bold text-white shadow"
             style={{ background: 'var(--color-vel-cta)', fontFamily: 'var(--font-display)' }}>
             {promo.label || `-${Math.round((1 - promo.newPrice / promo.oldPrice) * 100)}%`}
+          </div>
+        )}
+        {busyToday && (
+          <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md text-[9px] font-bold text-white backdrop-blur-sm"
+            style={{ background: 'rgba(15, 23, 42, 0.72)', border: '1px solid rgba(255,255,255,0.2)', fontFamily: 'var(--font-display)' }}>
+            {{ fr: "Louée aujourd'hui", ar: 'مستأجرة اليوم' }[lang]}
           </div>
         )}
       </div>
