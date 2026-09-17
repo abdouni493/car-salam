@@ -1,16 +1,27 @@
 import React, { useState } from 'react';
-import { Upload, FileText, Loader2, X } from 'lucide-react';
-import { useWizard } from './WizardContext';
+import { Upload, FileText, Loader2, X, Info, AlertTriangle } from 'lucide-react';
+import { useWizard, MIN_DRIVER_AGE } from './WizardContext';
 import { uploadClientProfilePhoto, uploadClientDocument } from '../../../services/uploadClientImage';
 import { SectionCard, SectionTitle, FieldLabel, inputClass, inputStyle, focusInput, blurInput, C, ALGERIAN_WILAYAS } from './wizardUi';
 
 /**
- * Étape 5 — Informations personnelles.
- * Reprend exactement les champs, libellés et validations du flux existant
- * (photo, identité, permis, document additionnel, documents scannés, adresse).
+ * Étape 4 — Informations personnelles.
+ *
+ * Toutes les informations sont FACULTATIVES : le client les complète à l'agence
+ * au moment de récupérer le véhicule. Seule exception, la date de naissance :
+ * elle est exigée parce qu'elle sert à vérifier l'âge minimum légal (18 ans),
+ * et une date sous cet âge bloque la réservation.
  */
 export const StepPersonalInfo: React.FC = () => {
-  const { lang, personal, setPersonal } = useWizard();
+  const { lang, personal, setPersonal, clientAge, isUnderage } = useWizard();
+
+  // Borne haute du sélecteur de date : la date de naissance d'une personne qui
+  // atteint tout juste 18 ans aujourd'hui.
+  const maxBirthDate = (() => {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() - MIN_DRIVER_AGE);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  })();
 
   const [uploadingProfile, setUploadingProfile] = useState(false);
   const [uploadingDocument, setUploadingDocument] = useState(false);
@@ -89,16 +100,25 @@ export const StepPersonalInfo: React.FC = () => {
         {uploadError && <p className="text-vel-gold-dark text-sm">{uploadError}</p>}
       </SectionCard>
 
-      {/* Personal info */}
+      {/* Personal info — tout est facultatif sauf la date de naissance */}
       <SectionCard>
         <SectionTitle>👤 {{ fr: 'Informations Personnelles', ar: 'معلومات شخصية' }[lang]}</SectionTitle>
+
+        <div className="flex items-start gap-3 px-4 py-3 rounded-xl"
+          style={{ background: 'rgba(234, 88, 12, 0.05)', border: '1px solid rgba(234, 88, 12, 0.16)' }}>
+          <Info size={17} style={{ color: C.accent }} className="flex-shrink-0 mt-0.5" />
+          <p className="text-vel-slate text-sm leading-relaxed">
+            {{ fr: 'Ces informations sont facultatives : vous pouvez les compléter à l\u2019agence lors de la récupération du véhicule. Seule la date de naissance est demandée maintenant, pour vérifier l\u2019âge minimum de conduite.',
+               ar: 'هذه المعلومات اختيارية: يمكنك إكمالها في الوكالة عند استلام السيارة. تاريخ الميلاد وحده مطلوب الآن للتحقق من السن الأدنى للقيادة.' }[lang]}
+          </p>
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {[
-            { label: { fr: 'Nom de famille *', ar: 'الاسم الأخير *' }, name: 'lastName', type: 'text' },
-            { label: { fr: 'Prénom *', ar: 'الاسم الأول *' }, name: 'firstName', type: 'text' },
-            { label: { fr: 'Téléphone *', ar: 'الهاتف *' }, name: 'phone', type: 'tel' },
-            { label: { fr: 'Email *', ar: 'البريد الإلكتروني *' }, name: 'email', type: 'email' },
-            { label: { fr: 'Date de naissance', ar: 'تاريخ الميلاد' }, name: 'dateOfBirth', type: 'date' },
+            { label: { fr: 'Nom de famille', ar: 'الاسم الأخير' }, name: 'lastName', type: 'text' },
+            { label: { fr: 'Prénom', ar: 'الاسم الأول' }, name: 'firstName', type: 'text' },
+            { label: { fr: 'Téléphone', ar: 'الهاتف' }, name: 'phone', type: 'tel' },
+            { label: { fr: 'Email', ar: 'البريد الإلكتروني' }, name: 'email', type: 'email' },
             { label: { fr: 'Lieu de naissance', ar: 'مكان الميلاد' }, name: 'placeOfBirth', type: 'text' },
           ].map(f => (
             <div key={f.name}>
@@ -108,15 +128,64 @@ export const StepPersonalInfo: React.FC = () => {
                 onFocus={focusInput} onBlur={blurInput} />
             </div>
           ))}
+
+          {/* Date de naissance — seul champ obligatoire (contrôle des 18 ans) */}
+          <div>
+            <FieldLabel>{{ fr: 'Date de naissance *', ar: 'تاريخ الميلاد *' }[lang]}</FieldLabel>
+            <input
+              type="date"
+              name="dateOfBirth"
+              value={personal.dateOfBirth}
+              max={maxBirthDate}
+              onChange={handleChange}
+              className={inputClass}
+              style={{ ...inputStyle, ...(isUnderage ? { borderColor: 'var(--color-vel-cta)' } : {}) }}
+              onFocus={focusInput}
+              onBlur={blurInput}
+              aria-invalid={isUnderage}
+            />
+            {!personal.dateOfBirth && (
+              <p className="text-vel-muted text-xs mt-2">
+                {{ fr: `Obligatoire — la location est réservée aux personnes de ${MIN_DRIVER_AGE} ans et plus.`,
+                   ar: `مطلوب — الإيجار مخصص لمن بلغوا ${MIN_DRIVER_AGE} سنة فأكثر.` }[lang]}
+              </p>
+            )}
+            {personal.dateOfBirth && !isUnderage && clientAge !== null && (
+              <p className="text-vel-muted text-xs mt-2">
+                {{ fr: `${clientAge} ans — âge minimum respecté ✅`, ar: `${clientAge} سنة — السن الأدنى مستوفى ✅` }[lang]}
+              </p>
+            )}
+          </div>
         </div>
+
+        {/* Blocage explicite des mineurs */}
+        {isUnderage && (
+          <p className="flex items-start gap-2 text-sm font-bold px-4 py-3 rounded-xl"
+            style={{ color: 'var(--color-vel-cta-bright)', background: 'rgba(234, 88, 12, 0.08)', border: '1px solid rgba(234, 88, 12, 0.3)' }}>
+            <AlertTriangle size={17} className="flex-shrink-0 mt-0.5" />
+            {{ fr: `Vous avez ${clientAge} ans. La location est interdite aux moins de ${MIN_DRIVER_AGE} ans : la réservation ne peut pas être poursuivie.`,
+               ar: `عمرك ${clientAge} سنة. الإيجار ممنوع لمن هم دون ${MIN_DRIVER_AGE} سنة: لا يمكن متابعة الحجز.` }[lang]}
+          </p>
+        )}
       </SectionCard>
 
       {/* License */}
       <SectionCard>
         <SectionTitle>🪪 {{ fr: 'Permis de conduire', ar: 'رخصة القيادة' }[lang]}</SectionTitle>
+
+        {/* Le permis n'est plus exigé en ligne, mais il l'est au comptoir. */}
+        <div className="flex items-start gap-3 px-4 py-3 rounded-xl"
+          style={{ background: 'rgba(234, 88, 12, 0.08)', border: '1px solid rgba(234, 88, 12, 0.3)' }}>
+          <AlertTriangle size={17} style={{ color: C.accent }} className="flex-shrink-0 mt-0.5" />
+          <p className="text-sm leading-relaxed font-bold" style={{ color: 'var(--color-vel-cta-bright)' }}>
+            {{ fr: 'Le permis de conduire est OBLIGATOIRE au moment de récupérer la voiture. Vous pouvez laisser ces champs vides ici, mais présentez-vous à l\u2019agence avec votre permis original en cours de validité.',
+               ar: 'رخصة القيادة إلزامية عند استلام السيارة. يمكنك ترك هذه الحقول فارغة هنا، لكن احضر إلى الوكالة برخصتك الأصلية سارية المفعول.' }[lang]}
+          </p>
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {[
-            { label: { fr: 'N° Permis *', ar: 'رقم الرخصة *' }, name: 'licenseNumber', type: 'text' },
+            { label: { fr: 'N° Permis', ar: 'رقم الرخصة' }, name: 'licenseNumber', type: 'text' },
             { label: { fr: 'Expiration', ar: 'انتهاء الصلاحية' }, name: 'licenseExpiration', type: 'date' },
             { label: { fr: 'Date de délivrance', ar: 'تاريخ الإصدار' }, name: 'licenseDelivery', type: 'date' },
             { label: { fr: 'Lieu de délivrance', ar: 'مكان الإصدار' }, name: 'licenseDeliveryPlace', type: 'text' },
@@ -211,7 +280,7 @@ export const StepPersonalInfo: React.FC = () => {
       <SectionCard>
         <SectionTitle>🏠 {{ fr: 'Adresse & Localisation', ar: 'العنوان والموقع' }[lang]}</SectionTitle>
         <div>
-          <FieldLabel>{{ fr: 'Wilaya *', ar: 'الولاية *' }[lang]}</FieldLabel>
+          <FieldLabel>{{ fr: 'Wilaya', ar: 'الولاية' }[lang]}</FieldLabel>
           <select name="wilaya" value={personal.wilaya} onChange={handleChange}
             className={inputClass} style={{ ...inputStyle, cursor: 'pointer' }}
             onFocus={focusInput} onBlur={blurInput}>

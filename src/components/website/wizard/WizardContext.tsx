@@ -3,6 +3,7 @@ import { Language, Car, Agency, SpecialOffer, ReservationStep2, AdditionalServic
 import { DatabaseService } from '../../../services/DatabaseService';
 import { getCurrentSpecialOfferForCar } from '../../../utils/specialOffers';
 import { Currency, carEurRate, dzdToEur, formatMoney } from '../../../utils/currency';
+import { computeRentalBasePrice, RentalPriceBreakdown, RentalUnitPrices } from '../../../utils/rentalPricing';
 import { fromYmd } from './wizardUi';
 
 // ═══ Modèle d'état du wizard de réservation (source unique de vérité) ═══
@@ -22,6 +23,21 @@ export interface WizardSearchCriteria {
 }
 
 export const WIZARD_STEP_COUNT = 5;
+
+/** Âge minimum légal pour louer un véhicule. */
+export const MIN_DRIVER_AGE = 18;
+
+/** Âge révolu à la date du jour, ou `null` si la date est vide/illisible. */
+export const ageFromYmd = (ymd?: string): number | null => {
+  if (!ymd || ymd.length < 10) return null;
+  const birth = fromYmd(ymd);
+  if (Number.isNaN(birth.getTime())) return null;
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const m = today.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age -= 1;
+  return age;
+};
 
 const emptyPersonal: ReservationStep2 = {
   photo: '',
@@ -88,6 +104,10 @@ interface WizardContextValue {
   // Étape 5 — informations personnelles
   personal: ReservationStep2;
   setPersonal: React.Dispatch<React.SetStateAction<ReservationStep2>>;
+  /** Âge du client déduit de sa date de naissance (null si non renseignée). */
+  clientAge: number | null;
+  /** true dès qu'une date de naissance saisie place le client sous 18 ans. */
+  isUnderage: boolean;
 
   // Étape 3 — assurance de protection
   availableAssurances: ProtectionAssurance[];
@@ -117,6 +137,12 @@ interface WizardContextValue {
   // Tous ces montants sont en DINARS : le dinar est la devise de référence.
   days: number;
   promo: SpecialOffer | undefined;
+  /** Tarifs unitaires du véhicule retenus pour le calcul (jour / semaine / mois). */
+  unitPrices: RentalUnitPrices;
+  /** Décomposition mois + semaines + jours appliquée au prix du véhicule. */
+  breakdown: RentalPriceBreakdown;
+  /** Applique la décomposition forfaitaire à une durée arbitraire (propositions). */
+  priceForDays: (n: number) => number;
   basePrice: number;
   discount: number;
   servicesTotal: number;
@@ -147,6 +173,42 @@ export const useWizard = (): WizardContextValue => {
   const ctx = useContext(WizardContext);
   if (!ctx) throw new Error('useWizard must be used within ReservationWizardProvider');
   return ctx;
+};
+
+/**
+ * Les erreurs métier de `create_website_reservation` remontent sous forme de
+ * codes (CAR_UNAVAILABLE, CLIENT_UNDERAGE…). Les afficher bruts au client ne
+ * lui dit rien : on les traduit, et on garde le message serveur en repli.
+ */
+const friendlySubmitError = (raw: string | undefined, lang: Language): string => {
+  const code = (raw || '').toUpperCase();
+  const retry = lang === 'fr'
+    ? ' Vos informations sont conservées, vous pouvez réessayer.'
+    : ' تم الاحتفاظ بمعلوماتك، يمكنك المحاولة مرة أخرى.';
+
+  if (code.includes('CLIENT_UNDERAGE')) {
+    return lang === 'fr'
+      ? `La location est interdite aux moins de ${MIN_DRIVER_AGE} ans. Vérifiez votre date de naissance à l'étape « Informations ».`
+      : `الإيجار ممنوع لمن هم دون ${MIN_DRIVER_AGE} سنة. تحقق من تاريخ ميلادك في خطوة «المعلومات».`;
+  }
+  if (code.includes('CLIENT_BIRTHDATE_REQUIRED')) {
+    return lang === 'fr'
+      ? "Votre date de naissance est obligatoire : renseignez-la à l'étape « Informations »."
+      : 'تاريخ ميلادك مطلوب: أدخله في خطوة «المعلومات».';
+  }
+  if (code.includes('CAR_UNAVAILABLE')) {
+    return lang === 'fr'
+      ? 'Ce véhicule vient d\u2019être réservé sur cette période. Choisissez d\u2019autres dates ou une autre voiture.'
+      : 'تم حجز هذه السيارة للتو في هذه الفترة. اختر تواريخ أخرى أو سيارة أخرى.';
+  }
+  if (code.includes('PROMO_CODE_INVALID')) {
+    return lang === 'fr'
+      ? 'Ce code promo n\u2019est plus valable. Retirez-le puis confirmez à nouveau.'
+      : 'رمز الخصم لم يعد صالحًا. أزله ثم أكّد من جديد.';
+  }
+  return lang === 'fr'
+    ? `La réservation n'a pas pu être enregistrée : ${raw || 'erreur inconnue'}.${retry}`
+    : `تعذر تسجيل الحجز: ${raw || 'خطأ غير معروف'}.${retry}`;
 };
 
 interface ProviderProps {
@@ -318,6 +380,12 @@ export const ReservationWizardProvider: React.FC<ProviderProps> = ({
     });
   };
 
+  // ─── Âge du conducteur ──────────────────────────────────────────────────────
+  // Location interdite aux mineurs : la date de naissance est le seul champ
+  // personnel exigé, et une date sous 18 ans bloque la suite du wizard.
+  const clientAge = ageFromYmd(personal.dateOfBirth);
+  const isUnderage = clientAge !== null && clientAge < MIN_DRIVER_AGE;
+
   // ─── Validation par étape ───────────────────────────────────────────────────
   const isStepValid = (n: number): boolean => {
     switch (n) {
@@ -328,8 +396,10 @@ export const ReservationWizardProvider: React.FC<ProviderProps> = ({
       case 3:
         return true; // les services sont optionnels
       case 4:
-        // Informations personnelles — mêmes champs obligatoires que le flux existant
-        return !!(personal.firstName && personal.lastName && personal.phone && personal.email && personal.licenseNumber && personal.wilaya);
+        // Informations personnelles — toutes facultatives : le client les complète
+        // à l'agence au retrait du véhicule. Seule la date de naissance est exigée,
+        // parce qu'elle sert à vérifier l'âge minimum légal (18 ans).
+        return !!personal.dateOfBirth && !isUnderage;
       case 5:
         return true;
       default:
@@ -359,8 +429,45 @@ export const ReservationWizardProvider: React.FC<ProviderProps> = ({
   }, [range.from, range.to]);
 
   const promo = car ? getCurrentSpecialOfferForCar(car.id, specialOffers) : undefined;
-  const basePrice = car ? car.priceDay * days : 0;
-  const discount = promo && car ? Math.max(0, (car.priceDay - promo.newPrice) * days) : 0;
+
+  // Tarifs unitaires de la fiche véhicule. Une semaine/un mois absent retombe
+  // sur le forfait inférieur (cf. resolveUnits dans rentalPricing).
+  const unitPrices: RentalUnitPrices = useMemo(() => ({
+    day: car ? Number(car.priceDay) || 0 : 0,
+    week: car ? Number(car.priceWeek) || 0 : 0,
+    month: car ? Number(car.priceMonth) || 0 : 0,
+  }), [car?.priceDay, car?.priceWeek, car?.priceMonth]);
+
+  // Décomposition mois (30 j) → semaines (7 j) → jours : 7 jours sont facturés au
+  // forfait semaine, 30 au forfait mois, et un reliquat plus cher que le forfait
+  // supérieur y est remonté. Le client ne paie jamais plus que le palier suivant.
+  const breakdown = useMemo(
+    () => computeRentalBasePrice(days, unitPrices),
+    [days, unitPrices],
+  );
+
+  /** Prix forfaitaire d'une durée quelconque — sert aux propositions 1 j / 1 sem. / 1 mois. */
+  const priceForDays = (n: number) => computeRentalBasePrice(n, unitPrices).total;
+
+  const basePrice = breakdown.total;
+
+  // Offre spéciale : la remise porte sur le tarif journalier. On applique le même
+  // ratio aux forfaits semaine/mois, sinon une promo « −20 % la journée »
+  // disparaîtrait dès que la durée bascule sur un forfait.
+  const promoRatio = promo && car && car.priceDay > 0
+    ? Math.min(1, Math.max(0, promo.newPrice / car.priceDay))
+    : 1;
+  const promoBreakdown = useMemo(
+    () => (promo && promoRatio < 1
+      ? computeRentalBasePrice(days, {
+          day: unitPrices.day * promoRatio,
+          week: unitPrices.week * promoRatio,
+          month: unitPrices.month * promoRatio,
+        })
+      : null),
+    [promo, promoRatio, days, unitPrices],
+  );
+  const discount = promoBreakdown ? Math.max(0, Math.round(basePrice - promoBreakdown.total)) : 0;
   const servicesTotal = selectedServices.reduce((sum, s) => sum + s.price, 0);
   const assuranceTotal = selectedAssurance ? selectedAssurance.pricePerDay * days : 0;
   const subtotal = Math.max(0, basePrice - discount + servicesTotal + assuranceTotal);
@@ -410,7 +517,8 @@ export const ReservationWizardProvider: React.FC<ProviderProps> = ({
   // Client + réservation + services + consommation du code promo : une seule
   // transaction serveur. Garde anti double-clic ; les saisies survivent à une erreur.
   const submit = async () => {
-    if (!car || isSubmitting || submitted) return;
+    // Garde finale : un mineur ne peut pas confirmer, même en forçant l'étape.
+    if (!car || isSubmitting || submitted || isUnderage || !personal.dateOfBirth) return;
     setIsSubmitting(true);
     setSubmitError(null);
     try {
@@ -482,11 +590,7 @@ export const ReservationWizardProvider: React.FC<ProviderProps> = ({
       setSubmitted(true);
     } catch (err: any) {
       console.error('Reservation submit failed:', err);
-      setSubmitError(
-        lang === 'fr'
-          ? `La réservation n'a pas pu être enregistrée : ${err.message || 'erreur inconnue'}. Vos informations sont conservées, vous pouvez réessayer.`
-          : `تعذر تسجيل الحجز: ${err.message || 'خطأ غير معروف'}. تم الاحتفاظ بمعلوماتك، يمكنك المحاولة مرة أخرى.`
-      );
+      setSubmitError(friendlySubmitError(err?.message, lang));
     } finally {
       setIsSubmitting(false);
     }
@@ -500,12 +604,13 @@ export const ReservationWizardProvider: React.FC<ProviderProps> = ({
     blockedRanges, loadingBlocked,
     search, availableCars, loadingAvailability,
     departureAgency, setDepartureAgency, differentReturnAgency, setDifferentReturnAgency, returnAgency, setReturnAgency,
-    personal, setPersonal,
+    personal, setPersonal, clientAge, isUnderage,
     availableAssurances, loadingAssurances, selectedAssurance, setSelectedAssurance,
     availableServices, loadingServices, selectedServices, toggleService,
     notes, setNotes,
     promoInput, setPromoInput, promoStatus, promoDiscountPct, verifyPromo, clearPromo,
-    days, promo, basePrice, discount, servicesTotal, assuranceTotal, promoDiscount, total,
+    days, promo, unitPrices, breakdown, priceForDays,
+    basePrice, discount, servicesTotal, assuranceTotal, promoDiscount, total,
     paymentCurrency, setPaymentCurrency, eurRate, totalEur, money,
     isSubmitting, submitError, submitted, submit,
   };

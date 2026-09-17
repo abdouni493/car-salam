@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { ChevronLeft, ChevronRight, Search, CalendarCheck, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Search, CalendarCheck, Loader2, Sun, CalendarRange, CalendarDays } from 'lucide-react';
 import { Car } from '../../../types';
 import { useWizard } from './WizardContext';
 import { CarBookingCalendar } from './CarBookingCalendar';
-import { SectionCard, SectionTitle, FieldLabel, inputClass, inputStyle, focusInput, blurInput, C, fromYmd } from './wizardUi';
+import { SectionCard, SectionTitle, FieldLabel, inputClass, inputStyle, focusInput, blurInput, C, fromYmd, toYmd } from './wizardUi';
 import { carPricesEur, formatMoney } from '../../../utils/currency';
+import { describeRentalBreakdown, DAYS_PER_WEEK, DAYS_PER_MONTH } from '../../../utils/rentalPricing';
 
 /**
  * Étape 1 — Choisir une voiture + dates.
@@ -20,7 +21,11 @@ export const StepCarDates: React.FC = () => {
     departureTime, setDepartureTime, returnTime, setReturnTime,
     blockedRanges, loadingBlocked, days, promo, total,
     search, availableCars, loadingAvailability, agencies,
+    unitPrices, breakdown, priceForDays,
   } = useWizard();
+
+  // Proposition de durée refusée parce qu'elle chevauche une période réservée.
+  const [durationError, setDurationError] = useState<string | null>(null);
 
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -156,6 +161,13 @@ export const StepCarDates: React.FC = () => {
                       <p className="text-xs font-bold text-vel-muted">
                         {formatMoney(carPricesEur(c).day, 'EUR')}{{ fr: ' / jour', ar: ' / يوم' }[lang]}
                       </p>
+                      {/* Forfaits : le client voit dès la sélection qu'une semaine
+                          ou un mois coûte moins cher que le cumul des journées. */}
+                      <p className="text-[11px] text-vel-dim mt-1 font-medium">
+                        {{ fr: 'sem.', ar: 'أسبوع' }[lang]} {(c.priceWeek || c.priceDay * 7).toLocaleString()}
+                        {' · '}
+                        {{ fr: 'mois', ar: 'شهر' }[lang]} {(c.priceMonth || c.priceDay * 30).toLocaleString()}
+                      </p>
                     </div>
                     <div className="w-8 h-8 rounded-xl flex items-center justify-center"
                       style={{ background: 'rgba(234, 88, 12, 0.09)', border: '1px solid rgba(234, 88, 12, 0.25)' }}>
@@ -170,6 +182,59 @@ export const StepCarDates: React.FC = () => {
       </div>
     );
   }
+
+  // ─── Propositions de durée ──────────────────────────────────────────────────
+  // Le client voit d'emblée ce que coûtent 1 jour, 1 semaine (forfait) et
+  // 1 mois (forfait) : sans ça, seul le tarif journalier était lisible et les
+  // forfaits semblaient ne jamais s'appliquer.
+  const todayYmd = toYmd(new Date());
+  const addDays = (ymd: string, n: number) => {
+    const d = fromYmd(ymd);
+    d.setDate(d.getDate() + n);
+    return toYmd(d);
+  };
+  const overlapsBlocked = (from: string, to: string) =>
+    blockedRanges.some(b => from <= b.to && b.from <= to);
+
+  /** Applique une durée en repartant de la date de départ choisie, sinon d'aujourd'hui. */
+  const applyDuration = (n: number) => {
+    const start = range.from && range.from >= todayYmd ? range.from : todayYmd;
+    const end = addDays(start, n);
+    if (overlapsBlocked(start, end)) {
+      setDurationError(
+        lang === 'fr'
+          ? 'Cette durée chevauche des dates déjà réservées — choisissez une date de départ puis ajustez au calendrier.'
+          : 'هذه المدة تتداخل مع تواريخ محجوزة — اختر تاريخ مغادرة ثم عدّل في التقويم.'
+      );
+      return;
+    }
+    setDurationError(null);
+    setRange({ from: start, to: end });
+  };
+
+  const durationOffers = [
+    {
+      n: 1,
+      icon: Sun,
+      label: { fr: '1 jour', ar: 'يوم واحد' },
+      tag: { fr: 'Tarif journalier', ar: 'السعر اليومي' },
+      price: priceForDays(1),
+    },
+    {
+      n: DAYS_PER_WEEK,
+      icon: CalendarRange,
+      label: { fr: '1 semaine', ar: 'أسبوع واحد' },
+      tag: { fr: 'Forfait semaine (7 jours)', ar: 'باقة الأسبوع (7 أيام)' },
+      price: priceForDays(DAYS_PER_WEEK),
+    },
+    {
+      n: DAYS_PER_MONTH,
+      icon: CalendarDays,
+      label: { fr: '1 mois', ar: 'شهر واحد' },
+      tag: { fr: 'Forfait mois (30 jours)', ar: 'باقة الشهر (30 يومًا)' },
+      price: priceForDays(DAYS_PER_MONTH),
+    },
+  ];
 
   // ─── Calendrier + heures pour la voiture choisie ────────────────────────────
   return (
@@ -208,6 +273,69 @@ export const StepCarDates: React.FC = () => {
         </button>
       </div>
 
+      {/* Propositions de durée — affichées AVANT le choix des dates */}
+      <SectionCard>
+        <SectionTitle>🏷️ {{ fr: 'Nos formules', ar: 'صيغنا' }[lang]}</SectionTitle>
+        <p className="text-vel-muted text-sm -mt-3">
+          {{ fr: 'Choisissez une formule : les dates se remplissent automatiquement et le forfait est appliqué.',
+             ar: 'اختر صيغة: تُملأ التواريخ تلقائيًا ويُطبَّق السعر المقطوع.' }[lang]}
+        </p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {durationOffers.map(o => {
+            const active = days === o.n;
+            const perDay = Math.round(o.price / o.n);
+            return (
+              <motion.button
+                key={o.n}
+                type="button"
+                onClick={() => applyDuration(o.n)}
+                whileHover={{ y: -4 }}
+                whileTap={{ scale: 0.97 }}
+                className="text-left rounded-2xl p-5 transition-all cursor-pointer"
+                style={{
+                  background: active ? 'rgba(234, 88, 12, 0.08)' : C.elevated,
+                  border: active ? '2px solid var(--color-vel-cta)' : '1px solid rgba(15, 23, 42, 0.08)',
+                  boxShadow: active ? '0 0 24px rgba(234, 88, 12, 0.12)' : 'none',
+                }}
+              >
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                    style={{ background: 'rgba(234, 88, 12, 0.1)', border: '1px solid rgba(234, 88, 12, 0.25)' }}>
+                    <o.icon size={17} style={{ color: C.accent }} />
+                  </span>
+                  <span className="font-black text-vel-ink text-base" style={{ fontFamily: 'var(--font-display)' }}>
+                    {o.label[lang]}
+                  </span>
+                </div>
+                <p className="font-black text-2xl leading-none" style={{ color: C.accent, fontFamily: 'var(--font-display)' }}>
+                  {o.price.toLocaleString()}
+                  <span className="text-xs ml-1 font-bold">{{ fr: 'DA', ar: 'د.ج' }[lang]}</span>
+                </p>
+                <p className="text-vel-muted text-[11px] font-bold mt-1.5 uppercase tracking-wider">{o.tag[lang]}</p>
+                {o.n > 1 && (
+                  <p className="text-vel-slate text-xs mt-2">
+                    {{ fr: 'soit', ar: 'أي' }[lang]} <span className="font-bold">{perDay.toLocaleString()} {{ fr: 'DA / jour', ar: 'د.ج / يوم' }[lang]}</span>
+                  </p>
+                )}
+              </motion.button>
+            );
+          })}
+        </div>
+
+        {durationError && (
+          <p className="text-sm font-bold px-4 py-3 rounded-xl"
+            style={{ color: 'var(--color-vel-cta-bright)', background: 'rgba(234, 88, 12, 0.08)', border: '1px solid rgba(234, 88, 12, 0.25)' }}>
+            ⚠️ {durationError}
+          </p>
+        )}
+
+        <p className="text-vel-dim text-xs">
+          {{ fr: 'Au-delà, tout est combiné automatiquement : 12 jours = 1 semaine + 5 jours, 39 jours = 1 mois + 1 semaine + 2 jours.',
+             ar: 'وما بعد ذلك يُجمع تلقائيًا: 12 يومًا = أسبوع + 5 أيام، 39 يومًا = شهر + أسبوع + يومان.' }[lang]}
+        </p>
+      </SectionCard>
+
       {/* Calendrier */}
       <SectionCard>
         <SectionTitle>📅 {{ fr: 'Dates de location', ar: 'تواريخ الإيجار' }[lang]}</SectionTitle>
@@ -240,24 +368,60 @@ export const StepCarDates: React.FC = () => {
           </div>
         </div>
 
-        {/* Aperçu durée + prix */}
-        {days > 0 && (
+        {/* Aperçu durée + ventilation par forfaits */}
+        {days > 0 && range.to && (
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            className="flex items-center gap-3 px-4 py-3 rounded-xl"
+            className="px-4 py-4 rounded-xl space-y-2"
             style={{ background: 'rgba(234, 88, 12, 0.05)', border: '1px solid rgba(234, 88, 12, 0.1)' }}
           >
-            <span className="text-xl">📅</span>
-            <span className="text-vel-slate font-bold text-sm">
-              {days} {{ fr: 'jour(s)', ar: 'يوم' }[lang]} ·{' '}
-              <span style={{ color: C.accent }}>{total.toLocaleString()} {{ fr: 'DA', ar: 'د.ج' }[lang]}</span>
-              {promo && (
-                <span className="ml-2 text-xs px-2 py-0.5 rounded font-bold text-white" style={{ background: 'var(--color-vel-cta)' }}>
-                  {promo.label || (lang === 'fr' ? 'Promo' : 'عرض')}
-                </span>
+            <div className="flex items-center gap-3">
+              <span className="text-xl">📅</span>
+              <span className="text-vel-slate font-bold text-sm">
+                {days} {{ fr: 'jour(s)', ar: 'يوم' }[lang]}
+                {' — '}
+                <span className="text-vel-ink">{describeRentalBreakdown(breakdown, lang === 'ar' ? 'ar' : 'fr')}</span>
+                {promo && (
+                  <span className="ml-2 text-xs px-2 py-0.5 rounded font-bold text-white" style={{ background: 'var(--color-vel-cta)' }}>
+                    {promo.label || (lang === 'fr' ? 'Promo' : 'عرض')}
+                  </span>
+                )}
+              </span>
+            </div>
+
+            {/* Le détail rend visible l'application des forfaits semaine / mois */}
+            <div className="space-y-1 pl-9 text-xs text-vel-muted">
+              {breakdown.months > 0 && (
+                <div className="flex justify-between gap-4">
+                  <span>{breakdown.months} × {{ fr: 'mois (30 j)', ar: 'شهر (30 يومًا)' }[lang]} × {unitPrices.month ? unitPrices.month.toLocaleString() : '—'}</span>
+                  <span className="font-bold text-vel-slate">{breakdown.monthsPrice.toLocaleString()} {{ fr: 'DA', ar: 'د.ج' }[lang]}</span>
+                </div>
               )}
-            </span>
+              {breakdown.weeks > 0 && (
+                <div className="flex justify-between gap-4">
+                  <span>{breakdown.weeks} × {{ fr: 'semaine (7 j)', ar: 'أسبوع (7 أيام)' }[lang]} × {unitPrices.week ? unitPrices.week.toLocaleString() : '—'}</span>
+                  <span className="font-bold text-vel-slate">{breakdown.weeksPrice.toLocaleString()} {{ fr: 'DA', ar: 'د.ج' }[lang]}</span>
+                </div>
+              )}
+              {breakdown.days > 0 && (
+                <div className="flex justify-between gap-4">
+                  <span>{breakdown.days} × {{ fr: 'jour', ar: 'يوم' }[lang]} × {unitPrices.day.toLocaleString()}</span>
+                  <span className="font-bold text-vel-slate">{breakdown.daysPrice.toLocaleString()} {{ fr: 'DA', ar: 'د.ج' }[lang]}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-between items-baseline gap-4 pt-2 border-t"
+              style={{ borderColor: 'rgba(234, 88, 12, 0.18)' }}>
+              {/* `total` inclut services et assurance si le client est déjà passé
+                  par les étapes suivantes — d'où « estimé » plutôt qu'un libellé
+                  qui promettrait le seul prix du véhicule. */}
+              <span className="text-vel-slate font-bold text-sm">{{ fr: 'Total estimé', ar: 'المجموع التقديري' }[lang]}</span>
+              <span className="font-black text-lg" style={{ color: C.accent, fontFamily: 'var(--font-display)' }}>
+                {total.toLocaleString()} {{ fr: 'DA', ar: 'د.ج' }[lang]}
+              </span>
+            </div>
           </motion.div>
         )}
       </SectionCard>

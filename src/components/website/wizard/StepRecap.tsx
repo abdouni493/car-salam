@@ -4,6 +4,7 @@ import { ChevronLeft, Coins, Loader2, Pencil, RefreshCcw, Ticket, CheckCircle2, 
 import { useWizard } from './WizardContext';
 import { SectionCard, SectionTitle, FieldLabel, inputClass, inputStyle, focusInput, blurInput, C, fromYmd } from './wizardUi';
 import { Currency, formatMoney } from '../../../utils/currency';
+import { describeRentalBreakdown } from '../../../utils/rentalPricing';
 
 /**
  * Étape 5 — Récapitulatif + confirmation.
@@ -16,17 +17,22 @@ export const StepRecap: React.FC = () => {
     lang, car, range, departureTime, returnTime,
     agencies, departureAgency, returnAgency, differentReturnAgency,
     personal, selectedServices, notes, setNotes,
-    days, promo, basePrice, discount, servicesTotal, total,
+    days, promo, basePrice, discount, servicesTotal, total, breakdown, unitPrices,
     paymentCurrency, setPaymentCurrency, eurRate, money,
     promoInput, setPromoInput, promoStatus, promoDiscountPct, promoDiscount, verifyPromo, clearPromo,
-    goToStep, prev, isSubmitting, submitError, submit,
+    goToStep, prev, isSubmitting, submitError, submit, isUnderage, clientAge,
   } = useWizard();
 
   if (!car) return null;
 
+  // Une réservation ne peut pas partir sans date de naissance valide (18 ans mini).
+  const blocked = isUnderage || !personal.dateOfBirth;
+
   const agencyName = (id: string) => agencies.find(a => a.id === id)?.name || '—';
   const effectiveReturnAgency = differentReturnAgency ? returnAgency : departureAgency;
   const fmtDate = (s?: string) => (s ? fromYmd(s).toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'ar-DZ') : '—');
+  /** Les informations personnelles étant facultatives, un champ vide s'affiche « — ». */
+  const orDash = (v?: string) => (v && v.trim() ? v : '—');
 
   const EditButton: React.FC<{ step: number }> = ({ step }) => (
     <button
@@ -88,10 +94,12 @@ export const StepRecap: React.FC = () => {
           {summaryBlock(
             lang === 'fr' ? '👤 Client' : '👤 العميل', 4,
             [
-              { label: lang === 'fr' ? 'Nom' : 'الاسم', value: `${personal.firstName} ${personal.lastName}` },
-              { label: lang === 'fr' ? 'Téléphone' : 'الهاتف', value: personal.phone },
-              { label: 'Email', value: personal.email },
-              { label: lang === 'fr' ? 'Wilaya' : 'الولاية', value: personal.wilaya },
+              // Ces champs sont facultatifs : un tiret vaut « à compléter à l'agence ».
+              { label: lang === 'fr' ? 'Nom' : 'الاسم', value: orDash(`${personal.firstName} ${personal.lastName}`.trim()) },
+              { label: lang === 'fr' ? 'Téléphone' : 'الهاتف', value: orDash(personal.phone) },
+              { label: 'Email', value: orDash(personal.email) },
+              { label: lang === 'fr' ? 'Naissance' : 'الميلاد', value: clientAge !== null ? `${fmtDate(personal.dateOfBirth)} (${clientAge} ${lang === 'fr' ? 'ans' : 'سنة'})` : '—' },
+              { label: lang === 'fr' ? 'Wilaya' : 'الولاية', value: orDash(personal.wilaya) },
             ]
           )}
         </div>
@@ -145,12 +153,37 @@ export const StepRecap: React.FC = () => {
         </div>
 
         <div className="space-y-3">
-          <div className="flex justify-between items-center px-4 py-3 rounded-xl text-sm"
+          {/* Location du véhicule — ventilée par forfaits (mois / semaines / jours) */}
+          <div className="px-4 py-3 rounded-xl text-sm space-y-2"
             style={{ background: 'rgba(15, 23, 42, 0.03)' }}>
-            <span className="text-vel-slate">
-              {days} {{ fr: 'j ×', ar: 'يوم ×' }[lang]} {money(car.priceDay)}
-            </span>
-            <span className="font-bold text-vel-ink">{money(basePrice)}</span>
+            <div className="flex justify-between items-baseline gap-4">
+              <span className="text-vel-slate font-bold">
+                {{ fr: 'Location', ar: 'الإيجار' }[lang]} · {days} {{ fr: 'jour(s)', ar: 'يوم' }[lang]}
+                {' — '}
+                {describeRentalBreakdown(breakdown, lang === 'ar' ? 'ar' : 'fr')}
+              </span>
+              <span className="font-bold text-vel-ink whitespace-nowrap">{money(basePrice)}</span>
+            </div>
+            <div className="space-y-1 text-xs text-vel-muted">
+              {breakdown.months > 0 && (
+                <div className="flex justify-between gap-4">
+                  <span>{breakdown.months} × {{ fr: 'mois (30 j)', ar: 'شهر (30 يومًا)' }[lang]} × {money(unitPrices.month || car.priceDay * 30)}</span>
+                  <span>{money(breakdown.monthsPrice)}</span>
+                </div>
+              )}
+              {breakdown.weeks > 0 && (
+                <div className="flex justify-between gap-4">
+                  <span>{breakdown.weeks} × {{ fr: 'semaine (7 j)', ar: 'أسبوع (7 أيام)' }[lang]} × {money(unitPrices.week || car.priceDay * 7)}</span>
+                  <span>{money(breakdown.weeksPrice)}</span>
+                </div>
+              )}
+              {breakdown.days > 0 && (
+                <div className="flex justify-between gap-4">
+                  <span>{breakdown.days} × {{ fr: 'jour', ar: 'يوم' }[lang]} × {money(unitPrices.day)}</span>
+                  <span>{money(breakdown.daysPrice)}</span>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Remise offre spéciale */}
@@ -302,6 +335,26 @@ export const StepRecap: React.FC = () => {
         </motion.div>
       )}
 
+      {/* Âge non conforme / date de naissance manquante : confirmation bloquée */}
+      {blocked && (
+        <div className="rounded-2xl p-5 flex items-start gap-3"
+          style={{ background: 'rgba(234, 88, 12, 0.08)', border: '1px solid rgba(234, 88, 12, 0.3)' }}>
+          <span className="text-xl">⚠️</span>
+          <div className="flex-1">
+            <p className="text-sm font-bold" style={{ color: 'var(--color-vel-cta-bright)' }}>
+              {isUnderage
+                ? { fr: `La location est interdite aux moins de 18 ans (âge indiqué : ${clientAge} ans).`, ar: `الإيجار ممنوع لمن هم دون 18 سنة (العمر المُدخل: ${clientAge} سنة).` }[lang]
+                : { fr: 'Renseignez votre date de naissance à l\u2019étape « Informations » pour confirmer la réservation.', ar: 'أدخل تاريخ ميلادك في خطوة «المعلومات» لتأكيد الحجز.' }[lang]}
+            </p>
+            <button onClick={() => goToStep(4)}
+              className="mt-2 text-xs font-bold underline"
+              style={{ color: 'var(--color-vel-cta-bright)' }}>
+              {{ fr: 'Revenir à mes informations', ar: 'العودة إلى معلوماتي' }[lang]}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Bandeau confirmation */}
       <div className="rounded-2xl p-6" style={{ background: 'rgba(234, 88, 12, 0.05)', border: '1px solid rgba(234, 88, 12, 0.16)' }}>
         <h3 className="font-black text-vel-ink text-lg mb-2" style={{ fontFamily: 'var(--font-display)' }}>
@@ -323,10 +376,10 @@ export const StepRecap: React.FC = () => {
         </button>
         <motion.button
           onClick={submit}
-          disabled={isSubmitting}
-          whileHover={isSubmitting ? {} : { scale: 1.02 }}
-          whileTap={isSubmitting ? {} : { scale: 0.98 }}
-          className={`btn-vel-cta flex-1 py-4 flex items-center justify-center gap-2 text-sm ${isSubmitting ? 'opacity-60 cursor-not-allowed' : ''}`}
+          disabled={isSubmitting || blocked}
+          whileHover={isSubmitting || blocked ? {} : { scale: 1.02 }}
+          whileTap={isSubmitting || blocked ? {} : { scale: 0.98 }}
+          className={`btn-vel-cta flex-1 py-4 flex items-center justify-center gap-2 text-sm ${isSubmitting || blocked ? 'opacity-60 cursor-not-allowed' : ''}`}
         >
           {isSubmitting ? (
             <><Loader2 size={18} className="animate-spin" /> {lang === 'fr' ? 'Enregistrement…' : 'جاري التسجيل…'}</>
