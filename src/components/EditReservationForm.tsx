@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { InspectionItem, Language, ReservationDetails, ReservationWizardData } from '../types';
 import { getDeliveryFeePayer } from '../utils/deliveryFee';
-import { getClientLongDurationFee } from '../utils/longDurationFee';
 import { computeRentalBasePrice } from '../utils/rentalPricing';
 import { ArrowLeft, ArrowRight, CheckCircle, AlertTriangle, Save, MapPin, CreditCard, Car as CarIcon, Camera, User, Plus, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -78,7 +77,7 @@ export const EditReservationForm: React.FC<EditReservationFormProps> = ({ lang, 
       tvaAmount: 0, // Will be calculated
       additionalFees: reservation.additionalFees,
       deliveryFee: reservation.deliveryFee || 0,
-      longDurationFee: reservation.longDurationFee || 0,
+      longDurationFee: 0,
       paymentNotes: reservation.notes,
       advancePayment: reservation.advancePayment,
       remainingPayment: reservation.remainingPayment,
@@ -300,11 +299,9 @@ export const EditReservationForm: React.FC<EditReservationFormProps> = ({ lang, 
       // ne sont donc pas facturés au client.
       const deliveryFee = formData.step6?.deliveryFee || 0;
       const clientDeliveryFee = getDeliveryFeePayer(newTotalDays) === 'client' ? deliveryFee : 0;
-      // Supplément longue durée : annulé d'office si la durée repasse sous le seuil.
-      const longDurationFee = getClientLongDurationFee(
-        formData.step6?.longDurationFee || 0,
-        newTotalDays,
-      );
+      // Le supplément « longue durée » n'est plus facturé au client (géré côté
+      // propriétaire dans « Bénéfices par véhicule »).
+      const longDurationFee = 0;
 
       console.log('🛒 Services Total:', servicesTotal.toLocaleString(), 'DA', '| Services count:', formData.step5?.additionalServices?.length || 0);
       console.log('💳 Discount Amount:', discountAmount.toLocaleString(), 'DA', '(Type:', formData.discountType, ')');
@@ -338,8 +335,8 @@ export const EditReservationForm: React.FC<EditReservationFormProps> = ({ lang, 
         console.log('🔧 MANUAL TOTAL PRICE (from top-level): Using manually edited value', newTotalPrice.toLocaleString(), 'DA');
       } else {
         // Calculate normally
-        newTotalPrice = basePrice + servicesTotal + additionalFees + tvaAmount + clientDeliveryFee + longDurationFee;
-        console.log('💰 Calculation: basePrice (' + basePrice + ') + servicesTotal (' + servicesTotal + ') + additionalFees (' + additionalFees + ') + tvaAmount (' + tvaAmount + ') + livraison client (' + clientDeliveryFee + ') + frais longue durée (' + longDurationFee + ') = ' + newTotalPrice);
+        newTotalPrice = basePrice + servicesTotal + additionalFees + tvaAmount + clientDeliveryFee;
+        console.log('💰 Calculation: basePrice (' + basePrice + ') + servicesTotal (' + servicesTotal + ') + additionalFees (' + additionalFees + ') + tvaAmount (' + tvaAmount + ') + livraison client (' + clientDeliveryFee + ') = ' + newTotalPrice);
       }
       
       console.log('💰 Subtotal before discount:', newTotalPrice.toLocaleString(), 'DA');

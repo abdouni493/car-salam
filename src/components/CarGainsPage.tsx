@@ -3,9 +3,10 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Calendar, TrendingUp, ChevronDown, Printer, Loader2, AlertCircle, Download,
   Clock, Handshake, Phone, User as UserIcon, Receipt, BarChart3,
-  ArrowRight, Gauge, Coins, FileText, CarFront, Sparkles,
+  ArrowRight, Gauge, Coins, FileText, CarFront, Sparkles, AlertTriangle,
 } from 'lucide-react';
 import { Language, Car, ReservationDetails, VehicleExpense } from '../types';
+import { isLongDuration, LONG_DURATION_FEE_DZD, LONG_DURATION_THRESHOLD_DAYS } from '../utils/longDurationFee';
 import { DatabaseService } from '../services/DatabaseService';
 import { ReservationsService } from '../services/ReservationsService';
 import { getVehicleExpenses } from '../services/expenseService';
@@ -91,6 +92,13 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
   const [expenses, setExpenses] = useState<VehicleExpense[]>([]);
   const [expandedRes, setExpandedRes] = useState<string | null>(null);
   const [drawer, setDrawer] = useState<DrawerKey>(null);
+
+  // Frais supplémentaires « longue durée » à la charge du PROPRIÉTAIRE : pour
+  // chaque location d'un véhicule en conciergerie qui atteint le seuil (≥ 10 j),
+  // l'agence lui refacture un forfait (3 000 DA par défaut). Réglé au moment du
+  // calcul du rapport — activable/désactivable et modifiable par location. La clé
+  // est l'id de la réservation.
+  const [longFees, setLongFees] = useState<Record<string, { active: boolean; amount: number }>>({});
 
   // Chargement AVEC les propriétaires : sans le barème, aucune commission de
   // conciergerie ne peut être calculée (page réservée à l'admin).
@@ -180,6 +188,19 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
         .filter(e => e.carId === selectedCarId && inRange(e.date, startDate, endDate))
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
+      // Pré-remplissage des frais « longue durée » du propriétaire : uniquement
+      // pour un véhicule en conciergerie, une entrée active (3 000 DA) par
+      // location non annulée qui atteint le seuil.
+      const car = cars.find(c => c.id === selectedCarId);
+      const isConsignmentCar = car?.ownershipType === 'consignment' && !!car?.ownerInfo;
+      const nextLongFees: Record<string, { active: boolean; amount: number }> = {};
+      if (isConsignmentCar) {
+        carRes
+          .filter(r => r.status !== 'cancelled' && isLongDuration(Number(r.totalDays) || 0))
+          .forEach(r => { if (r.id) nextLongFees[r.id] = { active: true, amount: LONG_DURATION_FEE_DZD }; });
+      }
+      setLongFees(nextLongFees);
+
       setReservations(carRes);
       setExpenses(carExp);
       setGenerated(true);
@@ -207,9 +228,30 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
   );
   const occupancy = Math.min(100, pct(g.daysRented, periodDays));
 
+  // ── Frais « longue durée » à la charge du propriétaire (conciergerie) ──────
+  // Locations non annulées de la période qui atteignent le seuil : ce sont
+  // elles qui déclenchent l'alerte et le supplément refacturé au propriétaire.
+  const longEligibleRes = useMemo(
+    () => (consignment
+      ? reservations.filter(r => r.status !== 'cancelled' && isLongDuration(Number(r.totalDays) || 0))
+      : []),
+    [consignment, reservations],
+  );
+  /** Total des suppléments longue durée actifs — encaissé par l'agence auprès du propriétaire. */
+  const ownerLongDurationTotal = useMemo(
+    () => longEligibleRes.reduce((s, r) => {
+      const f = r.id ? longFees[r.id] : undefined;
+      return s + (f && f.active ? Math.max(0, Number(f.amount) || 0) : 0);
+    }, 0),
+    [longEligibleRes, longFees],
+  );
+
   /** Les trois chiffres du haut : gains, dépenses, bénéfice. */
   const gainsValue = g.agencyRevenuePeriod;
-  const netValue = consignment ? g.netBenefitPeriod : g.netBenefit;
+  // Bénéfice avant supplément longue durée, puis bénéfice final : le supplément
+  // refacturé au propriétaire s'ajoute au bénéfice net de l'agence.
+  const netBase = consignment ? g.netBenefitPeriod : g.netBenefit;
+  const netValue = netBase + ownerLongDurationTotal;
   const marginValue = pct(netValue, gainsValue);
 
   const buildReportHTML = async (): Promise<string | null> => {
@@ -217,6 +259,14 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
     const agency = await DatabaseService.getAgencyBranding();
     return generateVehicleBenefitReportHTML({
       car: selectedCar, gains: g, reservations, expenses, startDate, endDate, agency, lang,
+      ownerLongDurationTotal,
+      ownerLongDurationItems: longEligibleRes
+        .filter(r => r.id && longFees[r.id]?.active)
+        .map(r => ({
+          name: `${r.client?.firstName || ''} ${r.client?.lastName || ''}`.trim() || '—',
+          totalDays: Number(r.totalDays) || 0,
+          amount: Math.max(0, Number(longFees[r.id!]?.amount) || 0),
+        })),
     });
   };
 
@@ -540,7 +590,7 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
                 label={T('Total bénéfice', 'إجمالي الربح', lang)}
                 value={netValue}
                 hint={`${T('marge', 'الهامش', lang)} ${fmtPct(marginValue)}`}
-                formula={`${fmt(gainsValue)} − ${fmt(g.expenses)}`}
+                formula={`${fmt(gainsValue)} − ${fmt(g.expenses)}${ownerLongDurationTotal > 0 ? ` + ${fmt(ownerLongDurationTotal)}` : ''}`}
                 detailLabel={T('Voir le calcul', 'عرض الحساب', lang)}
                 onOpen={() => setDrawer('net')}
               />
@@ -832,11 +882,20 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
                                 {fmtD(res.step1?.departureDate)} → {fmtD(res.step1?.returnDate)}
                               </span>
                               <span className="font-semibold text-slate-600">({res.totalDays}j)</span>
-                              {(res.longDurationFee || 0) > 0 && (
-                                <span className="rounded bg-violet-50 px-1.5 py-0.5 text-[10px] font-bold text-violet-700 ring-1 ring-violet-200">
-                                  +{fmt(res.longDurationFee || 0)} {T('frais suppl.', 'رسوم إضافية', lang)}
-                                </span>
-                              )}
+                              {consignment && res.status !== 'cancelled' && isLongDuration(Number(res.totalDays) || 0) && (() => {
+                                const f = res.id ? longFees[res.id] : undefined;
+                                const on = !!f?.active;
+                                return (
+                                  <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-bold ring-1 ${
+                                    on
+                                      ? 'bg-violet-50 text-violet-700 ring-violet-200'
+                                      : 'bg-slate-100 text-slate-400 ring-slate-200 line-through'
+                                  }`}>
+                                    <AlertTriangle size={10} />
+                                    {on ? `+${fmt(Number(f?.amount) || 0)} ${T('propr.', 'مالك', lang)}` : T('suppl. désactivé', 'رسم معطّل', lang)}
+                                  </span>
+                                );
+                              })()}
                             </p>
                           </div>
 
@@ -891,27 +950,66 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
                                   ))}
                                 </div>
 
-                                {/* Détail des suppléments facturés au client. */}
-                                {((res.deliveryFee || 0) > 0 || (res.longDurationFee || 0) > 0) && (
+                                {/* Détail des suppléments. */}
+                                {(res.deliveryFee || 0) > 0 && (
                                   <div className="flex flex-wrap gap-2">
-                                    {(res.longDurationFee || 0) > 0 && (
-                                      <span className="rounded-xl bg-violet-50 px-3 py-2 text-[11px] font-semibold text-violet-800 ring-1 ring-violet-200">
-                                        {T('Frais supplémentaires longue durée', 'رسوم إضافية للمدة الطويلة', lang)} :{' '}
-                                        <strong className="tabular-nums">{fmt(res.longDurationFee || 0)} DA</strong>
-                                      </span>
-                                    )}
-                                    {(res.deliveryFee || 0) > 0 && (
-                                      <span className="rounded-xl bg-sky-50 px-3 py-2 text-[11px] font-semibold text-sky-800 ring-1 ring-sky-200">
-                                        {T('Livraison', 'التوصيل', lang)} :{' '}
-                                        <strong className="tabular-nums">{fmt(res.deliveryFee || 0)} DA</strong>
-                                        {' · '}
-                                        {res.deliveryFeePayer === 'owner'
-                                          ? T('à charge du propriétaire', 'على عاتق المالك', lang)
-                                          : T('facturée au client', 'تُفوتر على العميل', lang)}
-                                      </span>
-                                    )}
+                                    <span className="rounded-xl bg-sky-50 px-3 py-2 text-[11px] font-semibold text-sky-800 ring-1 ring-sky-200">
+                                      {T('Livraison', 'التوصيل', lang)} :{' '}
+                                      <strong className="tabular-nums">{fmt(res.deliveryFee || 0)} DA</strong>
+                                      {' · '}
+                                      {res.deliveryFeePayer === 'owner'
+                                        ? T('à charge du propriétaire', 'على عاتق المالك', lang)
+                                        : T('facturée au client', 'تُفوتر على العميل', lang)}
+                                    </span>
                                   </div>
                                 )}
+
+                                {/* Frais longue durée à la charge du propriétaire (≥ seuil). */}
+                                {consignment && res.status !== 'cancelled' && isLongDuration(Number(res.totalDays) || 0) && res.id && (() => {
+                                  const f = longFees[res.id!] || { active: true, amount: LONG_DURATION_FEE_DZD };
+                                  const setF = (patch: Partial<{ active: boolean; amount: number }>) =>
+                                    setLongFees(prev => ({ ...prev, [res.id!]: { ...(prev[res.id!] || { active: true, amount: LONG_DURATION_FEE_DZD }), ...patch } }));
+                                  return (
+                                    <div className={`rounded-2xl border px-4 py-3 ${f.active ? 'bg-violet-50 border-violet-200' : 'bg-slate-50 border-slate-200'}`}>
+                                      <div className="flex flex-wrap items-center justify-between gap-3">
+                                        <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-violet-800">
+                                          <AlertTriangle size={13} />
+                                          {T(`Frais longue durée (≥ ${LONG_DURATION_THRESHOLD_DAYS} j) — à la charge du propriétaire`, `رسوم المدة الطويلة (≥ ${LONG_DURATION_THRESHOLD_DAYS} يوم) — على عاتق المالك`, lang)}
+                                        </p>
+                                        <label className="flex cursor-pointer select-none items-center gap-2">
+                                          <input
+                                            type="checkbox"
+                                            checked={f.active}
+                                            onChange={e => setF({ active: e.target.checked })}
+                                            className="h-4 w-4 accent-violet-600"
+                                          />
+                                          <span className={`text-[11px] font-bold ${f.active ? 'text-violet-800' : 'text-slate-400'}`}>
+                                            {f.active ? T('Activé', 'مفعّل', lang) : T('Désactivé', 'معطّل', lang)}
+                                          </span>
+                                        </label>
+                                      </div>
+                                      {f.active && (
+                                        <div className="mt-2.5 flex items-center gap-2">
+                                          <span className="text-[11px] font-semibold text-slate-500">
+                                            {T('Montant refacturé', 'المبلغ المفوتر', lang)} :
+                                          </span>
+                                          <div className="relative w-40">
+                                            <input
+                                              type="number"
+                                              min={0}
+                                              step={500}
+                                              dir="ltr"
+                                              value={f.amount}
+                                              onChange={e => setF({ amount: Math.max(0, Number(e.target.value) || 0) })}
+                                              className="w-full rounded-lg border border-violet-300 bg-white p-2 pe-10 text-sm font-bold outline-none focus:ring-2 focus:ring-violet-400"
+                                            />
+                                            <span className="absolute end-3 top-1/2 -translate-y-1/2 text-xs font-black text-violet-700">DA</span>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
 
                                 {/* Le calcul de commission, location par location. */}
                                 {cb && owner && (
@@ -1086,6 +1184,94 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
               </motion.div>
             )}
 
+            {/* ── Frais supplémentaires longue durée (propriétaire) ── */}
+            {consignment && longEligibleRes.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-violet-200"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-violet-100 bg-violet-50 px-5 py-3.5">
+                  <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide text-violet-800">
+                    <AlertTriangle size={16} />
+                    {T('Frais supplémentaires longue durée', 'رسوم إضافية للمدة الطويلة', lang)}
+                    <span className="rounded-md bg-white px-1.5 py-0.5 text-[11px] font-bold text-violet-600 ring-1 ring-violet-200">
+                      {longEligibleRes.length}
+                    </span>
+                  </h3>
+                  <span className="text-sm font-bold tabular-nums text-violet-700">
+                    +{fmt(ownerLongDurationTotal)} <span className="text-[10px] text-violet-400">DA</span>
+                  </span>
+                </div>
+
+                <div className="border-b border-violet-100 bg-violet-50/40 px-5 py-2.5">
+                  <p className="text-[11px] font-semibold text-violet-700/90">
+                    ⚠️ {T(
+                      `Ces location(s) atteignent ${LONG_DURATION_THRESHOLD_DAYS} jours ou plus : l'agence refacture un forfait (${fmt(LONG_DURATION_FEE_DZD)} DA par défaut) au PROPRIÉTAIRE. Désactivable ou modifiable ci-dessous ; le total s'ajoute au bénéfice net.`,
+                      `تبلغ مدة هذه الإيجارات ${LONG_DURATION_THRESHOLD_DAYS} أيام أو أكثر: تفرض الوكالة مبلغًا مقطوعًا (${fmt(LONG_DURATION_FEE_DZD)} دج افتراضيًا) على المالك. يمكن تعطيله أو تعديله أدناه؛ يُضاف المجموع إلى صافي الربح.`,
+                      lang)}
+                  </p>
+                </div>
+
+                <div className="divide-y divide-violet-50">
+                  {longEligibleRes.map(r => {
+                    const f = (r.id && longFees[r.id]) || { active: true, amount: LONG_DURATION_FEE_DZD };
+                    const setF = (patch: Partial<{ active: boolean; amount: number }>) =>
+                      r.id && setLongFees(prev => ({
+                        ...prev,
+                        [r.id!]: { ...(prev[r.id!] || { active: true, amount: LONG_DURATION_FEE_DZD }), ...patch },
+                      }));
+                    return (
+                      <div key={r.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-bold text-slate-800">
+                            {r.client?.firstName} {r.client?.lastName}
+                          </p>
+                          <p className="mt-0.5 flex items-center gap-1.5 text-[11px] tabular-nums text-slate-400" dir="ltr">
+                            {fmtD(r.step1?.departureDate)} → {fmtD(r.step1?.returnDate)}
+                            <span className="font-semibold text-violet-600">· {r.totalDays}j</span>
+                          </p>
+                        </div>
+                        <label className="flex cursor-pointer select-none items-center gap-1.5">
+                          <input
+                            type="checkbox"
+                            checked={f.active}
+                            onChange={e => setF({ active: e.target.checked })}
+                            className="h-4 w-4 accent-violet-600"
+                          />
+                          <span className={`text-[11px] font-bold ${f.active ? 'text-violet-700' : 'text-slate-400'}`}>
+                            {f.active ? T('Activé', 'مفعّل', lang) : T('Désactivé', 'معطّل', lang)}
+                          </span>
+                        </label>
+                        <div className="relative w-32">
+                          <input
+                            type="number"
+                            min={0}
+                            step={500}
+                            dir="ltr"
+                            disabled={!f.active}
+                            value={f.amount}
+                            onChange={e => setF({ amount: Math.max(0, Number(e.target.value) || 0) })}
+                            className="w-full rounded-lg border border-violet-200 bg-white p-2 pe-9 text-sm font-bold tabular-nums outline-none focus:ring-2 focus:ring-violet-400 disabled:bg-slate-50 disabled:text-slate-300"
+                          />
+                          <span className="absolute end-2.5 top-1/2 -translate-y-1/2 text-[10px] font-black text-violet-600">DA</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="flex items-center justify-between border-t border-violet-100 bg-violet-50 px-5 py-3 text-sm">
+                  <span className="font-semibold text-violet-700">
+                    {T('Total frais longue durée (propriétaire)', 'إجمالي رسوم المدة الطويلة (المالك)', lang)}
+                  </span>
+                  <span className="font-black tabular-nums text-violet-700">
+                    +{fmt(ownerLongDurationTotal)} <span className="text-[10px] font-semibold text-violet-400">DA</span>
+                  </span>
+                </div>
+              </motion.div>
+            )}
+
             {/* ── Résultat ── */}
             <motion.div
               initial={{ opacity: 0, y: 12 }}
@@ -1109,9 +1295,14 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
                   </p>
                   <p className="mt-2 font-mono text-[11px] tabular-nums text-white/60" dir="ltr">
                     {consignment
-                      ? `${fmt(consignment.commissionTotal)} + ${fmt(consignment.ownerDeliveryFeesAll)} − ${fmt(g.expenses)}`
+                      ? `${fmt(consignment.commissionTotal)} + ${fmt(consignment.ownerDeliveryFeesAll)} − ${fmt(g.expenses)}${ownerLongDurationTotal > 0 ? ` + ${fmt(ownerLongDurationTotal)}` : ''}`
                       : `${fmt(g.collected)} − ${fmt(g.expenses)}`}
                   </p>
+                  {ownerLongDurationTotal > 0 && (
+                    <p className="mt-1 text-[11px] font-semibold text-white/70">
+                      {T(`Dont +${fmt(ownerLongDurationTotal)} DA de frais longue durée refacturés au propriétaire`, `منها +${fmt(ownerLongDurationTotal)} دج رسوم مدة طويلة على المالك`, lang)}
+                    </p>
+                  )}
                 </div>
                 <div className="rounded-2xl bg-white/10 px-4 py-3 text-end ring-1 ring-white/20">
                   <p className="text-[11px] font-bold uppercase tracking-wide text-white/60">
@@ -1391,6 +1582,16 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
             share={expenseRatio}
             tone="rose"
           />
+          {consignment && ownerLongDurationTotal > 0 && (
+            <CalcRow
+              sign="+"
+              label={T('Frais longue durée (propriétaire)', 'رسوم المدة الطويلة (المالك)', lang)}
+              formula={`${longEligibleRes.filter(r => r.id && longFees[r.id]?.active).length} ${T('location(s) ≥', 'إيجار ≥', lang)} ${LONG_DURATION_THRESHOLD_DAYS} ${T('j', 'ي', lang)}`}
+              amount={ownerLongDurationTotal}
+              share={pct(ownerLongDurationTotal, gainsValue)}
+              tone="emerald"
+            />
+          )}
           <CalcRow
             sign="="
             label={T('BÉNÉFICE NET', 'صافي الربح', lang)}

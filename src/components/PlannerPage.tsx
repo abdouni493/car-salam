@@ -1083,7 +1083,6 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
           const subtotal = basePrice + servicesTotal;
           const totalCost = subtotal
             + (Number(reservation.additionalFees) || 0)
-            + (Number(reservation.longDurationFee) || 0)
             + (Number((reservation as any).tvaAmount) || 0);
           
           // Use the actual totalPrice from database, not the recalculated one

@@ -33,6 +33,10 @@ export interface VehicleBenefitReportInput {
   endDate: string;
   agency: any;
   lang: Language;
+  /** Total des frais « longue durée » refacturés au propriétaire (conciergerie). */
+  ownerLongDurationTotal?: number;
+  /** Détail des locations concernées par le supplément longue durée. */
+  ownerLongDurationItems?: { name: string; totalDays: number; amount: number }[];
 }
 
 const STATUS_LABEL: Record<string, { fr: string; ar: string }> = {
@@ -46,6 +50,7 @@ const STATUS_LABEL: Record<string, { fr: string; ar: string }> = {
 
 export const generateVehicleBenefitReportHTML = ({
   car, gains, reservations, expenses, startDate, endDate, agency, lang,
+  ownerLongDurationTotal = 0, ownerLongDurationItems = [],
 }: VehicleBenefitReportInput): string => {
   const isFrench = lang === 'fr';
   const dir = isFrench ? 'ltr' : 'rtl';
@@ -66,6 +71,11 @@ export const generateVehicleBenefitReportHTML = ({
   const owner = gains.owner;
   const c = gains.consignment;
   const isConsignment = gains.isConsignment && !!owner && !!c;
+
+  // Frais « longue durée » refacturés au propriétaire : n'existent que pour une
+  // conciergerie, et s'ajoutent au bénéfice net de l'agence.
+  const longFee = isConsignment ? Math.max(0, Number(ownerLongDurationTotal) || 0) : 0;
+  const netFinal = (isConsignment ? gains.netBenefitPeriod : gains.netBenefit) + longFee;
 
   const scaleLabel = owner
     ? owner.commissionType === 'percentage'
@@ -140,13 +150,19 @@ export const generateVehicleBenefitReportHTML = ({
           sub: `${expenses.length} ${T('poste(s)', 'بند', lang)}`,
           amount: gains.expenses,
         },
+        ...(longFee > 0 ? [{
+          sign: '+', tone: 'accent',
+          label: T('Frais longue durée (propriétaire)', 'رسوم المدة الطويلة (المالك)', lang),
+          sub: `${ownerLongDurationItems.length} ${T('location(s) ≥ 10 j', 'إيجار ≥ 10 أيام', lang)}`,
+          amount: longFee,
+        } as CalcLine] : []),
         {
           sign: '=', tone: 'total',
           label: T('BÉNÉFICE NET DE L’AGENCE', 'صافي ربح الوكالة', lang),
           sub: `${T('marge', 'الهامش', lang)} ${pctTxt(
-            gains.agencyRevenuePeriod > 0 ? (gains.netBenefitPeriod / gains.agencyRevenuePeriod) * 100 : 0,
+            gains.agencyRevenuePeriod > 0 ? (netFinal / gains.agencyRevenuePeriod) * 100 : 0,
           )}`,
-          amount: gains.netBenefitPeriod,
+          amount: netFinal,
         },
       ]
     : [
@@ -197,7 +213,7 @@ export const generateVehicleBenefitReportHTML = ({
     { label: T('Total des dépenses', 'إجمالي المصاريف', lang), value: gains.expenses, cls: 'kpi-exp' },
     {
       label: T('Bénéfice net', 'صافي الربح', lang),
-      value: isConsignment ? gains.netBenefitPeriod : gains.netBenefit,
+      value: netFinal,
       cls: 'kpi-net',
     },
   ].map(k => `
@@ -472,8 +488,8 @@ export const generateVehicleBenefitReportHTML = ({
   <div class="note">
     <strong>${T('Récapitulatif du règlement', 'ملخص التسوية', lang)} :</strong>
     ${T(
-      `Sur ${fmt(c!.grossAll)} DA de locations pour ce véhicule, l'agence conserve ${fmt(gains.agencyRevenuePeriod)} DA (commission${c!.ownerDeliveryFeesAll > 0 ? ' + livraison à charge du propriétaire' : ''}) et reverse ${fmt(c!.ownerPayoutTotal)} DA au propriétaire. Après ${fmt(gains.expenses)} DA de dépenses véhicule, le bénéfice net de l'agence s'établit à ${fmt(gains.netBenefitPeriod)} DA.`,
-      `من أصل ${fmt(c!.grossAll)} دج من إيجارات هذه المركبة، تحتفظ الوكالة بـ ${fmt(gains.agencyRevenuePeriod)} دج وتدفع ${fmt(c!.ownerPayoutTotal)} دج للمالك. وبعد ${fmt(gains.expenses)} دج من مصاريف المركبة، يبلغ صافي ربح الوكالة ${fmt(gains.netBenefitPeriod)} دج.`,
+      `Sur ${fmt(c!.grossAll)} DA de locations pour ce véhicule, l'agence conserve ${fmt(gains.agencyRevenuePeriod)} DA (commission${c!.ownerDeliveryFeesAll > 0 ? ' + livraison à charge du propriétaire' : ''}) et reverse ${fmt(c!.ownerPayoutTotal)} DA au propriétaire. Après ${fmt(gains.expenses)} DA de dépenses véhicule${longFee > 0 ? ` et +${fmt(longFee)} DA de frais longue durée refacturés au propriétaire` : ''}, le bénéfice net de l'agence s'établit à ${fmt(netFinal)} DA.`,
+      `من أصل ${fmt(c!.grossAll)} دج من إيجارات هذه المركبة، تحتفظ الوكالة بـ ${fmt(gains.agencyRevenuePeriod)} دج وتدفع ${fmt(c!.ownerPayoutTotal)} دج للمالك. وبعد ${fmt(gains.expenses)} دج من مصاريف المركبة${longFee > 0 ? ` و+${fmt(longFee)} دج رسوم مدة طويلة على المالك` : ''}، يبلغ صافي ربح الوكالة ${fmt(netFinal)} دج.`,
       lang)}
   </div>` : ''}
 
