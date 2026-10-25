@@ -179,7 +179,9 @@ export const StepRecap: React.FC = () => {
               )}
               {breakdown.days > 0 && (
                 <div className="flex justify-between gap-4">
-                  <span>{breakdown.days} × {{ fr: 'jour', ar: 'يوم' }[lang]} × {money(unitPrices.day)}</span>
+                  <span>{breakdown.days} × {breakdown.extraDaysAtMonthRate
+                    ? { fr: 'jour supp. (tarif mensuel ÷ 30)', ar: 'يوم إضافي (السعر الشهري ÷ 30)' }[lang]
+                    : { fr: 'jour', ar: 'يوم' }[lang]} × {money(breakdown.dayRate)}</span>
                   <span>{money(breakdown.daysPrice)}</span>
                 </div>
               )}

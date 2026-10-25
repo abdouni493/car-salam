@@ -406,7 +406,9 @@ export const StepCarDates: React.FC = () => {
               )}
               {breakdown.days > 0 && (
                 <div className="flex justify-between gap-4">
-                  <span>{breakdown.days} × {{ fr: 'jour', ar: 'يوم' }[lang]} × {unitPrices.day.toLocaleString()}</span>
+                  <span>{breakdown.days} × {breakdown.extraDaysAtMonthRate
+                    ? { fr: 'jour supp. (tarif mensuel ÷ 30)', ar: 'يوم إضافي (السعر الشهري ÷ 30)' }[lang]
+                    : { fr: 'jour', ar: 'يوم' }[lang]} × {Math.round(breakdown.dayRate).toLocaleString()}</span>
                   <span className="font-bold text-vel-slate">{breakdown.daysPrice.toLocaleString()} {{ fr: 'DA', ar: 'د.ج' }[lang]}</span>
                 </div>
               )}

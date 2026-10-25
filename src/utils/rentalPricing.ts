@@ -32,13 +32,17 @@ export interface RentalPriceBreakdown {
   monthsPrice: number;
   weeksPrice: number;
   daysPrice: number;
+  /** Prix unitaire appliqué aux jours restants (tarif journalier, ou mois ÷ 30 au-delà de 30 j). */
+  dayRate: number;
+  /** Vrai quand la location dépasse 30 j : les jours restants sont au prorata du tarif mensuel. */
+  extraDaysAtMonthRate: boolean;
   /** Somme des trois lignes ci-dessus. */
   total: number;
 }
 
 const EMPTY: RentalPriceBreakdown = {
   totalDays: 0, months: 0, weeks: 0, days: 0,
-  monthsPrice: 0, weeksPrice: 0, daysPrice: 0, total: 0,
+  monthsPrice: 0, weeksPrice: 0, daysPrice: 0, dayRate: 0, extraDaysAtMonthRate: false, total: 0,
 };
 
 /** Tarif positif, ou repli sur le forfait inférieur quand la fiche est vide. */
@@ -61,6 +65,24 @@ export const computeRentalBasePrice = (
   if (d <= 0) return EMPTY;
 
   const { day, week, month } = resolveUnits(unit);
+
+  // Au-delà de 30 jours : les mois pleins au tarif mensuel, et chaque jour
+  // supplémentaire au prorata de ce même tarif (mois ÷ 30) — jamais au tarif
+  // journalier normal.
+  if (d > DAYS_PER_MONTH && month > 0) {
+    const months = Math.floor(d / DAYS_PER_MONTH);
+    const days = d - months * DAYS_PER_MONTH;
+    const dayRate = month / DAYS_PER_MONTH;
+    const monthsPrice = months * month;
+    const daysPrice = Math.round(days * dayRate * 100) / 100;
+    return {
+      totalDays: d,
+      months, weeks: 0, days,
+      monthsPrice, weeksPrice: 0, daysPrice,
+      dayRate, extraDaysAtMonthRate: true,
+      total: monthsPrice + daysPrice,
+    };
+  }
 
   let months = Math.floor(d / DAYS_PER_MONTH);
   let rest = d - months * DAYS_PER_MONTH;
@@ -87,6 +109,7 @@ export const computeRentalBasePrice = (
     totalDays: d,
     months, weeks, days,
     monthsPrice, weeksPrice, daysPrice,
+    dayRate: day, extraDaysAtMonthRate: false,
     total: monthsPrice + weeksPrice + daysPrice,
   };
 };

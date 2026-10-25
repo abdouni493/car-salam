@@ -3673,7 +3673,7 @@ export const Step6FinalPricing: React.FC<{
                   )}
                   {remainingDays > 0 && (
                     <div className="flex justify-between items-center">
-                      <span>{remainingDays} {lang === 'fr' ? (remainingDays > 1 ? 'jours' : 'jour') : 'يوم'} × {fmt(unit.day)}</span>
+                      <span>{remainingDays} {lang === 'fr' ? (remainingDays > 1 ? 'jours' : 'jour') : 'يوم'}{priceBreakdown.extraDaysAtMonthRate ? (lang === 'fr' ? ' supp. (tarif mensuel ÷ 30)' : ' إضافي (السعر الشهري ÷ 30)') : ''} × {fmt(priceBreakdown.dayRate)}</span>
                       <span className="font-bold">{fmt(remainingPrice)}</span>
                     </div>
                   )}
