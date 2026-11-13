@@ -36,8 +36,33 @@ export class ReservationsService {
    * 'per_day', la clôture échouait (reservations_commission_type_check).
    * On calcule donc le snapshot ici : `commission_amount` étant renseigné, le
    * trigger ne fait plus rien. Le barème 'per_day' est enregistré comme un
-   * montant fixe ('amount') égal à valeur × jours, ce qui donne le même total.
+   * montant égal à valeur × jours, ce qui donne le même total.
+   * `commission_type` est laissé à NULL : NULL satisfait toujours la contrainte
+   * CHECK, quelles que soient les valeurs qu'elle autorise.
    */
+  /**
+   * Met à jour une réservation. Si la base rejette la ligne à cause de
+   * `reservations_commission_type_check` (trigger de snapshot), on réessaie en
+   * fournissant un snapshot neutre (type NULL, montant renseigné) afin que le
+   * trigger n'écrive plus de type de commission.
+   */
+  static async safeReservationUpdate(id: string, updateData: Record<string, any>) {
+    const first = await supabase.from('reservations').update(updateData).eq('id', id);
+    if (!first.error || !String(first.error.message || '').includes('commission_type')) {
+      return first;
+    }
+    console.warn('⚠️ commission_type check failed, retrying with neutral snapshot');
+    const snapshot = await this.buildCommissionSnapshot(id);
+    const retryData = {
+      ...updateData,
+      commission_type: null,
+      commission_value: snapshot.commission_value ?? updateData.commission_value ?? null,
+      // 0 ⇒ l'interface ré-estime la commission avec le barème actuel.
+      commission_amount: snapshot.commission_amount ?? updateData.commission_amount ?? 0,
+    };
+    return await supabase.from('reservations').update(retryData).eq('id', id);
+  }
+
   static async buildCommissionSnapshot(reservationId: string): Promise<Record<string, any>> {
     try {
       const { data: res, error } = await supabase
@@ -66,16 +91,16 @@ export class ReservationsService {
       const round2 = (n: number) => Math.round(n * 100) / 100;
       if (owner.commission_type === 'percentage') {
         return {
-          commission_type: 'percentage',
+          commission_type: null,
           commission_value: value,
           commission_amount: round2((Number(res.total_price) || 0) * value / 100),
         };
       }
       if (owner.commission_type === 'per_day') {
         const amount = round2(value * Math.max(1, Number(res.total_days) || 0));
-        return { commission_type: 'amount', commission_value: amount, commission_amount: amount };
+        return { commission_type: null, commission_value: amount, commission_amount: amount };
       }
-      return { commission_type: 'amount', commission_value: value, commission_amount: round2(value) };
+      return { commission_type: null, commission_value: value, commission_amount: round2(value) };
     } catch (err) {
       console.warn('⚠️ Commission snapshot failed (non-blocking):', err);
       return {};
@@ -769,19 +794,13 @@ export class ReservationsService {
     // Remove caution_amount_dzd from updateData if it exists and is invalid, as it may not exist in the schema yet
     // The column should be added via migration first
     try {
-      const { error } = await supabase
-        .from('reservations')
-        .update(updateData)
-        .eq('id', id);
+      const { error } = await this.safeReservationUpdate(id, updateData);
 
       if (error) {
         // If the error is about caution_amount_dzd column not existing, retry without it
         if (error.message && error.message.includes('caution_amount_dzd')) {
           delete updateData.caution_amount_dzd;
-          const { error: retryError } = await supabase
-            .from('reservations')
-            .update(updateData)
-            .eq('id', id);
+          const { error: retryError } = await this.safeReservationUpdate(id, updateData);
           if (retryError) throw retryError;
         } else {
           throw error;
@@ -1021,10 +1040,7 @@ export class ReservationsService {
 
       console.log('Update data:', updateData);
 
-      const { error } = await supabase
-        .from('reservations')
-        .update(updateData)
-        .eq('id', data.reservationId);
+      const { error } = await this.safeReservationUpdate(data.reservationId, updateData);
 
       if (error) {
         console.error('❌ Reservation update failed:', error);

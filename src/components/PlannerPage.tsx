@@ -293,15 +293,16 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
         err?.message?.includes('unique_reservation_type_inspection')
       ) {
         try {
-          await supabase
-            .from('reservations')
-            .update({
+          const { error: statusError } = await ReservationsService.safeReservationUpdate(
+            updatedReservation.id,
+            {
               status: updatedReservation.status,
               ...(updatedReservation.status === 'completed'
                 ? await ReservationsService.buildCommissionSnapshot(updatedReservation.id)
                 : {}),
-            })
-            .eq('id', updatedReservation.id);
+            }
+          );
+          if (statusError) throw statusError;
 
           const freshReservation = await ReservationsService.getReservationById(updatedReservation.id);
           setReservations(prev =>
