@@ -27,6 +27,78 @@ function mapProtectionAssurance(pa: any): ProtectionAssurance | undefined {
 // RESERVATIONS SERVICE
 // =========================================
 export class ReservationsService {
+  static async safeReservationUpdate(id: string, updateData: Record<string, any>) {
+    const isCommissionError = (err: any) =>
+      !!err && String(err.message || '').includes('commission_type');
+
+    const first = await supabase.from('reservations').update(updateData).eq('id', id);
+    if (!isCommissionError(first.error)) return first;
+
+    // 1) Snapshot neutre : type NULL + montant renseigné.
+    console.warn('⚠️ commission_type check failed, retrying with neutral snapshot');
+    const snapshot = await this.buildCommissionSnapshot(id);
+    const retryData = {
+      ...updateData,
+      commission_type: null,
+      commission_value: snapshot.commission_value ?? updateData.commission_value ?? null,
+      // 0 ⇒ l'interface ré-estime la commission avec le barème actuel.
+      commission_amount: snapshot.commission_amount ?? updateData.commission_amount ?? 0,
+    };
+    const second = await supabase.from('reservations').update(retryData).eq('id', id);
+    if (!isCommissionError(second.error)) return second;
+
+    // 2) Le trigger de la base recopie le barème du propriétaire (ex. 'per_day')
+    //    même quand le montant est fourni. On présente TEMPORAIREMENT au trigger
+    //    un barème accepté ('amount', montant = valeur × jours, soit le même
+    //    total), puis on restaure exactement le barème du propriétaire.
+    console.warn('⚠️ commission_type still rejected, using temporary owner scale');
+    const { data: res } = await supabase
+      .from('reservations')
+      .select('car_id, total_days')
+      .eq('id', id)
+      .single();
+    if (!res?.car_id) return second;
+
+    const { data: owner } = await supabase
+      .from('car_owners')
+      .select('id, commission_type, commission_value')
+      .eq('car_id', res.car_id)
+      .limit(1)
+      .maybeSingle();
+    if (!owner || owner.commission_type === 'amount' || owner.commission_type === 'percentage') {
+      return second;
+    }
+
+    const value = Number(owner.commission_value) || 0;
+    const amount =
+      owner.commission_type === 'per_day'
+        ? Math.round(value * Math.max(1, Number(res.total_days) || 0) * 100) / 100
+        : value;
+
+    const { error: tmpError } = await supabase
+      .from('car_owners')
+      .update({ commission_type: 'amount', commission_value: amount })
+      .eq('id', owner.id);
+    if (tmpError) {
+      console.error('❌ Temporary owner scale failed:', tmpError);
+      return second;
+    }
+
+    try {
+      const { commission_type, commission_value, commission_amount, ...base } = retryData as any;
+      return await supabase
+        .from('reservations')
+        .update({ ...base, commission_amount: null })
+        .eq('id', id);
+    } finally {
+      const { error: restoreError } = await supabase
+        .from('car_owners')
+        .update({ commission_type: owner.commission_type, commission_value: owner.commission_value })
+        .eq('id', owner.id);
+      if (restoreError) console.error('❌ Failed to restore owner commission scale:', restoreError);
+    }
+  }
+
   /**
    * Fige la commission conciergerie AVANT le passage en `completed`.
    *
@@ -40,29 +112,6 @@ export class ReservationsService {
    * `commission_type` est laissé à NULL : NULL satisfait toujours la contrainte
    * CHECK, quelles que soient les valeurs qu'elle autorise.
    */
-  /**
-   * Met à jour une réservation. Si la base rejette la ligne à cause de
-   * `reservations_commission_type_check` (trigger de snapshot), on réessaie en
-   * fournissant un snapshot neutre (type NULL, montant renseigné) afin que le
-   * trigger n'écrive plus de type de commission.
-   */
-  static async safeReservationUpdate(id: string, updateData: Record<string, any>) {
-    const first = await supabase.from('reservations').update(updateData).eq('id', id);
-    if (!first.error || !String(first.error.message || '').includes('commission_type')) {
-      return first;
-    }
-    console.warn('⚠️ commission_type check failed, retrying with neutral snapshot');
-    const snapshot = await this.buildCommissionSnapshot(id);
-    const retryData = {
-      ...updateData,
-      commission_type: null,
-      commission_value: snapshot.commission_value ?? updateData.commission_value ?? null,
-      // 0 ⇒ l'interface ré-estime la commission avec le barème actuel.
-      commission_amount: snapshot.commission_amount ?? updateData.commission_amount ?? 0,
-    };
-    return await supabase.from('reservations').update(retryData).eq('id', id);
-  }
-
   static async buildCommissionSnapshot(reservationId: string): Promise<Record<string, any>> {
     try {
       const { data: res, error } = await supabase
