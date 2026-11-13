@@ -27,6 +27,61 @@ function mapProtectionAssurance(pa: any): ProtectionAssurance | undefined {
 // RESERVATIONS SERVICE
 // =========================================
 export class ReservationsService {
+  /**
+   * Fige la commission conciergerie AVANT le passage en `completed`.
+   *
+   * Le trigger DB `snapshot_reservation_commission` recopie
+   * `car_owners.commission_type` dans `reservations.commission_type`, dont la
+   * contrainte CHECK n'accepte que 'amount' | 'percentage'. Avec le barème
+   * 'per_day', la clôture échouait (reservations_commission_type_check).
+   * On calcule donc le snapshot ici : `commission_amount` étant renseigné, le
+   * trigger ne fait plus rien. Le barème 'per_day' est enregistré comme un
+   * montant fixe ('amount') égal à valeur × jours, ce qui donne le même total.
+   */
+  static async buildCommissionSnapshot(reservationId: string): Promise<Record<string, any>> {
+    try {
+      const { data: res, error } = await supabase
+        .from('reservations')
+        .select('car_id, total_price, total_days, commission_amount')
+        .eq('id', reservationId)
+        .single();
+      if (error || !res || res.commission_amount != null || !res.car_id) return {};
+
+      const { data: car } = await supabase
+        .from('cars')
+        .select('ownership_type')
+        .eq('id', res.car_id)
+        .maybeSingle();
+      if (!car || car.ownership_type !== 'consignment') return {};
+
+      const { data: owner } = await supabase
+        .from('car_owners')
+        .select('commission_type, commission_value')
+        .eq('car_id', res.car_id)
+        .limit(1)
+        .maybeSingle();
+      if (!owner) return {};
+
+      const value = Number(owner.commission_value) || 0;
+      const round2 = (n: number) => Math.round(n * 100) / 100;
+      if (owner.commission_type === 'percentage') {
+        return {
+          commission_type: 'percentage',
+          commission_value: value,
+          commission_amount: round2((Number(res.total_price) || 0) * value / 100),
+        };
+      }
+      if (owner.commission_type === 'per_day') {
+        const amount = round2(value * Math.max(1, Number(res.total_days) || 0));
+        return { commission_type: 'amount', commission_value: amount, commission_amount: amount };
+      }
+      return { commission_type: 'amount', commission_value: value, commission_amount: round2(value) };
+    } catch (err) {
+      console.warn('⚠️ Commission snapshot failed (non-blocking):', err);
+      return {};
+    }
+  }
+
   // ========== RESERVATIONS ==========
   
   static async createReservation(data: {
@@ -680,6 +735,9 @@ export class ReservationsService {
     
     // Status & Financial fields
     if (updates.status !== undefined) updateData.status = updates.status;
+    if (updates.status === 'completed') {
+      Object.assign(updateData, await this.buildCommissionSnapshot(id));
+    }
     if (updates.discountAmount !== undefined) updateData.discount_amount = updates.discountAmount;
     if (updates.discountType !== undefined) updateData.discount_type = updates.discountType;
     if (updates.advancePayment !== undefined) updateData.advance_payment = updates.advancePayment;
@@ -954,6 +1012,7 @@ export class ReservationsService {
       const updateData: any = {
         status: 'completed',
         completed_at: new Date().toISOString(),
+        ...(await this.buildCommissionSnapshot(data.reservationId)),
       };
 
       if (data.excessMileage !== undefined) updateData.excess_mileage = data.excessMileage;

@@ -295,7 +295,12 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
         try {
           await supabase
             .from('reservations')
-            .update({ status: updatedReservation.status })
+            .update({
+              status: updatedReservation.status,
+              ...(updatedReservation.status === 'completed'
+                ? await ReservationsService.buildCommissionSnapshot(updatedReservation.id)
+                : {}),
+            })
             .eq('id', updatedReservation.id);
 
           const freshReservation = await ReservationsService.getReservationById(updatedReservation.id);
