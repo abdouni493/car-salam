@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Calendar, TrendingUp, ChevronDown, Printer, Loader2, AlertCircle, Download,
   Clock, Handshake, Phone, User as UserIcon, Receipt, BarChart3,
-  ArrowRight, Gauge, Coins, FileText, CarFront, Sparkles, AlertTriangle,
+  ArrowRight, Gauge, Coins, FileText, CarFront, Sparkles, AlertTriangle, Eye, EyeOff,
 } from 'lucide-react';
 import { Language, Car, ReservationDetails, VehicleExpense } from '../types';
 import { isLongDuration, LONG_DURATION_FEE_DZD, LONG_DURATION_THRESHOLD_DAYS } from '../utils/longDurationFee';
@@ -16,6 +16,7 @@ import {
   computeConsignmentSplit,
 } from '../utils/gainsMath';
 import { normalizeCommissionType } from '../utils/consignmentMath';
+import { expenseTypeLabel, expenseDetailFields, summarizeExpensesByType } from '../utils/expenseDetails';
 import { PctChip, SplitBar, SplitLegend, CalcRow } from './gains/GainsUI';
 import { BenefitCard, BenefitDrawer } from './gains/BenefitCards';
 import { CarSelector } from './gains/CarSelector';
@@ -93,6 +94,8 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
   const [expenses, setExpenses] = useState<VehicleExpense[]>([]);
   const [expandedRes, setExpandedRes] = useState<string | null>(null);
   const [drawer, setDrawer] = useState<DrawerKey>(null);
+  /** Affiche le détail complet de chaque dépense (kilométrage, filtres, note…). */
+  const [showExpenseDetails, setShowExpenseDetails] = useState(false);
 
   // Frais supplémentaires « longue durée » à la charge du PROPRIÉTAIRE : pour
   // chaque location d'un véhicule en conciergerie qui atteint le seuil (≥ 10 j),
@@ -221,6 +224,7 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
     () => computeVehicleGains(selectedCar, reservations, expenses),
     [selectedCar, reservations, expenses],
   );
+  const expensesByType = useMemo(() => summarizeExpensesByType(expenses, lang), [expenses, lang]);
   const { consignment, owner } = g;
 
   const periodDays = Math.max(
@@ -1214,14 +1218,14 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
               </motion.div>
             )}
 
-            {/* ── Dépenses ── */}
+            {/* ── Dépenses (avec option « détail ») ── */}
             {expenses.length > 0 && (
               <motion.div
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-slate-200"
               >
-                <div className="flex items-center justify-between border-b border-rose-100 bg-rose-50 px-5 py-3.5">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-rose-100 bg-rose-50 px-5 py-3.5">
                   <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide text-rose-700">
                     <Receipt size={16} />
                     {T('Liste des dépenses', 'قائمة المصاريف', lang)}
@@ -1229,33 +1233,105 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
                       {expenses.length}
                     </span>
                   </h3>
-                  <span className="text-sm font-bold tabular-nums text-rose-700">
-                    −{fmt(g.expenses)} <span className="text-[10px] text-rose-400">DA</span>
-                  </span>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowExpenseDetails(v => !v)}
+                      aria-pressed={showExpenseDetails}
+                      className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-bold ring-1 transition ${
+                        showExpenseDetails
+                          ? 'bg-rose-600 text-white ring-rose-600 hover:bg-rose-700'
+                          : 'bg-white text-rose-700 ring-rose-200 hover:bg-rose-100'
+                      }`}
+                    >
+                      {showExpenseDetails ? <EyeOff size={13} /> : <Eye size={13} />}
+                      {showExpenseDetails
+                        ? T('Masquer le détail', 'إخفاء التفاصيل', lang)
+                        : T('Afficher le détail', 'عرض التفاصيل', lang)}
+                    </button>
+                    <span className="text-sm font-bold tabular-nums text-rose-700">
+                      −{fmt(g.expenses)} <span className="text-[10px] text-rose-400">DA</span>
+                    </span>
+                  </div>
                 </div>
+
+                {split && (
+                  <p className="border-b border-rose-100 bg-rose-50/40 px-5 py-2 text-[11px] font-semibold text-rose-800">
+                    {T(
+                      'Véhicule en conciergerie : ces dépenses sont déduites de la part du propriétaire.',
+                      'مركبة في نظام الوكالة: تُخصم هذه المصاريف من حصة المالك.',
+                      lang)}
+                  </p>
+                )}
+
+                {/* Récapitulatif par type */}
+                {showExpenseDetails && (
+                  <div className="border-b border-slate-100 px-5 py-4">
+                    <p className="mb-2.5 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                      {T('Récapitulatif par type', 'ملخص حسب النوع', lang)}
+                    </p>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                      {expensesByType.map(t => (
+                        <div key={t.type} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3.5 py-2.5 ring-1 ring-slate-200">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-bold text-slate-800">{t.label}</p>
+                            <p className="text-[11px] font-medium text-slate-400">
+                              {t.count} {T('poste(s)', 'بند', lang)} · {fmtPct(pct(t.total, g.expenses))}
+                            </p>
+                          </div>
+                          <span className="shrink-0 text-sm font-black tabular-nums text-rose-700">
+                            −{fmt(t.total)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div className="divide-y divide-slate-100">
                   {expenses.map(exp => {
                     const cost = Number(exp.cost) || 0;
+                    const details = expenseDetailFields(exp, lang, fmtD);
                     return (
-                      <div key={exp.id} className="flex items-center gap-3 px-5 py-3 transition hover:bg-rose-50/40">
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-semibold text-slate-800">
-                            {exp.expenseName || exp.type}
-                          </p>
-                          <p className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-slate-400">
-                            <span className="flex items-center gap-1">
-                              <Calendar size={11} />
-                              {fmtD(exp.date)}
-                            </span>
-                            {exp.currentMileage ? <span>{fmt(exp.currentMileage)} km</span> : null}
-                            {exp.note ? <span className="truncate">{exp.note}</span> : null}
-                          </p>
+                      <div key={exp.id} className="px-5 py-3 transition hover:bg-rose-50/40">
+                        <div className="flex items-center gap-3">
+                          <div className="min-w-0 flex-1">
+                            <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-800">
+                              <span className="truncate">{exp.expenseName || expenseTypeLabel(exp.type, lang)}</span>
+                              <span className="rounded-md bg-rose-50 px-1.5 py-0.5 text-[10px] font-bold text-rose-600 ring-1 ring-rose-200">
+                                {expenseTypeLabel(exp.type, lang)}
+                              </span>
+                            </p>
+                            <p className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                              <span className="flex items-center gap-1">
+                                <Calendar size={11} />
+                                {fmtD(exp.date)}
+                              </span>
+                              {!showExpenseDetails && exp.currentMileage ? <span>{fmt(exp.currentMileage)} km</span> : null}
+                              {!showExpenseDetails && exp.note ? <span className="truncate">{exp.note}</span> : null}
+                            </p>
+                          </div>
+                          <PctChip value={pct(cost, g.expenses)} tone="rose" />
+                          <span className="shrink-0 text-sm font-bold tabular-nums text-rose-700">
+                            −{fmt(cost)}
+                          </span>
                         </div>
-                        <PctChip value={pct(cost, g.expenses)} tone="rose" />
-                        <span className="shrink-0 text-sm font-bold tabular-nums text-rose-700">
-                          −{fmt(cost)}
-                        </span>
+                        {showExpenseDetails && (
+                          details.length > 0 ? (
+                            <dl className="mt-2.5 grid grid-cols-1 gap-x-4 gap-y-1.5 rounded-xl bg-slate-50 px-3.5 py-2.5 ring-1 ring-slate-200 sm:grid-cols-2">
+                              {details.map(d => (
+                                <div key={d.label} className="flex min-w-0 gap-1.5 text-xs">
+                                  <dt className="shrink-0 font-semibold text-slate-500">{d.label} :</dt>
+                                  <dd className="min-w-0 break-words font-bold text-slate-800">{d.value}</dd>
+                                </div>
+                              ))}
+                            </dl>
+                          ) : (
+                            <p className="mt-2 text-[11px] italic text-slate-400">
+                              {T('Aucun détail supplémentaire enregistré.', 'لا توجد تفاصيل إضافية مسجلة.', lang)}
+                            </p>
+                          )
+                        )}
                       </div>
                     );
                   })}
@@ -1648,21 +1724,35 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
               </p>
             )}
             <div className="divide-y divide-slate-100">
-              {expenses.map(exp => (
-                <div key={exp.id} className="flex items-center gap-3 py-2.5">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-bold text-slate-800">{exp.expenseName || exp.type}</p>
-                    <p className="mt-0.5 text-[11px] text-slate-400">
-                      {fmtD(exp.date)} · {exp.type}
-                      {exp.note ? ` · ${exp.note}` : ''}
-                    </p>
+              {expenses.map(exp => {
+                const details = expenseDetailFields(exp, lang, fmtD);
+                return (
+                  <div key={exp.id} className="py-2.5">
+                    <div className="flex items-center gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-bold text-slate-800">{exp.expenseName || expenseTypeLabel(exp.type, lang)}</p>
+                        <p className="mt-0.5 text-[11px] text-slate-400">
+                          {fmtD(exp.date)} · {expenseTypeLabel(exp.type, lang)}
+                        </p>
+                      </div>
+                      <PctChip value={pct(Number(exp.cost) || 0, g.expenses)} tone="rose" />
+                      <span className="shrink-0 text-sm font-black tabular-nums text-rose-700">
+                        −{fmt(Number(exp.cost) || 0)}
+                      </span>
+                    </div>
+                    {details.length > 0 && (
+                      <dl className="mt-2 space-y-1 rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
+                        {details.map(d => (
+                          <div key={d.label} className="flex min-w-0 gap-1.5 text-[11px]">
+                            <dt className="shrink-0 font-semibold text-slate-500">{d.label} :</dt>
+                            <dd className="min-w-0 break-words font-bold text-slate-700">{d.value}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    )}
                   </div>
-                  <PctChip value={pct(Number(exp.cost) || 0, g.expenses)} tone="rose" />
-                  <span className="shrink-0 text-sm font-black tabular-nums text-rose-700">
-                    −{fmt(Number(exp.cost) || 0)}
-                  </span>
-                </div>
-              ))}
+                );
+              })}
             </div>
             <div className="flex items-center justify-between rounded-2xl bg-rose-700 px-4 py-3 text-white">
               <span className="text-xs font-bold uppercase tracking-wide text-white/75">

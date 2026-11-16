@@ -1,5 +1,6 @@
 import { Car, Language, ReservationDetails, VehicleExpense } from '../../types';
 import { VehicleGains, calcPaid, commissionBreakdown, computeConsignmentSplit } from '../../utils/gainsMath';
+import { expenseTypeLabel, expenseFilters, summarizeExpensesByType } from '../../utils/expenseDetails';
 
 /**
  * RAPPORT « BÉNÉFICES PAR VÉHICULE » — document imprimable / PDF.
@@ -112,13 +113,42 @@ export const generateVehicleBenefitReportHTML = ({
       </tr>`;
   }).join('');
 
-  const expRows = expenses.map((e, i) => `
+  // ── Dépenses : tableau détaillé + récapitulatif par type ────────────────
+  const totalExp = Number(gains.expenses) || 0;
+  const pctOfExp = (v: number) => pctTxt(totalExp > 0 ? (v / totalExp) * 100 : 0);
+  const expRows = expenses.map((e, i) => {
+    const cost = Number(e.cost) || 0;
+    const filters = expenseFilters(e, lang);
+    return `
     <tr>
       <td class="num">${i + 1}</td>
-      <td>${esc(e.type || '—')}</td>
+      <td><span class="pill">${esc(expenseTypeLabel(e.type, lang))}</span></td>
       <td class="nowrap">${ltr(fmtD(e.date))}</td>
-      <td>${esc(e.expenseName || e.note || '—')}</td>
-      <td class="num bad">−${fmt(Number(e.cost) || 0)}</td>
+      <td>${esc(e.expenseName || '—')}</td>
+      <td class="num nowrap">${e.currentMileage ? `${ltr(fmt(e.currentMileage))} km` : '—'}</td>
+      <td class="num nowrap">${e.nextVidangeKm ? `${ltr(fmt(e.nextVidangeKm))} km` : '—'}</td>
+      <td class="nowrap">${e.expirationDate ? ltr(fmtD(e.expirationDate)) : '—'}</td>
+      <td>${filters.length ? esc(filters.join(', ')) : '—'}</td>
+      <td>${esc(e.note || '—')}</td>
+      <td class="num muted">${pctOfExp(cost)}</td>
+      <td class="num bad nowrap">−${fmt(cost)}</td>
+    </tr>`;
+  }).join('');
+
+  const expTypeRows = summarizeExpensesByType(expenses, lang).map(t => `
+    <tr>
+      <td>${esc(t.label)}</td>
+      <td class="num">${t.count}</td>
+      <td class="num muted">${pctOfExp(t.total)}</td>
+      <td class="num bad">−${fmt(t.total)}</td>
+    </tr>`).join('');
+
+  const longRows = ownerLongDurationItems.map((it, i) => `
+    <tr>
+      <td class="num">${i + 1}</td>
+      <td>${esc(it.name)}</td>
+      <td class="num">${it.totalDays}</td>
+      <td class="num accent">+${fmt(it.amount)}</td>
     </tr>`).join('');
 
   // ── Calcul final, ligne à ligne ─────────────────────────────────────────
@@ -326,6 +356,10 @@ export const generateVehicleBenefitReportHTML = ({
     color:#0f766e; border-bottom:2px solid #0f766e; padding-bottom:4px; margin:14px 0 7px;
   }
   table { width:100%; border-collapse:collapse; font-size:9.5px; }
+  .exp-table { font-size:8.5px; }
+  .exp-table thead th { font-size:7.5px; padding:4px 4px; }
+  .exp-table tbody td { padding:4px 4px; vertical-align:top; }
+  tr { page-break-inside:avoid; }
   thead th {
     background:#0f766e; color:#fff; padding:5px 6px; text-align:${isFrench ? 'left' : 'right'};
     font-weight:700; font-size:8.5px; text-transform:uppercase; letter-spacing:.5px;
@@ -470,26 +504,78 @@ export const generateVehicleBenefitReportHTML = ({
     ${commissionNote}${deliveryNote}${pendingNote}
   </div>` : ''}
 
-  <h2 class="section">${T('Liste des dépenses', 'قائمة المصاريف', lang)} (${expenses.length})</h2>
+  <h2 class="section">${T('Détail des dépenses du véhicule', 'تفاصيل مصاريف المركبة', lang)} (${expenses.length})</h2>
   ${expenses.length > 0 ? `
-  <table>
+  ${isConsignment ? `<p class="note" style="margin:0 0 7px">${T(
+    'Véhicule en conciergerie : ces dépenses sont à la charge du propriétaire et sont déduites de sa part.',
+    'مركبة في نظام الوكالة: هذه المصاريف على حساب المالك وتُخصم من حصته.',
+    lang)}</p>` : ''}
+  <table class="exp-table">
     <thead>
       <tr>
         <th class="num">#</th>
         <th>${T('Type', 'النوع', lang)}</th>
         <th>${T('Date', 'التاريخ', lang)}</th>
-        <th>${T('Description', 'الوصف', lang)}</th>
+        <th>${T('Désignation', 'التسمية', lang)}</th>
+        <th class="num">${T('Km', 'كم', lang)}</th>
+        <th class="num">${T('Proch. vidange', 'التغيير القادم', lang)}</th>
+        <th>${T('Expiration', 'الانتهاء', lang)}</th>
+        <th>${T('Filtres changés', 'الفلاتر', lang)}</th>
+        <th>${T('Note', 'ملاحظة', lang)}</th>
+        <th class="num">%</th>
         <th class="num">${T('Montant', 'المبلغ', lang)}</th>
       </tr>
     </thead>
     <tbody>${expRows}</tbody>
     <tfoot>
       <tr>
-        <td colspan="4">${T('TOTAL DES DÉPENSES', 'إجمالي المصاريف', lang)}</td>
-        <td class="num bad">−${fmt(gains.expenses)}</td>
+        <td colspan="9">${T('TOTAL DES DÉPENSES', 'إجمالي المصاريف', lang)}</td>
+        <td class="num">100 %</td>
+        <td class="num bad nowrap">−${fmt(totalExp)}</td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <h2 class="section">${T('Récapitulatif des dépenses par type', 'ملخص المصاريف حسب النوع', lang)}</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>${T('Type', 'النوع', lang)}</th>
+        <th class="num">${T('Postes', 'البنود', lang)}</th>
+        <th class="num">${T('Part', 'النسبة', lang)}</th>
+        <th class="num">${T('Total', 'الإجمالي', lang)}</th>
+      </tr>
+    </thead>
+    <tbody>${expTypeRows}</tbody>
+    <tfoot>
+      <tr>
+        <td>${T('TOTAL', 'الإجمالي', lang)}</td>
+        <td class="num">${expenses.length}</td>
+        <td class="num">100 %</td>
+        <td class="num bad">−${fmt(totalExp)}</td>
       </tr>
     </tfoot>
   </table>` : `<p class="note">${T('Aucune dépense sur la période.', 'لا توجد مصاريف في هذه الفترة.', lang)}</p>`}
+
+  ${isConsignment && longRows ? `
+  <h2 class="section">${T('Frais longue durée refacturés au propriétaire', 'رسوم المدة الطويلة على المالك', lang)} (${ownerLongDurationItems.length})</h2>
+  <table>
+    <thead>
+      <tr>
+        <th class="num">#</th>
+        <th>${T('Client', 'العميل', lang)}</th>
+        <th class="num">${T('Jours', 'أيام', lang)}</th>
+        <th class="num">${T('Montant', 'المبلغ', lang)}</th>
+      </tr>
+    </thead>
+    <tbody>${longRows}</tbody>
+    <tfoot>
+      <tr>
+        <td colspan="3">${T('TOTAL', 'الإجمالي', lang)}</td>
+        <td class="num">+${fmt(longFee)}</td>
+      </tr>
+    </tfoot>
+  </table>` : ''}
 
   <h2 class="section">${isConsignment
     ? T('Calcul des parts agence / propriétaire', 'حساب حصتي الوكالة والمالك', lang)
