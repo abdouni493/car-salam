@@ -1,5 +1,5 @@
 import { Car, Language, ReservationDetails, VehicleExpense } from '../../types';
-import { VehicleGains, calcPaid, commissionBreakdown } from '../../utils/gainsMath';
+import { VehicleGains, calcPaid, commissionBreakdown, computeConsignmentSplit } from '../../utils/gainsMath';
 
 /**
  * RAPPORT « BÉNÉFICES PAR VÉHICULE » — document imprimable / PDF.
@@ -73,9 +73,12 @@ export const generateVehicleBenefitReportHTML = ({
   const isConsignment = gains.isConsignment && !!owner && !!c;
 
   // Frais « longue durée » refacturés au propriétaire : n'existent que pour une
-  // conciergerie, et s'ajoutent au bénéfice net de l'agence.
+  // conciergerie ; ils s'ajoutent à la part de l'agence et se déduisent de celle
+  // du propriétaire. Les dépenses du véhicule sont à la charge du propriétaire :
+  // la part de l'agence est calculée indépendamment, sans les toucher.
   const longFee = isConsignment ? Math.max(0, Number(ownerLongDurationTotal) || 0) : 0;
-  const netFinal = (isConsignment ? gains.netBenefitPeriod : gains.netBenefit) + longFee;
+  const split = isConsignment ? computeConsignmentSplit(gains, longFee) : null;
+  const netFinal = split ? split.agencyPart : gains.netBenefit;
 
   const scaleLabel = owner
     ? owner.commissionType === 'percentage'
@@ -121,48 +124,59 @@ export const generateVehicleBenefitReportHTML = ({
   // ── Calcul final, ligne à ligne ─────────────────────────────────────────
   type CalcLine = { label: string; sub?: string; amount: number; sign: string; tone: string };
 
-  const calcLines: CalcLine[] = isConsignment
+  const calcLines: CalcLine[] = split
     ? [
         {
           sign: '', tone: 'neutral',
           label: T('Chiffre d’affaires des locations', 'رقم أعمال الإيجارات', lang),
           sub: `${gains.rentals} ${T('location(s)', 'إيجار', lang)} · ${gains.daysRented} ${T('jours loués', 'يوم كراء', lang)}`,
-          amount: c!.grossAll,
+          amount: split.gross,
         },
         {
-          sign: '−', tone: 'muted',
-          label: T('Part reversée au propriétaire', 'الحصة المستحقة للمالك', lang),
-          sub: `${pctTxt(c!.grossAll > 0 ? (c!.ownerPayoutTotal / c!.grossAll) * 100 : 0)} ${T('du chiffre d’affaires', 'من رقم الأعمال', lang)}`,
-          amount: c!.ownerPayoutTotal,
+          sign: '', tone: 'accent',
+          label: T('Commission de l’agence', 'عمولة الوكالة', lang),
+          sub: `${pctTxt(split.gross > 0 ? (split.commission / split.gross) * 100 : 0)} ${T('du chiffre d’affaires', 'من رقم الأعمال', lang)}`,
+          amount: split.commission,
         },
-        {
-          sign: '=', tone: 'accent',
-          label: T('Revenu de l’agence', 'إيراد الوكالة', lang),
-          sub: `${T('commission', 'العمولة', lang)} ${fmt(c!.commissionTotal)}`
-            + (c!.ownerDeliveryFeesAll > 0
-              ? ` + ${T('livraison propriétaire', 'توصيل المالك', lang)} ${fmt(c!.ownerDeliveryFeesAll)}`
-              : ''),
-          amount: gains.agencyRevenuePeriod,
-        },
-        {
-          sign: '−', tone: 'bad',
-          label: T('Dépenses du véhicule', 'مصاريف المركبة', lang),
-          sub: `${expenses.length} ${T('poste(s)', 'بند', lang)}`,
-          amount: gains.expenses,
-        },
-        ...(longFee > 0 ? [{
+        ...(split.ownerDelivery > 0 ? [{
+          sign: '+', tone: 'accent',
+          label: T('Livraison à charge du propriétaire', 'التوصيل على حساب المالك', lang),
+          amount: split.ownerDelivery,
+        } as CalcLine] : []),
+        ...(split.longFee > 0 ? [{
           sign: '+', tone: 'accent',
           label: T('Frais longue durée (propriétaire)', 'رسوم المدة الطويلة (المالك)', lang),
           sub: `${ownerLongDurationItems.length} ${T('location(s) ≥ 10 j', 'إيجار ≥ 10 أيام', lang)}`,
-          amount: longFee,
+          amount: split.longFee,
         } as CalcLine] : []),
         {
           sign: '=', tone: 'total',
-          label: T('BÉNÉFICE NET DE L’AGENCE', 'صافي ربح الوكالة', lang),
-          sub: `${T('marge', 'الهامش', lang)} ${pctTxt(
-            gains.agencyRevenuePeriod > 0 ? (netFinal / gains.agencyRevenuePeriod) * 100 : 0,
-          )}`,
-          amount: netFinal,
+          label: T('PART DE L’AGENCE', 'حصة الوكالة', lang),
+          sub: `${pctTxt(split.agencyShare)} ${T('du CA · aucune dépense déduite', 'من رقم الأعمال · دون خصم المصاريف', lang)}`,
+          amount: split.agencyPart,
+        },
+        {
+          sign: '', tone: 'muted',
+          label: T('Part du propriétaire (brute)', 'حصة المالك (الإجمالية)', lang),
+          sub: T('CA − commission − livraison', 'رقم الأعمال − العمولة − التوصيل', lang),
+          amount: split.ownerGross,
+        },
+        ...(split.longFee > 0 ? [{
+          sign: '−', tone: 'bad',
+          label: T('Frais longue durée', 'رسوم المدة الطويلة', lang),
+          amount: split.longFee,
+        } as CalcLine] : []),
+        {
+          sign: '−', tone: 'bad',
+          label: T('Dépenses du véhicule (à la charge du propriétaire)', 'مصاريف المركبة (على حساب المالك)', lang),
+          sub: `${expenses.length} ${T('poste(s)', 'بند', lang)}`,
+          amount: split.expenses,
+        },
+        {
+          sign: '=', tone: 'total',
+          label: T('NET À REVERSER AU PROPRIÉTAIRE', 'الصافي المستحق للمالك', lang),
+          sub: `${pctTxt(split.ownerNetShare)} ${T('du chiffre d’affaires', 'من رقم الأعمال', lang)}`,
+          amount: split.ownerNet,
         },
       ]
     : [
@@ -202,21 +216,17 @@ export const generateVehicleBenefitReportHTML = ({
       <span class="calc-amount">${l.amount < 0 ? '−' : ''}${fmt(Math.abs(l.amount))} DA</span>
     </div>`).join('');
 
-  const kpiCards = [
-    {
-      label: isConsignment
-        ? T('Gains des locations (agence)', 'أرباح الإيجارات (الوكالة)', lang)
-        : T('Gains des locations', 'أرباح الإيجارات', lang),
-      value: gains.agencyRevenuePeriod,
-      cls: 'kpi-gain',
-    },
-    { label: T('Total des dépenses', 'إجمالي المصاريف', lang), value: gains.expenses, cls: 'kpi-exp' },
-    {
-      label: T('Bénéfice net', 'صافي الربح', lang),
-      value: netFinal,
-      cls: 'kpi-net',
-    },
-  ].map(k => `
+  const kpiCards = (split
+    ? [
+        { label: T('Part de l’agence', 'حصة الوكالة', lang), value: split.agencyPart, cls: 'kpi-gain' },
+        { label: T('Dépenses (propriétaire)', 'المصاريف (المالك)', lang), value: split.expenses, cls: 'kpi-exp' },
+        { label: T('Net propriétaire', 'صافي المالك', lang), value: split.ownerNet, cls: 'kpi-net' },
+      ]
+    : [
+        { label: T('Gains des locations', 'أرباح الإيجارات', lang), value: gains.agencyRevenuePeriod, cls: 'kpi-gain' },
+        { label: T('Total des dépenses', 'إجمالي المصاريف', lang), value: gains.expenses, cls: 'kpi-exp' },
+        { label: T('Bénéfice net', 'صافي الربح', lang), value: netFinal, cls: 'kpi-net' },
+      ]).map(k => `
     <div class="kpi ${k.cls}">
       <span class="kpi-label">${esc(k.label)}</span>
       <span class="kpi-value">${k.value < 0 ? '−' : ''}${fmt(Math.abs(k.value))} <small>DA</small></span>
@@ -481,15 +491,17 @@ export const generateVehicleBenefitReportHTML = ({
     </tfoot>
   </table>` : `<p class="note">${T('Aucune dépense sur la période.', 'لا توجد مصاريف في هذه الفترة.', lang)}</p>`}
 
-  <h2 class="section">${T('Calcul du bénéfice', 'حساب الربح', lang)}</h2>
+  <h2 class="section">${isConsignment
+    ? T('Calcul des parts agence / propriétaire', 'حساب حصتي الوكالة والمالك', lang)
+    : T('Calcul du bénéfice', 'حساب الربح', lang)}</h2>
   <div class="calc">${calcHtml}</div>
 
   ${isConsignment ? `
   <div class="note">
     <strong>${T('Récapitulatif du règlement', 'ملخص التسوية', lang)} :</strong>
     ${T(
-      `Sur ${fmt(c!.grossAll)} DA de locations pour ce véhicule, l'agence conserve ${fmt(gains.agencyRevenuePeriod)} DA (commission${c!.ownerDeliveryFeesAll > 0 ? ' + livraison à charge du propriétaire' : ''}) et reverse ${fmt(c!.ownerPayoutTotal)} DA au propriétaire. Après ${fmt(gains.expenses)} DA de dépenses véhicule${longFee > 0 ? ` et +${fmt(longFee)} DA de frais longue durée refacturés au propriétaire` : ''}, le bénéfice net de l'agence s'établit à ${fmt(netFinal)} DA.`,
-      `من أصل ${fmt(c!.grossAll)} دج من إيجارات هذه المركبة، تحتفظ الوكالة بـ ${fmt(gains.agencyRevenuePeriod)} دج وتدفع ${fmt(c!.ownerPayoutTotal)} دج للمالك. وبعد ${fmt(gains.expenses)} دج من مصاريف المركبة${longFee > 0 ? ` و+${fmt(longFee)} دج رسوم مدة طويلة على المالك` : ''}، يبلغ صافي ربح الوكالة ${fmt(netFinal)} دج.`,
+      `Sur ${fmt(split!.gross)} DA de locations pour ce véhicule, la part de l'agence s'élève à ${fmt(split!.agencyPart)} DA (commission${split!.ownerDelivery > 0 ? ' + livraison à charge du propriétaire' : ''}${split!.longFee > 0 ? ' + frais longue durée' : ''}), sans aucune dépense déduite. La part brute du propriétaire est de ${fmt(split!.ownerGross)} DA${split!.longFee > 0 ? `, moins ${fmt(split!.longFee)} DA de frais longue durée` : ''} et ${fmt(split!.expenses)} DA de dépenses du véhicule à sa charge : il reste ${fmt(split!.ownerNet)} DA net à reverser au propriétaire.`,
+      `من أصل ${fmt(split!.gross)} دج من إيجارات هذه المركبة، تبلغ حصة الوكالة ${fmt(split!.agencyPart)} دج دون خصم أي مصاريف. حصة المالك الإجمالية ${fmt(split!.ownerGross)} دج${split!.longFee > 0 ? `، ناقص ${fmt(split!.longFee)} دج رسوم مدة طويلة` : ''} و${fmt(split!.expenses)} دج من مصاريف المركبة على حسابه: يبقى ${fmt(split!.ownerNet)} دج صافيًا مستحقًا للمالك.`,
       lang)}
   </div>` : ''}
 

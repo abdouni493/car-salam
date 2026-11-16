@@ -287,3 +287,63 @@ export const commissionBreakdown = (
     differsFromScale: locked && Math.abs(commission - estimateCommission(reservation, owner)) > 0.5,
   };
 };
+
+/**
+ * Répartition INDÉPENDANTE agence / propriétaire d'un véhicule en conciergerie,
+ * sur toute la période (locations terminées + en cours).
+ *
+ *  - Part agence  = commission + livraison à charge du propriétaire
+ *                   + frais longue durée refacturés au propriétaire.
+ *    Les dépenses du véhicule n'y touchent JAMAIS.
+ *  - Part propriétaire (brute) = CA − commission − livraison propriétaire.
+ *  - Part propriétaire (nette) = brute − frais longue durée − dépenses du véhicule.
+ *    C'est le propriétaire qui supporte les dépenses de sa voiture.
+ *
+ * Invariant : agencyPart + ownerNet + expenses = CA de la période.
+ */
+export interface ConsignmentSplit {
+  /** CA des locations non annulées de la période. */
+  gross: number;
+  commission: number;
+  ownerDelivery: number;
+  /** Frais longue durée refacturés au propriétaire. */
+  longFee: number;
+  /** Part de l'agence — indépendante des dépenses. */
+  agencyPart: number;
+  /** Part du propriétaire avant frais longue durée et dépenses. */
+  ownerGross: number;
+  /** Dépenses du véhicule, déduites de la part du propriétaire. */
+  expenses: number;
+  /** Ce qui revient réellement au propriétaire (peut être négatif). */
+  ownerNet: number;
+  /** Parts en % du CA. */
+  agencyShare: number;
+  ownerNetShare: number;
+  expensesShare: number;
+}
+
+export const computeConsignmentSplit = (
+  gains: Pick<VehicleGains, 'consignment' | 'expenses'>,
+  longFee = 0,
+): ConsignmentSplit | null => {
+  const c = gains.consignment;
+  if (!c) return null;
+  const fee = Math.max(0, Number(longFee) || 0);
+  const expenses = Number(gains.expenses) || 0;
+  const agencyPart = c.commissionTotal + c.ownerDeliveryFeesAll + fee;
+  const ownerGross = c.ownerPayoutTotal;
+  const ownerNet = ownerGross - fee - expenses;
+  return {
+    gross: c.grossAll,
+    commission: c.commissionTotal,
+    ownerDelivery: c.ownerDeliveryFeesAll,
+    longFee: fee,
+    agencyPart,
+    ownerGross,
+    expenses,
+    ownerNet,
+    agencyShare: pct(agencyPart, c.grossAll),
+    ownerNetShare: pct(ownerNet, c.grossAll),
+    expensesShare: pct(expenses, c.grossAll),
+  };
+};

@@ -13,6 +13,7 @@ import { getVehicleExpenses } from '../services/expenseService';
 import { getCarsWithOwners } from '../services/carService';
 import {
   calcPaid, inRange, pct, fmtPct, computeVehicleGains, commissionBreakdown,
+  computeConsignmentSplit,
 } from '../utils/gainsMath';
 import { normalizeCommissionType } from '../utils/consignmentMath';
 import { PctChip, SplitBar, SplitLegend, CalcRow } from './gains/GainsUI';
@@ -248,11 +249,19 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
 
   /** Les trois chiffres du haut : gains, dépenses, bénéfice. */
   const gainsValue = g.agencyRevenuePeriod;
-  // Bénéfice avant supplément longue durée, puis bénéfice final : le supplément
-  // refacturé au propriétaire s'ajoute au bénéfice net de l'agence.
-  const netBase = consignment ? g.netBenefitPeriod : g.netBenefit;
-  const netValue = netBase + ownerLongDurationTotal;
-  const marginValue = pct(netValue, gainsValue);
+
+  // Conciergerie : part agence et part propriétaire calculées INDÉPENDAMMENT.
+  // La part agence (commission + livraison + frais longue durée) n'est jamais
+  // touchée par les dépenses ; celles-ci sont déduites de la part propriétaire.
+  const split = useMemo(
+    () => computeConsignmentSplit(g, ownerLongDurationTotal),
+    [g, ownerLongDurationTotal],
+  );
+
+  // Véhicule de l'agence : bénéfice = encaissé − dépenses.
+  // Conciergerie : le « bénéfice » de l'agence est sa part, intacte.
+  const netValue = split ? split.agencyPart : g.netBenefit;
+  const marginValue = split ? split.agencyShare : pct(netValue, gainsValue);
 
   const buildReportHTML = async (): Promise<string | null> => {
     if (!selectedCar) return null;
@@ -562,13 +571,15 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
                 index={0}
                 tone="gain"
                 icon={<Coins size={17} />}
-                label={consignment
-                  ? T('Total des gains des locations (agence)', 'إجمالي أرباح الإيجارات (الوكالة)', lang)
+                label={split
+                  ? T('Part de l’agence', 'حصة الوكالة', lang)
                   : T('Total des gains des locations', 'إجمالي أرباح الإيجارات', lang)}
-                value={gainsValue}
-                hint={`${g.rentals} ${T('location(s)', 'إيجار', lang)} · ${g.daysRented} ${T('jours loués', 'يوم كراء', lang)}`}
-                formula={consignment
-                  ? `${fmt(consignment.commissionTotal)}${consignment.ownerDeliveryFeesAll > 0 ? ` + ${fmt(consignment.ownerDeliveryFeesAll)}` : ''}`
+                value={split ? split.agencyPart : gainsValue}
+                hint={split
+                  ? `${fmtPct(split.agencyShare)} ${T('du CA · sans dépenses', 'من رقم الأعمال · دون مصاريف', lang)}`
+                  : `${g.rentals} ${T('location(s)', 'إيجار', lang)} · ${g.daysRented} ${T('jours loués', 'يوم كراء', lang)}`}
+                formula={split
+                  ? [split.commission, split.ownerDelivery, split.longFee].filter(v => v > 0).map(fmt).join(' + ') || '0'
                   : undefined}
                 detailLabel={T('Voir le détail', 'عرض التفاصيل', lang)}
                 onOpen={() => setDrawer('gains')}
@@ -579,18 +590,26 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
                 icon={<Receipt size={17} />}
                 label={T('Total des dépenses', 'إجمالي المصاريف', lang)}
                 value={g.expenses}
-                hint={`${expenses.length} ${T('poste(s)', 'بند', lang)} · ${fmtPct(expenseRatio)} ${T('des gains', 'من الأرباح', lang)}`}
+                hint={split
+                  ? `${expenses.length} ${T('poste(s)', 'بند', lang)} · ${T('à la charge du propriétaire', 'على حساب المالك', lang)}`
+                  : `${expenses.length} ${T('poste(s)', 'بند', lang)} · ${fmtPct(expenseRatio)} ${T('des gains', 'من الأرباح', lang)}`}
                 detailLabel={T('Voir le détail', 'عرض التفاصيل', lang)}
                 onOpen={() => setDrawer('expenses')}
               />
               <BenefitCard
                 index={2}
-                tone={netValue >= 0 ? 'net' : 'netNegative'}
-                icon={<TrendingUp size={17} />}
-                label={T('Total bénéfice', 'إجمالي الربح', lang)}
-                value={netValue}
-                hint={`${T('marge', 'الهامش', lang)} ${fmtPct(marginValue)}`}
-                formula={`${fmt(gainsValue)} − ${fmt(g.expenses)}${ownerLongDurationTotal > 0 ? ` + ${fmt(ownerLongDurationTotal)}` : ''}`}
+                tone={(split ? split.ownerNet : netValue) >= 0 ? 'net' : 'netNegative'}
+                icon={split ? <UserIcon size={17} /> : <TrendingUp size={17} />}
+                label={split
+                  ? T('Part du propriétaire (nette)', 'حصة المالك (الصافية)', lang)
+                  : T('Total bénéfice', 'إجمالي الربح', lang)}
+                value={split ? split.ownerNet : netValue}
+                hint={split
+                  ? `${fmtPct(split.ownerNetShare)} ${T('du CA · après dépenses', 'من رقم الأعمال · بعد المصاريف', lang)}`
+                  : `${T('marge', 'الهامش', lang)} ${fmtPct(marginValue)}`}
+                formula={split
+                  ? `${fmt(split.ownerGross)}${split.longFee > 0 ? ` − ${fmt(split.longFee)}` : ''} − ${fmt(split.expenses)}`
+                  : `${fmt(gainsValue)} − ${fmt(g.expenses)}`}
                 detailLabel={T('Voir le calcul', 'عرض الحساب', lang)}
                 onOpen={() => setDrawer('net')}
               />
@@ -746,13 +765,74 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
                     )}
                     <CalcRow
                       sign="="
-                      label={T('À reverser au propriétaire', 'المستحق للمالك', lang)}
+                      label={T('Part du propriétaire (brute)', 'حصة المالك (الإجمالية)', lang)}
                       amount={consignment.ownerPayoutTotal}
                       share={ownerSharePeriod}
                       tone="slate"
-                      strong
                     />
+                    {split && split.longFee > 0 && (
+                      <CalcRow
+                        sign="−"
+                        label={T('Frais longue durée (refacturés au propriétaire)', 'رسوم المدة الطويلة (على المالك)', lang)}
+                        amount={split.longFee}
+                        share={pct(split.longFee, split.gross)}
+                        tone="amber"
+                      />
+                    )}
+                    {split && (
+                      <CalcRow
+                        sign="−"
+                        label={T('Dépenses du véhicule (à la charge du propriétaire)', 'مصاريف المركبة (على حساب المالك)', lang)}
+                        formula={`${expenses.length} ${T('poste(s)', 'بند', lang)}`}
+                        amount={split.expenses}
+                        share={split.expensesShare}
+                        tone="rose"
+                      />
+                    )}
+                    {split && (
+                      <CalcRow
+                        sign="="
+                        label={T('Net à reverser au propriétaire', 'الصافي المستحق للمالك', lang)}
+                        amount={split.ownerNet}
+                        share={split.ownerNetShare}
+                        tone={split.ownerNet >= 0 ? 'slate' : 'rose'}
+                        strong
+                      />
+                    )}
                   </div>
+
+                  {split && (
+                    <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div className="rounded-2xl bg-teal-50 px-4 py-3 ring-1 ring-teal-200">
+                        <p className="text-[11px] font-bold uppercase tracking-wide text-teal-700">
+                          {T('Part de l’agence', 'حصة الوكالة', lang)}
+                        </p>
+                        <p className="mt-0.5 text-xl font-black tabular-nums text-teal-800">
+                          {fmt(split.agencyPart)} <span className="text-[10px] text-teal-500">DA</span>
+                        </p>
+                        <p className="mt-0.5 font-mono text-[11px] tabular-nums text-teal-700/70" dir="ltr">
+                          {[split.commission, split.ownerDelivery, split.longFee].filter(v => v > 0).map(fmt).join(' + ') || '0'}
+                        </p>
+                        <p className="mt-1 text-[11px] font-semibold text-teal-700/80">
+                          {T('Commission + livraison + frais longue durée — aucune dépense déduite.', 'العمولة + التوصيل + رسوم المدة الطويلة — دون خصم أي مصاريف.', lang)}
+                        </p>
+                      </div>
+                      <div className={`rounded-2xl px-4 py-3 ring-1 ${split.ownerNet >= 0 ? 'bg-slate-50 ring-slate-200' : 'bg-rose-50 ring-rose-200'}`}>
+                        <p className="text-[11px] font-bold uppercase tracking-wide text-slate-600">
+                          {T('Part du propriétaire (nette)', 'حصة المالك (الصافية)', lang)}
+                        </p>
+                        <p className={`mt-0.5 text-xl font-black tabular-nums ${split.ownerNet >= 0 ? 'text-slate-800' : 'text-rose-700'}`}>
+                          {fmt(split.ownerNet)} <span className="text-[10px] text-slate-400">DA</span>
+                        </p>
+                        <p className="mt-0.5 font-mono text-[11px] tabular-nums text-slate-500" dir="ltr">
+                          {fmt(split.ownerGross)}{split.longFee > 0 ? ` − ${fmt(split.longFee)}` : ''} − {fmt(split.expenses)}
+                        </p>
+                        <p className="mt-1 text-[11px] font-semibold text-slate-500">
+                          {T('Part brute − frais longue durée − dépenses du véhicule.', 'الحصة الإجمالية − رسوم المدة الطويلة − مصاريف المركبة.', lang)}
+                        </p>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="mt-5 rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200">
                     <div className="mb-2.5 flex items-center justify-between">
@@ -764,14 +844,22 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
                       </p>
                     </div>
                     <SplitBar
-                      segments={[
+                      segments={split ? [
+                        { value: split.agencyPart, label: T('Agence', 'الوكالة', lang), cls: 'bg-teal-500' },
+                        { value: Math.min(split.expenses, Math.max(0, split.ownerGross - split.longFee)), label: T('Dépenses', 'المصاريف', lang), cls: 'bg-rose-400' },
+                        { value: Math.max(0, split.ownerNet), label: T('Propriétaire (net)', 'المالك (صافي)', lang), cls: 'bg-slate-400' },
+                      ] : [
                         { value: consignment.commissionTotal, label: T('Commission', 'العمولة', lang), cls: 'bg-teal-500' },
                         { value: consignment.ownerDeliveryFeesAll, label: T('Livraison', 'التوصيل', lang), cls: 'bg-teal-300' },
                         { value: consignment.ownerPayoutTotal, label: T('Propriétaire', 'المالك', lang), cls: 'bg-slate-400' },
                       ]}
                     />
                     <SplitLegend
-                      items={[
+                      items={split ? [
+                        { label: T('Agence', 'الوكالة', lang), cls: 'bg-teal-500', pct: split.agencyShare, tone: 'emerald' },
+                        { label: T('Dépenses (propriétaire)', 'المصاريف (المالك)', lang), cls: 'bg-rose-400', pct: split.expensesShare, tone: 'rose' },
+                        { label: T('Propriétaire (net)', 'المالك (صافي)', lang), cls: 'bg-slate-400', pct: split.ownerNetShare, tone: 'slate' },
+                      ] : [
                         { label: T('Agence', 'الوكالة', lang), cls: 'bg-teal-500', pct: agencySharePeriod, tone: 'emerald' },
                         { label: T('Propriétaire', 'المالك', lang), cls: 'bg-slate-400', pct: ownerSharePeriod, tone: 'slate' },
                       ]}
@@ -1207,8 +1295,8 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
                 <div className="border-b border-violet-100 bg-violet-50/40 px-5 py-2.5">
                   <p className="text-[11px] font-semibold text-violet-700/90">
                     ⚠️ {T(
-                      `Ces location(s) atteignent ${LONG_DURATION_THRESHOLD_DAYS} jours ou plus : l'agence refacture un forfait (${fmt(LONG_DURATION_FEE_DZD)} DA par défaut) au PROPRIÉTAIRE. Désactivable ou modifiable ci-dessous ; le total s'ajoute au bénéfice net.`,
-                      `تبلغ مدة هذه الإيجارات ${LONG_DURATION_THRESHOLD_DAYS} أيام أو أكثر: تفرض الوكالة مبلغًا مقطوعًا (${fmt(LONG_DURATION_FEE_DZD)} دج افتراضيًا) على المالك. يمكن تعطيله أو تعديله أدناه؛ يُضاف المجموع إلى صافي الربح.`,
+                      `Ces location(s) atteignent ${LONG_DURATION_THRESHOLD_DAYS} jours ou plus : l'agence refacture un forfait (${fmt(LONG_DURATION_FEE_DZD)} DA par défaut) au PROPRIÉTAIRE. Désactivable ou modifiable ci-dessous ; le total s'ajoute à la part de l'agence et se déduit de la part du propriétaire.`,
+                      `تبلغ مدة هذه الإيجارات ${LONG_DURATION_THRESHOLD_DAYS} أيام أو أكثر: تفرض الوكالة مبلغًا مقطوعًا (${fmt(LONG_DURATION_FEE_DZD)} دج افتراضيًا) على المالك. يمكن تعطيله أو تعديله أدناه؛ يُضاف المجموع إلى حصة الوكالة ويُخصم من حصة المالك.`,
                       lang)}
                   </p>
                 </div>
@@ -1273,6 +1361,60 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
             )}
 
             {/* ── Résultat ── */}
+            {split ? (
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="grid grid-cols-1 gap-4 md:grid-cols-2"
+              >
+                <div className="overflow-hidden rounded-3xl bg-gradient-to-br from-teal-600 via-emerald-700 to-slate-900 p-5 text-white shadow-lg">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-white/60">
+                    {T('Part de l’agence (période)', 'حصة الوكالة (الفترة)', lang)}
+                  </p>
+                  <p className="mt-1 text-4xl font-black tabular-nums leading-none">
+                    {fmt(split.agencyPart)}
+                    <span className="ms-1.5 text-base font-semibold text-white/50">DA</span>
+                  </p>
+                  <p className="mt-2 font-mono text-[11px] tabular-nums text-white/60" dir="ltr">
+                    {fmt(split.commission)}
+                    {split.ownerDelivery > 0 ? ` + ${fmt(split.ownerDelivery)}` : ''}
+                    {split.longFee > 0 ? ` + ${fmt(split.longFee)}` : ''}
+                  </p>
+                  <p className="mt-1 text-[11px] font-semibold text-white/70">
+                    {T(
+                      `Commission${split.ownerDelivery > 0 ? ' + livraison' : ''}${split.longFee > 0 ? ' + frais longue durée' : ''} · ${fmtPct(split.agencyShare)} du CA · aucune dépense déduite`,
+                      `العمولة${split.ownerDelivery > 0 ? ' + التوصيل' : ''}${split.longFee > 0 ? ' + رسوم المدة الطويلة' : ''} · ${fmtPct(split.agencyShare)} من رقم الأعمال · دون خصم المصاريف`,
+                      lang)}
+                  </p>
+                </div>
+                <div
+                  className={`overflow-hidden rounded-3xl p-5 text-white shadow-lg ${
+                    split.ownerNet >= 0
+                      ? 'bg-gradient-to-br from-slate-600 via-slate-700 to-slate-900'
+                      : 'bg-gradient-to-br from-rose-600 to-rose-800'
+                  }`}
+                >
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-white/60">
+                    {T('Net à reverser au propriétaire', 'الصافي المستحق للمالك', lang)}
+                  </p>
+                  <p className="mt-1 text-4xl font-black tabular-nums leading-none">
+                    {fmt(split.ownerNet)}
+                    <span className="ms-1.5 text-base font-semibold text-white/50">DA</span>
+                  </p>
+                  <p className="mt-2 font-mono text-[11px] tabular-nums text-white/60" dir="ltr">
+                    {fmt(split.ownerGross)}
+                    {split.longFee > 0 ? ` − ${fmt(split.longFee)}` : ''}
+                    {` − ${fmt(split.expenses)}`}
+                  </p>
+                  <p className="mt-1 text-[11px] font-semibold text-white/70">
+                    {T(
+                      `Part brute${split.longFee > 0 ? ' − frais longue durée' : ''} − ${fmt(split.expenses)} DA de dépenses du véhicule`,
+                      `الحصة الإجمالية${split.longFee > 0 ? ' − رسوم المدة الطويلة' : ''} − ${fmt(split.expenses)} دج مصاريف المركبة`,
+                      lang)}
+                  </p>
+                </div>
+              </motion.div>
+            ) : (
             <motion.div
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
@@ -1285,24 +1427,15 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
               <div className="flex flex-wrap items-end justify-between gap-4">
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-wide text-white/60">
-                    {consignment
-                      ? T('Bénéfice net de l’agence (période)', 'صافي ربح الوكالة (الفترة)', lang)
-                      : T('Bénéfice net', 'صافي الأرباح', lang)}
+                    {T('Bénéfice net', 'صافي الأرباح', lang)}
                   </p>
                   <p className="mt-1 text-4xl font-black tabular-nums leading-none">
                     {netValue >= 0 ? '+' : ''}{fmt(netValue)}
                     <span className="ms-1.5 text-base font-semibold text-white/50">DA</span>
                   </p>
                   <p className="mt-2 font-mono text-[11px] tabular-nums text-white/60" dir="ltr">
-                    {consignment
-                      ? `${fmt(consignment.commissionTotal)} + ${fmt(consignment.ownerDeliveryFeesAll)} − ${fmt(g.expenses)}${ownerLongDurationTotal > 0 ? ` + ${fmt(ownerLongDurationTotal)}` : ''}`
-                      : `${fmt(g.collected)} − ${fmt(g.expenses)}`}
+                    {`${fmt(g.collected)} − ${fmt(g.expenses)}`}
                   </p>
-                  {ownerLongDurationTotal > 0 && (
-                    <p className="mt-1 text-[11px] font-semibold text-white/70">
-                      {T(`Dont +${fmt(ownerLongDurationTotal)} DA de frais longue durée refacturés au propriétaire`, `منها +${fmt(ownerLongDurationTotal)} دج رسوم مدة طويلة على المالك`, lang)}
-                    </p>
-                  )}
                 </div>
                 <div className="rounded-2xl bg-white/10 px-4 py-3 text-end ring-1 ring-white/20">
                   <p className="text-[11px] font-bold uppercase tracking-wide text-white/60">
@@ -1315,6 +1448,7 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
                 </div>
               </div>
             </motion.div>
+            )}
 
             {reservations.length === 0 && expenses.length === 0 && (
               <div className="flex items-center gap-3 rounded-3xl bg-slate-50 p-6 ring-1 ring-slate-200">
@@ -1424,14 +1558,32 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
                 })}
             </div>
 
+            {split && split.longFee > 0 && (
+              <div className="flex items-center gap-3 rounded-2xl bg-violet-50 px-4 py-2.5 ring-1 ring-violet-200">
+                <span className="min-w-0 flex-1 text-sm font-bold text-violet-800">
+                  {T('Frais longue durée (propriétaire)', 'رسوم المدة الطويلة (المالك)', lang)}
+                </span>
+                <span className="shrink-0 text-sm font-black tabular-nums text-violet-700">
+                  +{fmt(split.longFee)}
+                  <span className="ms-1 text-[10px] font-semibold text-slate-400">DA</span>
+                </span>
+              </div>
+            )}
+
             <div className="flex items-center justify-between rounded-2xl bg-slate-900 px-4 py-3 text-white">
               <span className="text-xs font-bold uppercase tracking-wide text-white/70">
-                {T('Total gains agence', 'إجمالي أرباح الوكالة', lang)}
+                {T('Part de l’agence', 'حصة الوكالة', lang)}
               </span>
               <span className="text-lg font-black tabular-nums text-emerald-300">
-                {fmt(gainsValue)} <span className="text-[10px] text-white/50">DA</span>
+                {fmt(split ? split.agencyPart : gainsValue)} <span className="text-[10px] text-white/50">DA</span>
               </span>
             </div>
+            <p className="text-[11px] font-semibold text-slate-500">
+              {T(
+                'La part de l’agence est calculée indépendamment : les dépenses du véhicule sont déduites de la part du propriétaire.',
+                'تُحسب حصة الوكالة بشكل مستقل: تُخصم مصاريف المركبة من حصة المالك.',
+                lang)}
+            </p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -1487,6 +1639,14 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
           </p>
         ) : (
           <div className="space-y-4">
+            {split && (
+              <p className="rounded-2xl bg-rose-50 px-4 py-3 text-xs font-semibold text-rose-900 ring-1 ring-rose-200">
+                {T(
+                  'Véhicule en conciergerie : ces dépenses sont déduites de la part du propriétaire. La part de l’agence n’est pas touchée.',
+                  'مركبة في نظام الوكالة: تُخصم هذه المصاريف من حصة المالك. حصة الوكالة لا تتأثر.',
+                  lang)}
+              </p>
+            )}
             <div className="divide-y divide-slate-100">
               {expenses.map(exp => (
                 <div key={exp.id} className="flex items-center gap-3 py-2.5">
@@ -1520,38 +1680,131 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
         open={drawer === 'net'}
         accent="slate"
         onClose={() => setDrawer(null)}
-        title={T('Calcul du bénéfice', 'حساب الربح', lang)}
+        title={split
+          ? T('Calcul des parts agence / propriétaire', 'حساب حصتي الوكالة والمالك', lang)
+          : T('Calcul du bénéfice', 'حساب الربح', lang)}
         subtitle={`${selectedCar?.brand || ''} ${selectedCar?.model || ''} · ${fmtD(startDate)} → ${fmtD(endDate)}`}
       >
-        <div className="divide-y divide-slate-100">
-          {consignment ? (
-            <>
-              <CalcRow
-                label={T('CA des locations', 'رقم أعمال الإيجارات', lang)}
-                amount={consignment.grossAll}
-                share={100}
-                tone="slate"
+        {split ? (
+          <div className="space-y-5">
+            <div>
+              <p className="mb-1 text-[11px] font-black uppercase tracking-wide text-teal-700">
+                {T('Part de l’agence', 'حصة الوكالة', lang)}
+              </p>
+              <div className="divide-y divide-slate-100">
+                <CalcRow
+                  label={T('Commission agence', 'عمولة الوكالة', lang)}
+                  amount={split.commission}
+                  share={pct(split.commission, split.gross)}
+                  tone="emerald"
+                />
+                {split.ownerDelivery > 0 && (
+                  <CalcRow
+                    sign="+"
+                    label={T('Livraison à charge du propriétaire', 'التوصيل على حساب المالك', lang)}
+                    amount={split.ownerDelivery}
+                    share={pct(split.ownerDelivery, split.gross)}
+                    tone="emerald"
+                  />
+                )}
+                {split.longFee > 0 && (
+                  <CalcRow
+                    sign="+"
+                    label={T('Frais longue durée (propriétaire)', 'رسوم المدة الطويلة (المالك)', lang)}
+                    formula={`${longEligibleRes.filter(r => r.id && longFees[r.id]?.active).length} ${T('location(s) ≥', 'إيجار ≥', lang)} ${LONG_DURATION_THRESHOLD_DAYS} ${T('j', 'ي', lang)}`}
+                    amount={split.longFee}
+                    share={pct(split.longFee, split.gross)}
+                    tone="emerald"
+                  />
+                )}
+                <CalcRow
+                  sign="="
+                  label={T('PART DE L’AGENCE', 'حصة الوكالة', lang)}
+                  formula={T('aucune dépense déduite', 'دون خصم المصاريف', lang)}
+                  amount={split.agencyPart}
+                  share={split.agencyShare}
+                  tone="indigo"
+                  strong
+                />
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-1 text-[11px] font-black uppercase tracking-wide text-slate-600">
+                {T('Part du propriétaire', 'حصة المالك', lang)}
+              </p>
+              <div className="divide-y divide-slate-100">
+                <CalcRow
+                  label={T('CA des locations', 'رقم أعمال الإيجارات', lang)}
+                  amount={split.gross}
+                  share={100}
+                  tone="slate"
+                />
+                <CalcRow
+                  sign="−"
+                  label={T('Commission + livraison (agence)', 'العمولة + التوصيل (الوكالة)', lang)}
+                  amount={split.commission + split.ownerDelivery}
+                  share={pct(split.commission + split.ownerDelivery, split.gross)}
+                  tone="amber"
+                />
+                <CalcRow
+                  sign="="
+                  label={T('Part du propriétaire (brute)', 'حصة المالك (الإجمالية)', lang)}
+                  amount={split.ownerGross}
+                  share={pct(split.ownerGross, split.gross)}
+                  tone="slate"
+                />
+                {split.longFee > 0 && (
+                  <CalcRow
+                    sign="−"
+                    label={T('Frais longue durée', 'رسوم المدة الطويلة', lang)}
+                    amount={split.longFee}
+                    share={pct(split.longFee, split.gross)}
+                    tone="amber"
+                  />
+                )}
+                <CalcRow
+                  sign="−"
+                  label={T('Dépenses du véhicule', 'مصاريف المركبة', lang)}
+                  formula={`${expenses.length} ${T('poste(s)', 'بند', lang)}`}
+                  amount={split.expenses}
+                  share={split.expensesShare}
+                  tone="rose"
+                />
+                <CalcRow
+                  sign="="
+                  label={T('NET À REVERSER AU PROPRIÉTAIRE', 'الصافي المستحق للمالك', lang)}
+                  amount={split.ownerNet}
+                  share={split.ownerNetShare}
+                  tone={split.ownerNet >= 0 ? 'indigo' : 'rose'}
+                  strong
+                />
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200">
+              <p className="mb-2.5 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                {T('Répartition du CA', 'توزيع رقم الأعمال', lang)}
+              </p>
+              <SplitBar
+                segments={[
+                  { value: split.agencyPart, label: T('Agence', 'الوكالة', lang), cls: 'bg-teal-500' },
+                  { value: Math.min(split.expenses, Math.max(0, split.ownerGross - split.longFee)), label: T('Dépenses', 'المصاريف', lang), cls: 'bg-rose-400' },
+                  { value: Math.max(0, split.ownerNet), label: T('Propriétaire (net)', 'المالك (صافي)', lang), cls: 'bg-slate-400' },
+                ]}
               />
-              <CalcRow
-                sign="−"
-                label={T('Part reversée au propriétaire', 'الحصة المستحقة للمالك', lang)}
-                amount={consignment.ownerPayoutTotal}
-                share={ownerSharePeriod}
-                tone="slate"
+              <SplitLegend
+                items={[
+                  { label: T('Agence', 'الوكالة', lang), cls: 'bg-teal-500', pct: split.agencyShare, tone: 'emerald' },
+                  { label: T('Dépenses', 'المصاريف', lang), cls: 'bg-rose-400', pct: split.expensesShare, tone: 'rose' },
+                  { label: T('Propriétaire (net)', 'المالك (صافي)', lang), cls: 'bg-slate-400', pct: split.ownerNetShare, tone: 'slate' },
+                ]}
               />
-              <CalcRow
-                sign="="
-                label={T('Gains des locations (agence)', 'أرباح الإيجارات (الوكالة)', lang)}
-                formula={`${T('commission', 'العمولة', lang)} ${fmt(consignment.commissionTotal)}${
-                  consignment.ownerDeliveryFeesAll > 0 ? ` + ${T('livraison', 'التوصيل', lang)} ${fmt(consignment.ownerDeliveryFeesAll)}` : ''
-                }`}
-                amount={gainsValue}
-                share={agencySharePeriod}
-                tone="emerald"
-              />
-            </>
-          ) : (
-            <>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="divide-y divide-slate-100">
               <CalcRow
                 label={T('Total facturé', 'الإجمالي المفوتر', lang)}
                 amount={g.invoiced}
@@ -1572,53 +1825,43 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
                 share={pct(g.outstanding, g.invoiced)}
                 tone="amber"
               />
-            </>
-          )}
-          <CalcRow
-            sign="−"
-            label={T('Dépenses du véhicule', 'مصاريف المركبة', lang)}
-            formula={`${expenses.length} ${T('poste(s)', 'بند', lang)}`}
-            amount={g.expenses}
-            share={expenseRatio}
-            tone="rose"
-          />
-          {consignment && ownerLongDurationTotal > 0 && (
-            <CalcRow
-              sign="+"
-              label={T('Frais longue durée (propriétaire)', 'رسوم المدة الطويلة (المالك)', lang)}
-              formula={`${longEligibleRes.filter(r => r.id && longFees[r.id]?.active).length} ${T('location(s) ≥', 'إيجار ≥', lang)} ${LONG_DURATION_THRESHOLD_DAYS} ${T('j', 'ي', lang)}`}
-              amount={ownerLongDurationTotal}
-              share={pct(ownerLongDurationTotal, gainsValue)}
-              tone="emerald"
-            />
-          )}
-          <CalcRow
-            sign="="
-            label={T('BÉNÉFICE NET', 'صافي الربح', lang)}
-            amount={netValue}
-            share={marginValue}
-            tone={netValue >= 0 ? 'indigo' : 'rose'}
-            strong
-          />
-        </div>
+              <CalcRow
+                sign="−"
+                label={T('Dépenses du véhicule', 'مصاريف المركبة', lang)}
+                formula={`${expenses.length} ${T('poste(s)', 'بند', lang)}`}
+                amount={g.expenses}
+                share={expenseRatio}
+                tone="rose"
+              />
+              <CalcRow
+                sign="="
+                label={T('BÉNÉFICE NET', 'صافي الربح', lang)}
+                amount={netValue}
+                share={marginValue}
+                tone={netValue >= 0 ? 'indigo' : 'rose'}
+                strong
+              />
+            </div>
 
-        <div className="mt-4 rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200">
-          <p className="mb-2.5 text-[11px] font-bold uppercase tracking-wide text-slate-500">
-            {T('Répartition des gains', 'توزيع الأرباح', lang)}
-          </p>
-          <SplitBar
-            segments={[
-              { value: Math.max(0, netValue), label: T('Bénéfice net', 'صافي الربح', lang), cls: 'bg-teal-500' },
-              { value: g.expenses, label: T('Dépenses', 'المصاريف', lang), cls: 'bg-rose-400' },
-            ]}
-          />
-          <SplitLegend
-            items={[
-              { label: T('Bénéfice net', 'صافي الربح', lang), cls: 'bg-teal-500', pct: marginValue, tone: 'emerald' },
-              { label: T('Dépenses', 'المصاريف', lang), cls: 'bg-rose-400', pct: expenseRatio, tone: 'rose' },
-            ]}
-          />
-        </div>
+            <div className="mt-4 rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200">
+              <p className="mb-2.5 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                {T('Répartition des gains', 'توزيع الأرباح', lang)}
+              </p>
+              <SplitBar
+                segments={[
+                  { value: Math.max(0, netValue), label: T('Bénéfice net', 'صافي الربح', lang), cls: 'bg-teal-500' },
+                  { value: g.expenses, label: T('Dépenses', 'المصاريف', lang), cls: 'bg-rose-400' },
+                ]}
+              />
+              <SplitLegend
+                items={[
+                  { label: T('Bénéfice net', 'صافي الربح', lang), cls: 'bg-teal-500', pct: marginValue, tone: 'emerald' },
+                  { label: T('Dépenses', 'المصاريف', lang), cls: 'bg-rose-400', pct: expenseRatio, tone: 'rose' },
+                ]}
+              />
+            </div>
+          </>
+        )}
       </BenefitDrawer>
     </div>
   );
