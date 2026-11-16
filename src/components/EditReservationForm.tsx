@@ -749,6 +749,29 @@ export const EditReservationForm: React.FC<EditReservationFormProps> = ({ lang, 
 };
 
 // Edit Step 1: Dates & Locations
+/**
+ * Option « agence » des listes de lieux : le nom saisi dans Paramètres, jamais
+ * un nom codé en dur. Une valeur déjà enregistrée sur la réservation (ancien
+ * nom) reste sélectionnable pour ne pas être perdue à l'édition.
+ */
+const AgencyLocationOption: React.FC<{ lang: Language; current?: string }> = ({ lang, current }) => {
+  const [name, setName] = useState('');
+  useEffect(() => {
+    let alive = true;
+    DatabaseService.getAgencyBranding()
+      .then(b => { if (alive) setName((b.name || '').trim()); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  const known = new Set(['', 'Autre agence', name]);
+  return (
+    <>
+      {name && <option value={name}>{name}</option>}
+      {current && !known.has(current) && <option value={current}>{current}</option>}
+    </>
+  );
+};
+
 const EditStep1DatesLocations: React.FC<{
   lang: Language;
   formData: ReservationWizardData;
@@ -818,7 +841,7 @@ const EditStep1DatesLocations: React.FC<{
               className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
             >
               <option value="">{lang === 'fr' ? 'Sélectionner une agence...' : 'اختر وكالة...'}</option>
-              <option value="AGENCE MHD-AUTO">{lang === 'fr' ? 'AGENCE MHD-AUTO' : 'وكالة MHD-AUTO'}</option>
+              <AgencyLocationOption lang={lang} current={formData.step1?.departureLocation} />
               <option value="Autre agence">{lang === 'fr' ? 'Autre agence' : 'وكالة أخرى'}</option>
             </select>
           </div>
@@ -873,7 +896,7 @@ const EditStep1DatesLocations: React.FC<{
             className="w-full p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
             <option value="">{lang === 'fr' ? 'Sélectionner une agence...' : 'اختر وكالة...'}</option>
-            <option value="AGENCE MHD-AUTO">{lang === 'fr' ? 'AGENCE MHD-AUTO' : 'وكالة MHD-AUTO'}</option>
+            <AgencyLocationOption lang={lang} current={formData.step1?.returnLocation} />
             <option value="Autre agence">{lang === 'fr' ? 'Autre agence' : 'وكالة أخرى'}</option>
           </select>
         </div>

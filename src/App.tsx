@@ -23,7 +23,8 @@ import { ReservationsPage } from './components/ReservationsPage';
 import { Language, User, UserRole, Car, Agency } from './types';
 import { supabase, supabaseConfigured } from './supabase';
 import { SIDEBAR_ITEMS } from './constants';
-import { DatabaseService } from './services/DatabaseService';
+import { AGENCY_BRANDING_EVENT, DatabaseService } from './services/DatabaseService';
+import { applyBranding, BRANDING_CACHE_KEY } from './utils/branding';
 import { setupErrorInterceptor } from './utils/errorInterceptor';
 import { DebugAuth } from './utils/debugAuth';
 import { sessionService } from './utils/sessionService';
@@ -383,16 +384,9 @@ export default function App() {
         setContactInfo(dbContactInfo || mockContactInfo);
         setWebsiteSettings(dbWebsiteSettings || mockWebsiteSettings);
 
-        // Branding dynamique : le titre et le favicon suivent le logo/nom
-        // de l'agence en base (les PNG de public/ restent le défaut statique).
-        if (dbWebsiteSettings?.name) {
-          document.title = `${dbWebsiteSettings.name.split(/\s+/).slice(0, 3).join(' ')} | Location de Voitures`;
-        }
-        if (dbWebsiteSettings?.logo) {
-          document.querySelectorAll("link[rel='icon']").forEach(link => {
-            (link as HTMLLinkElement).href = dbWebsiteSettings.logo;
-          });
-        }
+        // Onglet du navigateur : uniquement le nom et le logo de l'agence
+        // saisis dans Paramètres (le logo sert aussi de favicon).
+        applyBranding(dbWebsiteSettings);
       } catch (error) {
         console.error('Failed to load website data from database:', error);
         // Fallback to mock data if database load fails
@@ -403,6 +397,12 @@ export default function App() {
     };
 
     loadWebsiteData();
+    // Nouveau nom / logo enregistré dans Paramètres : l'onglet suit aussitôt.
+    const onBranding = () => {
+      DatabaseService.getWebsiteSettings().then(applyBranding).catch(() => {});
+    };
+    window.addEventListener(AGENCY_BRANDING_EVENT, onBranding);
+    return () => window.removeEventListener(AGENCY_BRANDING_EVENT, onBranding);
   }, []); // Load once on mount
 
   // fetch agencies for public website mode (used by ReservationWizard)
@@ -519,10 +519,14 @@ export default function App() {
     email: 'contact@luxdrive.com',
   };
 
+  // Repli si la base est injoignable : jamais un nom de site inventé, seulement
+  // le dernier nom d'agence connu (cache du branding), sinon rien.
   const mockWebsiteSettings = {
-    name: 'Luxdrive Premium',
-    description: 'Votre partenaire de confiance en location de véhicules',
-    logo: 'https://images.unsplash.com/photo-1560958089-b8a63dd8aa8b?w=200&h=200&fit=crop',
+    name: (() => {
+      try { return JSON.parse(localStorage.getItem(BRANDING_CACHE_KEY) || 'null')?.name || ''; } catch { return ''; }
+    })(),
+    description: '',
+    logo: '',
   };
 
   const handleLogin = (userObj: User) => {
