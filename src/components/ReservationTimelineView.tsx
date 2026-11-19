@@ -25,9 +25,26 @@ const COLORS = [
 
 export const ReservationTimelineView: React.FC<ReservationTimelineViewProps> = ({ 
   lang, 
-  reservations,
+  reservations: rawReservations,
   onSelectReservation 
 }) => {
+  // Guard against incomplete records (e.g. car or client deleted → null relation)
+  // which would otherwise crash the whole calendar with "Cannot read properties of null".
+  const reservations = useMemo<ReservationDetails[]>(
+    () =>
+      (rawReservations || [])
+        .filter(res => res && res.car && res.car.id && res.step1)
+        .map(res => ({
+          ...res,
+          client: {
+            ...(res.client || {}),
+            firstName: res.client?.firstName || '',
+            lastName: res.client?.lastName || '',
+            phone: res.client?.phone || '',
+          } as ReservationDetails['client'],
+        })),
+    [rawReservations]
+  );
   const [currentDate, setCurrentDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const [viewMode, setViewMode] = useState<'month' | 'week' | 'cars' | 'fleet'>('month');
