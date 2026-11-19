@@ -16,6 +16,8 @@ export const AgencyModal: React.FC<AgencyModalProps> = ({ isOpen, onClose, onSav
     name: '',
     address: '',
     city: '',
+    deliveryPriceAller: 0,
+    deliveryPriceRetour: 0,
   });
 
   useEffect(() => {
@@ -24,12 +26,16 @@ export const AgencyModal: React.FC<AgencyModalProps> = ({ isOpen, onClose, onSav
         name: agency.name,
         address: agency.address,
         city: agency.city,
+        deliveryPriceAller: agency.deliveryPriceAller ?? 0,
+        deliveryPriceRetour: agency.deliveryPriceRetour ?? 0,
       });
     } else {
       setFormData({
         name: '',
         address: '',
         city: '',
+        deliveryPriceAller: 0,
+        deliveryPriceRetour: 0,
       });
     }
   }, [agency, isOpen]);
@@ -37,17 +43,21 @@ export const AgencyModal: React.FC<AgencyModalProps> = ({ isOpen, onClose, onSav
   if (!isOpen) return null;
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
+    const { name, value, type } = e.target as HTMLInputElement;
     setFormData(prev => ({
       ...prev,
-      [name]: value
+      [name]: type === 'number' ? (value === '' ? ('' as any) : Math.max(0, Number(value))) : value
     }));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (formData.name && formData.address && formData.city) {
-      onSave(formData);
+      onSave({
+        ...formData,
+        deliveryPriceAller: Number(formData.deliveryPriceAller) || 0,
+        deliveryPriceRetour: Number(formData.deliveryPriceRetour) || 0,
+      });
     }
   };
 
@@ -122,6 +132,52 @@ export const AgencyModal: React.FC<AgencyModalProps> = ({ isOpen, onClose, onSav
               className="input-saas"
               required
             />
+          </div>
+
+          {/* Delivery prices */}
+          <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4 space-y-3">
+            <div>
+              <p className="text-sm font-black text-sky-900">
+                🚚 {lang === 'fr' ? 'Prix de livraison' : 'سعر التوصيل'}
+              </p>
+              <p className="text-[11px] font-medium text-sky-700 mt-1">
+                {lang === 'fr'
+                  ? "Appliqués automatiquement aux réservations : « aller » quand l'agence est l'agence de départ, « retour » quand elle est l'agence de retour. 0 = gratuit."
+                  : 'تُطبَّق تلقائيًا على الحجوزات: «ذهاب» عندما تكون الوكالة وكالة الانطلاق، و«إياب» عندما تكون وكالة الإرجاع. 0 = مجاني.'}
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <label className="label-saas">
+                  {lang === 'fr' ? '➡️ Livraison aller (DA)' : '➡️ توصيل ذهاب (دج)'}
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  step={100}
+                  name="deliveryPriceAller"
+                  value={formData.deliveryPriceAller as any}
+                  onChange={handleChange}
+                  placeholder="0"
+                  className="input-saas"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="label-saas">
+                  {lang === 'fr' ? '⬅️ Livraison retour (DA)' : '⬅️ توصيل إياب (دج)'}
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  step={100}
+                  name="deliveryPriceRetour"
+                  value={formData.deliveryPriceRetour as any}
+                  onChange={handleChange}
+                  placeholder="0"
+                  className="input-saas"
+                />
+              </div>
+            </div>
           </div>
         </form>
 

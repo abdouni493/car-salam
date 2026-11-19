@@ -14,6 +14,7 @@ export const StepAgencies: React.FC = () => {
     departureAgency, setDepartureAgency,
     differentReturnAgency, setDifferentReturnAgency,
     returnAgency, setReturnAgency,
+    delivery, deliveryTotal, money,
   } = useWizard();
 
   const departureAgencyName = agencies.find(a => a.id === departureAgency)?.name;
@@ -106,6 +107,34 @@ export const StepAgencies: React.FC = () => {
           )}
         </AnimatePresence>
       </SectionCard>
+
+      {/* Frais de livraison des agences choisies */}
+      {departureAgency && deliveryTotal > 0 && (
+        <SectionCard>
+          <SectionTitle>🚚 {{ fr: 'Frais de livraison', ar: 'رسوم التوصيل' }[lang]}</SectionTitle>
+          <div className="space-y-2 text-sm">
+            {(['aller', 'retour'] as const).filter(leg => delivery[leg].enabled).map(leg => (
+              <div key={leg} className="flex justify-between gap-4 px-4 py-2.5 rounded-xl"
+                style={{ background: 'rgba(14, 165, 233, 0.06)', border: '1px solid rgba(14, 165, 233, 0.2)' }}>
+                <span className="text-vel-slate">
+                  {leg === 'aller'
+                    ? { fr: 'Livraison aller', ar: 'توصيل ذهاب' }[lang]
+                    : { fr: 'Livraison retour', ar: 'توصيل إياب' }[lang]}
+                  {delivery[leg].agencyName ? <span className="text-vel-muted"> — {delivery[leg].agencyName}</span> : null}
+                </span>
+                <span className="font-bold text-vel-ink">{money(delivery[leg].amount)}</span>
+              </div>
+            ))}
+            <div className="flex justify-between gap-4 px-4 pt-1 font-black text-vel-ink">
+              <span>{{ fr: 'Total livraison', ar: 'إجمالي التوصيل' }[lang]}</span>
+              <span>{money(deliveryTotal)}</span>
+            </div>
+            <p className="px-4 text-xs text-vel-muted">
+              {{ fr: 'Ces frais sont ajoutés au total de votre réservation.', ar: 'تُضاف هذه الرسوم إلى مجموع حجزك.' }[lang]}
+            </p>
+          </div>
+        </SectionCard>
+      )}
     </div>
   );
 };

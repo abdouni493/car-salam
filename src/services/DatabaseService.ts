@@ -2,6 +2,7 @@ import { supabase } from '../supabase';
 import { AgencyBranding, Car, CarOwnerInfo, Client, Agency, Worker, WorkerAdvance, WorkerAbsence, WorkerPayment, StoreExpense, VehicleExpense, MaintenanceAlert, WebsiteOrder, ReservationDetails, SpecialOffer, ContactInfo, WebsiteSettings, PromoCode } from '../types';
 import { eurOrUndefined, DEFAULT_EUR_RATE } from '../utils/currency';
 import { normalizeCommissionType } from '../utils/consignmentMath';
+import { AGENCY_DELIVERY_CATEGORY } from '../utils/agencyDelivery';
 
 /**
  * `website_settings` ne contient qu'une seule ligne, à cet identifiant fixe
@@ -611,13 +612,87 @@ export class DatabaseService {
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    return data || [];
+    const prices = await DatabaseService.getAgencyDeliveryPrices();
+    return (data || []).map((a: Agency) => ({
+      ...a,
+      deliveryPriceAller: prices[a.id]?.aller ?? 0,
+      deliveryPriceRetour: prices[a.id]?.retour ?? 0,
+    }));
+  }
+
+  /**
+   * Frais de livraison par agence (aller / retour).
+   *
+   * La table `agencies` n'a pas de colonne pour ces montants et le schéma ne
+   * doit pas changer : ils sont donc rangés dans `services` (lisible par le
+   * site public, modifiable par l'admin), une ligne par agence :
+   *   category = 'agency_delivery', service_name = <id agence>,
+   *   price = aller, description = '{"aller":…,"retour":…}', is_active = false.
+   * `is_active = false` + le filtre de catégorie dans getServices() les tiennent
+   * hors de la liste des services proposés au client.
+   */
+  static async getAgencyDeliveryPrices(): Promise<Record<string, { aller: number; retour: number }>> {
+    try {
+      const { data, error } = await supabase
+        .from('services')
+        .select('id, service_name, description, price')
+        .eq('category', AGENCY_DELIVERY_CATEGORY);
+      if (error) throw error;
+      const out: Record<string, { aller: number; retour: number }> = {};
+      for (const row of data || []) {
+        let parsed: any = {};
+        try { parsed = JSON.parse(row.description || '{}'); } catch { parsed = {}; }
+        out[row.service_name] = {
+          aller: Math.max(0, Math.round(Number(parsed.aller ?? row.price) || 0)),
+          retour: Math.max(0, Math.round(Number(parsed.retour) || 0)),
+        };
+      }
+      return out;
+    } catch (err) {
+      console.warn('getAgencyDeliveryPrices failed — delivery prices default to 0', err);
+      return {};
+    }
+  }
+
+  static async setAgencyDeliveryPrices(agencyId: string, aller: number, retour: number): Promise<void> {
+    const a = Math.max(0, Math.round(Number(aller) || 0));
+    const r = Math.max(0, Math.round(Number(retour) || 0));
+    const payload = {
+      category: AGENCY_DELIVERY_CATEGORY,
+      service_name: agencyId,
+      description: JSON.stringify({ aller: a, retour: r }),
+      price: a,
+      is_active: false,
+    };
+    const { data: existing, error: selErr } = await supabase
+      .from('services')
+      .select('id')
+      .eq('category', AGENCY_DELIVERY_CATEGORY)
+      .eq('service_name', agencyId);
+    if (selErr) throw selErr;
+    if (existing && existing.length > 0) {
+      const { error } = await supabase.from('services').update(payload).eq('id', existing[0].id);
+      if (error) throw error;
+      // Doublons éventuels (double clic, ancienne écriture) : on ne garde qu'une ligne.
+      if (existing.length > 1) {
+        await supabase.from('services').delete().in('id', existing.slice(1).map((x: any) => x.id));
+      }
+    } else {
+      const { error } = await supabase.from('services').insert([payload]);
+      if (error) throw error;
+    }
+  }
+
+  /** Retire les champs calculés (frais de livraison) avant écriture dans `agencies`. */
+  private static agencyRow(agency: Partial<Agency>) {
+    const { deliveryPriceAller, deliveryPriceRetour, createdAt, ...row } = agency as any;
+    return row;
   }
 
   static async createAgency(agency: Omit<Agency, 'id' | 'created_at'>): Promise<Agency> {
     // ensure an id exists (supabase table does not auto-generate)
     const withId = {
-      ...agency,
+      ...DatabaseService.agencyRow(agency),
       id: (agency as any).id || crypto.randomUUID(),
     };
 
@@ -628,19 +703,34 @@ export class DatabaseService {
       .single();
 
     if (error) throw error;
-    return data;
+    const aller = Number(agency.deliveryPriceAller) || 0;
+    const retour = Number(agency.deliveryPriceRetour) || 0;
+    if (aller > 0 || retour > 0) {
+      await DatabaseService.setAgencyDeliveryPrices(data.id, aller, retour);
+    }
+    return { ...data, deliveryPriceAller: aller, deliveryPriceRetour: retour };
   }
 
   static async updateAgency(id: string, updates: Partial<Agency>): Promise<Agency> {
     const { data, error } = await supabase
       .from('agencies')
-      .update(updates)
+      .update(DatabaseService.agencyRow(updates))
       .eq('id', id)
       .select()
       .single();
 
     if (error) throw error;
-    return data;
+    let prices = { aller: 0, retour: 0 };
+    if (updates.deliveryPriceAller !== undefined || updates.deliveryPriceRetour !== undefined) {
+      prices = {
+        aller: Number(updates.deliveryPriceAller) || 0,
+        retour: Number(updates.deliveryPriceRetour) || 0,
+      };
+      await DatabaseService.setAgencyDeliveryPrices(id, prices.aller, prices.retour);
+    } else {
+      prices = (await DatabaseService.getAgencyDeliveryPrices())[id] || prices;
+    }
+    return { ...data, deliveryPriceAller: prices.aller, deliveryPriceRetour: prices.retour };
   }
 
   static async deleteAgency(id: string): Promise<void> {
@@ -650,6 +740,11 @@ export class DatabaseService {
       .eq('id', id);
 
     if (error) throw error;
+    await supabase
+      .from('services')
+      .delete()
+      .eq('category', AGENCY_DELIVERY_CATEGORY)
+      .eq('service_name', id);
   }
 
   // Workers
@@ -1915,7 +2010,7 @@ export class DatabaseService {
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    return (data || []).map(service => ({
+    return (data || []).filter(service => service.category !== AGENCY_DELIVERY_CATEGORY).map(service => ({
       id: service.id,
       category: service.category,
       name: service.service_name,

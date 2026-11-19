@@ -19,6 +19,7 @@ import { getCars } from '../services/carService';
 import { supabase } from '../supabase';
 import { generateConditionsPrintHTML } from '../constants/ConditionsTemplates';
 import { generateContractHTML as buildContractHTML } from './ContractHTMLGenerator';
+import { getReservationDeliveryLines, deliveryLegLabel, isAgencyDeliveryService } from '../utils/agencyDelivery';
 import { printHTMLDocument } from '../utils/printDocument';
 
 /**
@@ -2387,6 +2388,10 @@ export const PersonalizationModal: React.FC<{
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);
   // Société (company client) state
+  // Affichage des frais de livraison sur le contrat imprimé (activable/désactivable).
+  const hasDeliveryFees = (Number(reservation?.deliveryFee) || 0) > 0
+    || getReservationDeliveryLines(reservation?.additionalServices).length > 0;
+  const [showDeliveryFees, setShowDeliveryFees] = useState(true);
   const [isSociete, setIsSociete] = useState(false);
   const [societeData, setSocieteData] = useState({
     conducteur: '',
@@ -2529,7 +2534,7 @@ export const PersonalizationModal: React.FC<{
    * propriétaire (conciergerie) ne figure sur ce document remis au client.
    */
   const generateContractHTML = (templateLang: 'fr' | 'ar'): string =>
-    buildContractHTML(reservation, agencySettings, secondConductor, templateLang);
+    buildContractHTML(reservation, agencySettings, secondConductor, templateLang, { showDeliveryFees });
 
   const generateDevisHTML = (templateLang: 'fr' | 'ar'): string => {
     const isFrench = templateLang === 'fr';
@@ -4446,6 +4451,30 @@ export const PersonalizationModal: React.FC<{
 
           {/* Content Area with Preview */}
           <div className="flex-1 overflow-auto bg-gradient-to-b from-gray-50 to-white p-8">
+
+            {/* Frais de livraison — contrat uniquement */}
+            {type === 'contract' && hasDeliveryFees && (
+              <label className="mb-5 flex items-center gap-3 px-4 py-3 rounded-xl border-2 border-sky-300 bg-sky-50 cursor-pointer select-none hover:bg-sky-100 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={showDeliveryFees}
+                  onChange={e => setShowDeliveryFees(e.target.checked)}
+                  className="w-5 h-5 accent-sky-600 cursor-pointer"
+                />
+                <span className="text-xl">🚚</span>
+                <div className="flex-1">
+                  <div className="font-bold text-sky-800 text-sm">
+                    {lang === 'fr' ? 'Afficher les frais de livraison sur le contrat' : 'إظهار رسوم التوصيل في العقد'}
+                  </div>
+                  <div className="text-xs text-sky-600">
+                    {[
+                      ...getReservationDeliveryLines(reservation?.additionalServices).map(l => `${deliveryLegLabel(l.leg, lang)} : ${formatAmount(l.amount)} DA`),
+                      ...((Number(reservation?.deliveryFee) || 0) > 0 ? [`${lang === 'fr' ? 'Frais de livraison' : 'رسوم التوصيل'} : ${formatAmount(reservation.deliveryFee || 0)} DA`] : []),
+                    ].join(' · ')}
+                  </div>
+                </div>
+              </label>
+            )}
 
             {/* Société Option - Only for invoice/facture */}
             {(type === 'invoice' || type === 'facture') && (

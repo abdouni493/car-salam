@@ -18,6 +18,7 @@ export const StepRecap: React.FC = () => {
     agencies, departureAgency, returnAgency, differentReturnAgency,
     personal, selectedServices, notes, setNotes,
     days, promo, basePrice, discount, servicesTotal, total, breakdown, unitPrices,
+    delivery, deliveryTotal,
     paymentCurrency, setPaymentCurrency, eurRate, money,
     promoInput, setPromoInput, promoStatus, promoDiscountPct, promoDiscount, verifyPromo, clearPromo,
     goToStep, prev, isSubmitting, submitError, submit, isUnderage, clientAge,
@@ -83,6 +84,8 @@ export const StepRecap: React.FC = () => {
             [
               { label: lang === 'fr' ? 'Lieu de départ' : 'مكان المغادرة', value: agencyName(departureAgency) },
               { label: lang === 'fr' ? 'Lieu de retour' : 'مكان الإرجاع', value: agencyName(effectiveReturnAgency) },
+              ...(delivery.aller.enabled ? [{ label: lang === 'fr' ? '🚚 Livraison aller' : '🚚 توصيل ذهاب', value: money(delivery.aller.amount) }] : []),
+              ...(delivery.retour.enabled ? [{ label: lang === 'fr' ? '🚚 Livraison retour' : '🚚 توصيل إياب', value: money(delivery.retour.amount) }] : []),
             ]
           )}
           {summaryBlock(
@@ -209,6 +212,28 @@ export const StepRecap: React.FC = () => {
               <span className="font-bold" style={{ color: C.amber }}>{money(s.price)}</span>
             </div>
           ))}
+
+          {/* Frais de livraison des agences choisies */}
+          {deliveryTotal > 0 && (
+            <div className="px-4 py-3 rounded-xl text-sm space-y-1.5"
+              style={{ background: 'rgba(14, 165, 233, 0.06)', border: '1px solid rgba(14, 165, 233, 0.25)' }}>
+              <div className="flex justify-between items-center">
+                <span className="text-vel-slate font-bold">🚚 {{ fr: 'Frais de livraison', ar: 'رسوم التوصيل' }[lang]}</span>
+                <span className="font-bold text-vel-ink">{money(deliveryTotal)}</span>
+              </div>
+              {(['aller', 'retour'] as const).filter(leg => delivery[leg].enabled).map(leg => (
+                <div key={leg} className="flex justify-between gap-4 text-xs text-vel-muted">
+                  <span>
+                    {leg === 'aller'
+                      ? { fr: 'Aller', ar: 'ذهاب' }[lang]
+                      : { fr: 'Retour', ar: 'إياب' }[lang]}
+                    {delivery[leg].agencyName ? ` — ${delivery[leg].agencyName}` : ''}
+                  </span>
+                  <span>{money(delivery[leg].amount)}</span>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* ── Code promo : saisie + vérification serveur + remise appliquée ── */}
           <div className="px-4 py-4 rounded-xl space-y-3"

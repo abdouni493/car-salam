@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Calendar, Users, Car as CarIcon, Plus, Search, Filter, Eye, Edit, Trash2, CheckCircle, XCircle, Clock, MapPin, Fuel, Camera, FileText, CreditCard, DollarSign, AlertTriangle, Phone, Mail, User, Loader } from 'lucide-react';
 import { DatabaseService } from '../services/DatabaseService';
 import { ReservationsService } from '../services/ReservationsService';
+import { getReservationDeliveryLines, deliveryLegLabel, isAgencyDeliveryService } from '../utils/agencyDelivery';
 import { DEFAULT_EUR_RATE, dzdToEur, formatMoney } from '../utils/currency';
 
 interface WebsiteOrdersProps {
@@ -694,8 +695,10 @@ export const WebsiteOrders: React.FC<WebsiteOrdersProps> = ({ lang, onOrdersChan
                         💰 {lang === 'fr' ? 'Tarification & Paiement' : 'التسعير والدفع'}
                       </h3>
                       {(() => {
-                        const servicesTotal = selectedOrder.servicesTotal || 0;
-                        const carPortion = Math.max(0, selectedOrder.totalPrice - servicesTotal);
+                        const deliveryLines = getReservationDeliveryLines(selectedOrder.step3.additionalServices);
+                        const deliveryTotal = deliveryLines.reduce((sum, l) => sum + l.amount, 0);
+                        const servicesTotal = Math.max(0, (selectedOrder.servicesTotal || 0) - deliveryTotal);
+                        const carPortion = Math.max(0, selectedOrder.totalPrice - servicesTotal - deliveryTotal);
                         const payInEur = selectedOrder.paymentCurrency === 'EUR';
                         const rate = selectedOrder.euroRate || DEFAULT_EUR_RATE;
                         // Le total euro convenu fait foi ; à défaut on reconvertit le total DZD.
@@ -729,6 +732,16 @@ export const WebsiteOrders: React.FC<WebsiteOrdersProps> = ({ lang, onOrdersChan
                               </div>
                             )}
 
+                            {deliveryLines.map(line => (
+                              <div key={line.leg} className="flex justify-between">
+                                <span className="font-bold">🚚 {deliveryLegLabel(line.leg, lang)}:</span>
+                                <span>
+                                  {formatMoney(line.amount, 'DZD')}
+                                  {payInEur && <span className="text-slate-500 ml-2">≈ {formatMoney(dzdToEur(line.amount, rate), 'EUR')}</span>}
+                                </span>
+                              </div>
+                            ))}
+
                             <div className="border-t border-orange-300 pt-3 flex justify-between font-black text-lg">
                               <span>{lang === 'fr' ? 'Total à payer:' : 'المبلغ المستحق:'}</span>
                               <span className="text-orange-600">
@@ -755,14 +768,36 @@ export const WebsiteOrders: React.FC<WebsiteOrdersProps> = ({ lang, onOrdersChan
                       })()}
                     </div>
 
+                    {/* Frais de livraison d'agence */}
+                    {getReservationDeliveryLines(selectedOrder.step3.additionalServices).length > 0 && (
+                      <div className="bg-gradient-to-r from-sky-50 to-cyan-50 rounded-2xl p-6 border border-sky-200">
+                        <h3 className="text-lg font-black text-sky-900 mb-4">
+                          🚚 {lang === 'fr' ? 'Frais de livraison' : 'رسوم التوصيل'}
+                        </h3>
+                        <div className="space-y-2">
+                          {getReservationDeliveryLines(selectedOrder.step3.additionalServices).map(line => (
+                            <div key={line.leg} className="flex justify-between items-center">
+                              <span className="font-bold">
+                                {deliveryLegLabel(line.leg, lang)}
+                                {line.label.includes(' — ') && (
+                                  <span className="ml-1 font-medium text-slate-500">({line.label.split(' — ')[1]})</span>
+                                )}
+                              </span>
+                              <span className="text-sky-700 font-bold">{line.amount.toLocaleString()} DA</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Services */}
-                    {selectedOrder.step3.additionalServices.length > 0 && (
+                    {selectedOrder.step3.additionalServices.filter(sv => !isAgencyDeliveryService(sv)).length > 0 && (
                       <div className="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-2xl p-6 border border-indigo-200">
                         <h3 className="text-lg font-black text-indigo-900 mb-4">
                           🛎️ {lang === 'fr' ? 'Services Supplémentaires' : 'الخدمات الإضافية'}
                         </h3>
                         <div className="space-y-2">
-                          {selectedOrder.step3.additionalServices.map((service) => (
+                          {selectedOrder.step3.additionalServices.filter(sv => !isAgencyDeliveryService(sv)).map((service) => (
                             <div key={service.id} className="flex justify-between items-center">
                               <span className="font-bold">{service.name}</span>
                               <span className="text-indigo-700">{service.price.toLocaleString()} DA</span>

@@ -4,6 +4,7 @@ import { getDeliveryFeePayer } from '../utils/deliveryFee';
 import { computeRentalBasePrice } from '../utils/rentalPricing';
 import { ArrowLeft, ArrowRight, CheckCircle, AlertTriangle, Save, MapPin, CreditCard, Car as CarIcon, Camera, User, Plus, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { isAgencyDeliveryService, selectionFromServices, deliverySelectionToServices } from '../utils/agencyDelivery';
 import { Step1DatesLocations, Step2VehicleSelection, Step3DepartureInspection, Step4ClientSelection, Step5AdditionalServices, Step6FinalPricing } from './CreateReservationForm';
 import { DatabaseService } from '../services/DatabaseService';
 import { ReservationsService } from '../services/ReservationsService';
@@ -37,6 +38,9 @@ export const EditReservationForm: React.FC<EditReservationFormProps> = ({ lang, 
       departureLocation: '', // Will be set after agencies prop update
       returnLocation: '', // Will be set after agencies prop update
       differentReturnAgency: reservation.step1.differentReturnAgency,
+      // Ids d'agence : servent au calcul des frais de livraison d'agence (step6).
+      departureAgencyId: reservation.step1.departureAgency,
+      returnAgencyId: reservation.step1.returnAgency || reservation.step1.departureAgency,
     },
     step2: {
       selectedCar: reservation.car,
@@ -67,7 +71,9 @@ export const EditReservationForm: React.FC<EditReservationFormProps> = ({ lang, 
       selectedClient: reservation.client
     },
     step5: {
-      additionalServices: reservation.additionalServices || []
+      // Les frais de livraison d'agence sont des lignes de services, mais ils
+      // s'éditent à l'étape tarification (step6.agencyDelivery).
+      additionalServices: (reservation.additionalServices || []).filter(sv => !isAgencyDeliveryService(sv))
     },
     step6: {
       totalPrice: reservation.totalPrice,
@@ -77,6 +83,9 @@ export const EditReservationForm: React.FC<EditReservationFormProps> = ({ lang, 
       tvaAmount: 0, // Will be calculated
       additionalFees: reservation.additionalFees,
       deliveryFee: reservation.deliveryFee || 0,
+      agencyDelivery: selectionFromServices(reservation.additionalServices),
+      // Les agences ne changent pas en édition : on conserve la sélection enregistrée.
+      agencyDeliveryKey: `${reservation.step1.departureAgency || ''}|${reservation.step1.returnAgency || reservation.step1.departureAgency || ''}`,
       longDurationFee: 0,
       paymentNotes: reservation.notes,
       advancePayment: reservation.advancePayment,
@@ -454,7 +463,10 @@ export const EditReservationForm: React.FC<EditReservationFormProps> = ({ lang, 
       console.log('📊 Saved result:', JSON.stringify(savedResult, null, 2));
 
       // Update reservation services
-      const services = formData.step5?.additionalServices || [];
+      const services = [
+        ...(formData.step5?.additionalServices || []).filter(sv => !isAgencyDeliveryService(sv)),
+        ...deliverySelectionToServices(formData.step6?.agencyDelivery),
+      ];
       console.log('🛒 Updating services:', services.length, 'items');
       await ReservationsService.updateReservationServices(reservation.id, services);
       console.log('✅ Services updated successfully');

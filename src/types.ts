@@ -128,6 +128,14 @@ export interface Agency {
   address: string;
   city: string;
   createdAt?: string;
+  /**
+   * Frais de livraison (DA) appliqués quand cette agence est l'agence de
+   * DÉPART d'une réservation (livraison « aller »). 0 = pas de frais.
+   * Stockés hors table `agencies` — cf. DatabaseService.getAgencyDeliveryPrices.
+   */
+  deliveryPriceAller?: number;
+  /** Frais de livraison (DA) quand cette agence est l'agence de RETOUR. */
+  deliveryPriceRetour?: number;
 }
 
 export interface Client {
@@ -585,6 +593,14 @@ export interface ReservationWizardPricing {
   deliveryFee?: number;
   /** Supplément longue durée (DA) facturé au client — cf. utils/longDurationFee. */
   longDurationFee?: number;
+  /**
+   * Frais de livraison d'AGENCE (aller = agence de départ, retour = agence de
+   * retour), en DA. Enregistrés comme lignes `reservation_services` (catégorie
+   * `livraison`) — cf. utils/agencyDelivery.
+   */
+  agencyDelivery?: import('./utils/agencyDelivery').AgencyDeliverySelection;
+  /** Couple « départ|retour » pour lequel `agencyDelivery` a été calculé. */
+  agencyDeliveryKey?: string;
   advancePayment?: number;
   remainingPayment?: number;
   deposit?: number;

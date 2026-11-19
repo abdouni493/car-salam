@@ -8,6 +8,13 @@ import {
 } from '../utils/currency';
 import { computeRentalBasePrice } from '../utils/rentalPricing';
 import { DeliveryFeeField } from './DeliveryFeeField';
+import {
+  AgencyDeliverySelection,
+  defaultDeliveryForAgencies,
+  deliverySelectionTotal,
+  deliverySelectionToServices,
+  isAgencyDeliveryService,
+} from '../utils/agencyDelivery';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, ArrowRight, Calendar, Clock, MapPin, Car as CarIcon, User, CreditCard, CheckCircle, Plus, Search, X, Camera, Fuel, AlertTriangle, Check, Upload } from 'lucide-react';
 import { AGENCIES, CAR_IMAGES } from '../constants';
@@ -387,7 +394,12 @@ export const CreateReservationForm: React.FC<CreateReservationFormProps> = ({ la
       // Save selected services. En mode inspection, `step5` n'est qu'une recopie des
       // services déjà rattachés à la réservation : les réécrire ne ferait que rejouer
       // un delete/insert inutile.
-      const selectedServices = formData.step5?.additionalServices || [];
+      // Les frais de livraison d'agence (aller / retour) sont enregistrés comme
+      // lignes de services (catégorie `livraison`) — cf. utils/agencyDelivery.
+      const selectedServices = [
+        ...(formData.step5?.additionalServices || []).filter(sv => !isAgencyDeliveryService(sv)),
+        ...deliverySelectionToServices(formData.step6?.agencyDelivery),
+      ];
       if (!inspectionMode && selectedServices.length > 0) {
         await ReservationsService.updateReservationServices(reservationId, selectedServices);
       }
@@ -2982,6 +2994,33 @@ export const Step6FinalPricing: React.FC<{
   // l'agence reste libre d'ajuster ou de désactiver le montant.
   const deliveryAutoApplied = React.useRef(false);
 
+  // ── Livraison d'agence (aller / retour) ─────────────────────────────────────
+  // Calculée depuis les tarifs des agences de départ et de retour choisies à
+  // l'étape 1, puis librement activable / désactivable / ajustable ici. Elle
+  // est recalculée si l'utilisateur change d'agence.
+  const depAgencyId = formData.step1?.departureAgencyId || formData.step1?.departureAgency || '';
+  const retAgencyId = formData.step1?.returnAgencyId || formData.step1?.returnAgency || depAgencyId;
+  const agencyKey = `${depAgencyId}|${retAgencyId}`;
+  const [agencyDelivery, setAgencyDelivery] = useState<AgencyDeliverySelection | null>(
+    formData.step6?.agencyDelivery ?? null,
+  );
+  useEffect(() => {
+    if (!agencies || agencies.length === 0 || !depAgencyId) return;
+    const savedKey = formData.step6?.agencyDeliveryKey;
+    if (formData.step6?.agencyDelivery && (savedKey === agencyKey || savedKey === undefined)) {
+      // Sélection déjà faite (retour sur cette étape, ou réservation en édition).
+      if (savedKey === undefined) {
+        setFormData(prev => ({ ...prev, step6: { ...prev.step6, agencyDeliveryKey: agencyKey } }));
+      }
+      return;
+    }
+    setAgencyDelivery(defaultDeliveryForAgencies(agencies, depAgencyId, retAgencyId));
+    setFormData(prev => ({ ...prev, step6: { ...prev.step6, agencyDeliveryKey: agencyKey } }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agencies, agencyKey]);
+  const updateDeliveryLeg = (leg: 'aller' | 'retour', patch: Partial<AgencyDeliverySelection['aller']>) =>
+    setAgencyDelivery(prev => prev ? { ...prev, [leg]: { ...prev[leg], ...patch } } : prev);
+
   // Assurance Serenity : l'éditeur a été retiré de l'étape paiement, mais la valeur
   // enregistrée est conservée telle quelle pour les réservations existantes.
   const [assuranceEnabled, setAssuranceEnabled] = useState(false);
@@ -3176,7 +3215,11 @@ export const Step6FinalPricing: React.FC<{
   const durationRemainingDays = days % 7;
 
   // Les extras sont saisis en dinars : on les convertit vers la devise de règlement.
-  const servicesTotalDzd = formData.step5?.additionalServices?.reduce((sum, s) => sum + s.price, 0) || 0;
+  const regularServices = (formData.step5?.additionalServices || []).filter(sv => !isAgencyDeliveryService(sv));
+  const servicesTotalDzd = regularServices.reduce((sum, s) => sum + s.price, 0);
+  // Livraison d'agence, saisie en dinars.
+  const agencyDeliveryDzd = deliverySelectionTotal(agencyDelivery);
+  const agencyDeliveryAmount = fromDzd(agencyDeliveryDzd, paymentCurrency, rate);
   const servicesTotal = fromDzd(servicesTotalDzd, paymentCurrency, rate);
   // Assurance de protection : prix/jour × nombre de jours
   const protectionAssuranceCostDzd = formData.protectionAssurance
@@ -3195,7 +3238,7 @@ export const Step6FinalPricing: React.FC<{
   /** Total calculé, dans la devise de règlement. */
   const computedPrice = Math.max(
     0,
-    roundIn(subtotal + tvaAmount + clientDeliveryFee, paymentCurrency),
+    roundIn(subtotal + tvaAmount + clientDeliveryFee + agencyDeliveryAmount, paymentCurrency),
   );
   /** `''` ⇒ l'agence n'a pas forcé le total : il suit le calcul. */
   const isManualTotal = manualTotal !== '';
@@ -3254,6 +3297,7 @@ export const Step6FinalPricing: React.FC<{
         tvaApplied: tvaEnabled,
         tvaAmount: toDzd(tvaAmount, paymentCurrency, rate),
         deliveryFee: deliveryFeeAmountDzd,
+        agencyDelivery: agencyDelivery ?? undefined,
         // Supplément longue durée retiré de la facturation client (géré côté
         // propriétaire dans « Bénéfices par véhicule »).
         longDurationFee: 0,
@@ -3285,7 +3329,7 @@ export const Step6FinalPricing: React.FC<{
       deposit: deposit,
       totalPrice: totalPriceDzd
     }));
-  }, [totalPriceDzd, isManualTotal, manualTotal, tvaEnabled, tvaAmount, deliveryFeeAmountDzd, cautionEnabled, cautionCurrency, euroAmount, euroRate, assuranceEnabled, assurancePercentage, assuranceAmount, finalTotal, deposit, editedDeposit, paymentCurrency, advancePaymentDzd, remainingPaymentDzd, paymentNotes]);
+  }, [totalPriceDzd, isManualTotal, manualTotal, tvaEnabled, tvaAmount, deliveryFeeAmountDzd, agencyDelivery, cautionEnabled, cautionCurrency, euroAmount, euroRate, assuranceEnabled, assurancePercentage, assuranceAmount, finalTotal, deposit, editedDeposit, paymentCurrency, advancePaymentDzd, remainingPaymentDzd, paymentNotes]);
 
   return (
     <div className="space-y-8">
@@ -3685,11 +3729,11 @@ export const Step6FinalPricing: React.FC<{
               </div>
 
           {/* Services */}
-          {formData.step5?.additionalServices && formData.step5.additionalServices.length > 0 && (
+          {regularServices.length > 0 && (
             <div className="bg-blue-50 rounded-lg p-4">
               <h5 className="font-bold text-blue-900 mb-3">{lang === 'fr' ? 'Services Supplémentaires' : 'الخدمات الإضافية'}</h5>
               <div className="space-y-2">
-                {formData.step5.additionalServices.map((service) => (
+                {regularServices.map((service) => (
                   <div key={service.id} className="flex justify-between items-center">
                     <span>{service.name}</span>
                     <span>{fmtDzd(service.price)}</span>
@@ -3732,6 +3776,59 @@ export const Step6FinalPricing: React.FC<{
               <div className="flex justify-between items-center border-t border-red-300 pt-2 font-bold">
                 <span>{lang === 'fr' ? 'Total Assurance' : 'إجمالي التأمين'}</span>
                 <span>{fmt(protectionAssuranceCost)}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Frais de livraison d'agence (aller / retour) */}
+          {agencyDelivery && (agencyDelivery.aller.amount > 0 || agencyDelivery.retour.amount > 0 || agencyDelivery.aller.enabled || agencyDelivery.retour.enabled) && (
+            <div className="bg-sky-50 rounded-lg p-4 border border-sky-200 space-y-3">
+              <div>
+                <h5 className="font-bold text-sky-900">
+                  🚚 {lang === 'fr' ? "Frais de livraison de l'agence" : 'رسوم توصيل الوكالة'}
+                </h5>
+                <p className="text-[11px] font-medium text-sky-700 mt-1">
+                  {lang === 'fr'
+                    ? "Activés automatiquement d'après les agences de départ et de retour. Décochez pour ne pas les facturer."
+                    : 'تُفعَّل تلقائيًا حسب وكالتي الانطلاق والإرجاع. ألغِ التحديد لعدم احتسابها.'}
+                </p>
+              </div>
+              {(['aller', 'retour'] as const).map(leg => {
+                const l = agencyDelivery[leg];
+                return (
+                  <div key={leg} className={`flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2 ${l.enabled ? 'border-sky-300 bg-white' : 'border-slate-200 bg-slate-50 opacity-70'}`}>
+                    <label className="flex items-center gap-2 cursor-pointer select-none flex-1 min-w-[180px]">
+                      <input
+                        type="checkbox"
+                        checked={l.enabled}
+                        onChange={e => updateDeliveryLeg(leg, { enabled: e.target.checked })}
+                        className="w-4 h-4 accent-sky-600"
+                      />
+                      <span className="text-sm font-bold text-slate-800">
+                        {leg === 'aller'
+                          ? (lang === 'fr' ? '➡️ Livraison aller' : '➡️ توصيل ذهاب')
+                          : (lang === 'fr' ? '⬅️ Livraison retour' : '⬅️ توصيل إياب')}
+                        {l.agencyName && <span className="ms-1 text-xs font-medium text-slate-500">({l.agencyName})</span>}
+                      </span>
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={0}
+                        step={100}
+                        value={l.amount}
+                        disabled={!l.enabled}
+                        onChange={e => updateDeliveryLeg(leg, { amount: Math.max(0, Number(e.target.value) || 0) })}
+                        className="w-28 px-2 py-1 border border-sky-200 rounded-md text-sm font-bold text-right"
+                      />
+                      <span className="text-xs font-bold text-slate-500">DA</span>
+                    </div>
+                  </div>
+                );
+              })}
+              <div className="flex justify-between items-center border-t border-sky-300 pt-2 font-bold text-sky-900">
+                <span>{lang === 'fr' ? 'Total livraison' : 'إجمالي التوصيل'}</span>
+                <span>{fmt(agencyDeliveryAmount)}</span>
               </div>
             </div>
           )}
@@ -4014,6 +4111,19 @@ export const Step6FinalPricing: React.FC<{
                 <span className={`font-bold ${clientDeliveryFee === 0 ? 'text-green-700 line-through' : 'text-indigo-900'}`}>
                   {fmt(deliveryFeeAmount)}
                 </span>
+              </div>
+            )}
+
+            {agencyDelivery?.aller.enabled && agencyDelivery.aller.amount > 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-indigo-700">{lang === 'fr' ? 'Livraison aller:' : 'توصيل ذهاب:'}</span>
+                <span className="font-bold text-indigo-900">{fmtDzd(agencyDelivery.aller.amount)}</span>
+              </div>
+            )}
+            {agencyDelivery?.retour.enabled && agencyDelivery.retour.amount > 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-indigo-700">{lang === 'fr' ? 'Livraison retour:' : 'توصيل إياب:'}</span>
+                <span className="font-bold text-indigo-900">{fmtDzd(agencyDelivery.retour.amount)}</span>
               </div>
             )}
 

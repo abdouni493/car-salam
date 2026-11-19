@@ -5,6 +5,7 @@ import { getCurrentSpecialOfferForCar } from '../../../utils/specialOffers';
 import { Currency, carEurRate, dzdToEur, formatMoney } from '../../../utils/currency';
 import { computeRentalBasePrice, RentalPriceBreakdown, RentalUnitPrices } from '../../../utils/rentalPricing';
 import { fromYmd } from './wizardUi';
+import { AgencyDeliverySelection, defaultDeliveryForAgencies, deliverySelectionTotal, deliverySelectionToServices } from '../../../utils/agencyDelivery';
 
 // ═══ Modèle d'état du wizard de réservation (source unique de vérité) ═══
 // Tout l'état vit ici : naviguer entre les étapes ne perd jamais les saisies.
@@ -148,6 +149,9 @@ interface WizardContextValue {
   servicesTotal: number;
   assuranceTotal: number;
   promoDiscount: number;        // remise en DA du code promo
+  /** Frais de livraison des agences choisies (aller = départ, retour = retour). */
+  delivery: AgencyDeliverySelection;
+  deliveryTotal: number;
   total: number;
 
   // Devise de règlement choisie par le client à l'étape finale
@@ -475,7 +479,13 @@ export const ReservationWizardProvider: React.FC<ProviderProps> = ({
   const promoDiscount = promoStatus === 'valid' && promoDiscountPct > 0
     ? Math.round(subtotal * (promoDiscountPct / 100))
     : 0;
-  const total = Math.max(0, subtotal - promoDiscount);
+  // Frais de livraison des agences : hors remise du code promo, ajoutés au total.
+  const delivery = useMemo(
+    () => defaultDeliveryForAgencies(agencies, departureAgency, differentReturnAgency ? returnAgency : departureAgency),
+    [agencies, departureAgency, differentReturnAgency, returnAgency],
+  );
+  const deliveryTotal = deliverySelectionTotal(delivery);
+  const total = Math.max(0, subtotal - promoDiscount) + deliveryTotal;
 
   // ─── Devise de règlement ────────────────────────────────────────────────────
   // Le taux vient des tarifs de la voiture : afficher un total euro calculé à un
@@ -573,12 +583,16 @@ export const ReservationWizardProvider: React.FC<ProviderProps> = ({
         protection_assurance_price: selectedAssurance?.pricePerDay ?? 0,
       };
 
-      const servicesPayload = selectedServices.map(s => ({
-        category: (s as any).category || 'service',
-        service_name: (s as any).name || (s as any).service_name || '',
-        description: (s as any).description || '',
-        price: s.price,
-      }));
+      const servicesPayload = [
+        ...selectedServices.map(s => ({
+          category: (s as any).category || 'service',
+          service_name: (s as any).name || (s as any).service_name || '',
+          description: (s as any).description || '',
+          price: s.price,
+        })),
+        // Frais de livraison d'agence : mêmes lignes que celles du planificateur.
+        ...deliverySelectionToServices(delivery),
+      ];
 
       await DatabaseService.createWebsiteReservation({
         client: clientPayload,
@@ -610,7 +624,7 @@ export const ReservationWizardProvider: React.FC<ProviderProps> = ({
     notes, setNotes,
     promoInput, setPromoInput, promoStatus, promoDiscountPct, verifyPromo, clearPromo,
     days, promo, unitPrices, breakdown, priceForDays,
-    basePrice, discount, servicesTotal, assuranceTotal, promoDiscount, total,
+    basePrice, discount, servicesTotal, assuranceTotal, promoDiscount, delivery, deliveryTotal, total,
     paymentCurrency, setPaymentCurrency, eurRate, totalEur, money,
     isSubmitting, submitError, submitted, submit,
   };

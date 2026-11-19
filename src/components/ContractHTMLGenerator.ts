@@ -1,4 +1,5 @@
 import { ReservationDetails } from '../types';
+import { getReservationDeliveryLines, deliveryLegLabel } from '../utils/agencyDelivery';
 
 /**
  * Force a phone number to render strictly left-to-right, even inside an RTL (Arabic)
@@ -30,8 +31,12 @@ export const generateContractHTML = (
   reservation: ReservationDetails | null,
   agencySettings: any,
   secondConductor: any,
-  templateLang: 'fr' | 'ar'
+  templateLang: 'fr' | 'ar',
+  options: { showDeliveryFees?: boolean } = {}
 ): string => {
+  // Par défaut les frais de livraison figurent au contrat ; l'utilisateur peut
+  // les masquer depuis l'aperçu d'impression.
+  const showDeliveryFees = options.showDeliveryFees !== false;
   const isFrench = templateLang === 'fr';
   const textDir = isFrench ? 'ltr' : 'rtl';
 
@@ -77,11 +82,20 @@ export const generateContractHTML = (
   // Frais de livraison : montant + payeur (déduit du seuil de durée par la DB).
   const deliveryFeeDzd = Number(reservation?.deliveryFee) || 0;
   const deliveryPaidByOwner = reservation?.deliveryFeePayer === 'owner';
-  const deliveryFeeText = deliveryFeeDzd > 0
+  const deliveryFeeText = showDeliveryFees && deliveryFeeDzd > 0
     ? `${ltr(Math.round(deliveryFeeDzd).toLocaleString('fr-FR'))} DA — ${
         deliveryPaidByOwner ? labels.deliveryByOwner : labels.deliveryByClient
       }`
     : '';
+  // Frais de livraison d'agence (aller / retour), enregistrés comme services.
+  const agencyDeliveryLines = showDeliveryFees
+    ? getReservationDeliveryLines(reservation?.additionalServices)
+    : [];
+  const agencyDeliveryCells = agencyDeliveryLines.map(l => `
+            <div class="meta-cell">
+              <span class="meta-label">🚚 ${deliveryLegLabel(l.leg, templateLang)}</span>
+              <span class="meta-value">${ltr(Math.round(l.amount).toLocaleString('fr-FR'))} DA</span>
+            </div>`).join('');
 
   const termsList = isFrench
     ? [
@@ -440,6 +454,10 @@ export const generateContractHTML = (
               <span class="meta-label">🚚 ${labels.deliveryFee}</span>
               <span class="meta-value">${deliveryFeeText}</span>
             </div>
+          </div>` : ''}
+          ${agencyDeliveryCells ? `
+          <div class="period-row" style="grid-template-columns: repeat(${agencyDeliveryLines.length}, 1fr); border-top: 1px solid var(--border);">
+            ${agencyDeliveryCells}
           </div>` : ''}
         </div>
 

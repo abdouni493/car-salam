@@ -1,6 +1,7 @@
 import React from 'react';
 import { Agency, Language } from '../types';
 import { motion } from 'motion/react';
+import { formatAmount } from '../utils/format';
 import { MapPin, Phone, Mail } from 'lucide-react';
 
 interface AgencyCardProps {
@@ -49,6 +50,22 @@ export const AgencyCard: React.FC<AgencyCardProps> = ({
             <p className="text-[12px] text-saas-text-muted mt-1">
               {agency.city}
             </p>
+          </div>
+        </div>
+
+        {/* Delivery prices */}
+        <div className="grid grid-cols-2 gap-2">
+          <div className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2">
+            <p className="text-[9px] font-bold uppercase tracking-widest text-sky-700">
+              🚚 {lang === 'fr' ? 'Livraison aller' : 'توصيل ذهاب'}
+            </p>
+            <p className="text-sm font-black text-sky-900">{formatAmount(agency.deliveryPriceAller ?? 0)} {lang === 'fr' ? 'DA' : 'دج'}</p>
+          </div>
+          <div className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2">
+            <p className="text-[9px] font-bold uppercase tracking-widest text-sky-700">
+              🚚 {lang === 'fr' ? 'Livraison retour' : 'توصيل إياب'}
+            </p>
+            <p className="text-sm font-black text-sky-900">{formatAmount(agency.deliveryPriceRetour ?? 0)} {lang === 'fr' ? 'DA' : 'دج'}</p>
           </div>
         </div>
 

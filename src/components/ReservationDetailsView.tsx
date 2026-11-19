@@ -8,6 +8,7 @@ import { supabase } from '../supabase';
 import { formatAmount } from '../utils/format';
 import { DEFAULT_EUR_RATE, dzdToEur, formatMoney } from '../utils/currency';
 import { SignaturePad } from './SignaturePad';
+import { getReservationDeliveryLines, deliveryLegLabel, isAgencyDeliveryService } from '../utils/agencyDelivery';
 
 interface ReservationDetailsViewProps {
   lang: Language;
@@ -331,6 +332,28 @@ const OverviewTab: React.FC<{ lang: Language; reservation: ReservationDetails }>
           </div>
         </div>
       </div>
+
+      {/* Frais de livraison d'agence */}
+      {getReservationDeliveryLines(reservation.additionalServices).length > 0 && (
+        <div className="bg-white rounded-2xl shadow-lg p-6 border border-sky-200">
+          <h3 className="text-xl font-black text-slate-900 mb-4 flex items-center gap-2">
+            🚚 {lang === 'fr' ? 'Frais de livraison' : 'رسوم التوصيل'}
+          </h3>
+          <div className="space-y-2 text-sm">
+            {getReservationDeliveryLines(reservation.additionalServices).map(line => (
+              <div key={line.leg} className="flex justify-between items-center rounded-lg bg-sky-50 border border-sky-200 px-3 py-2">
+                <span className="font-bold text-sky-900">
+                  {deliveryLegLabel(line.leg, lang)}
+                  {line.label.includes(' — ') && (
+                    <span className="ms-1 font-medium text-slate-500">({line.label.split(' — ')[1]})</span>
+                  )}
+                </span>
+                <span className="font-black text-sky-900">{formatAmount(line.amount)} DA</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   </div>
 );
@@ -862,10 +885,21 @@ const FinancialTab: React.FC<{ lang: Language; reservation: ReservationDetails }
           <span className="font-bold">{lang === 'fr' ? 'Location de base' : 'التأجير الأساسي'}</span>
           <span className="font-bold">{formatAmount(reservation.totalPrice - reservation.additionalFees)} DA</span>
         </div>
-        {reservation.additionalServices.map((service: any) => (
+        {(reservation.additionalServices || []).filter((service: any) => !isAgencyDeliveryService(service)).map((service: any) => (
           <div key={service.id} className="flex justify-between items-center py-2 border-b border-slate-200">
             <span>🛎️ {service.name || service.service_name}</span>
             <span>{formatAmount(Number(service.price))} DA</span>
+          </div>
+        ))}
+        {getReservationDeliveryLines(reservation.additionalServices).map(line => (
+          <div key={line.leg} className="flex justify-between items-center py-2 border-b border-slate-200 text-sky-800">
+            <span>
+              🚚 {deliveryLegLabel(line.leg, lang)}
+              {line.label.includes(' — ') && (
+                <span className="text-slate-400 text-sm ml-1">({line.label.split(' — ')[1]})</span>
+              )}
+            </span>
+            <span className="font-bold">{formatAmount(line.amount)} DA</span>
           </div>
         ))}
         {(reservation.protectionAssurance || reservation.protectionAssuranceName) && (
