@@ -2,7 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const OUT = path.join('c:/Users/Admin/Desktop/auto location salam', 'src/styles/theme-carbon.css');
+const OUT = path.join(__dirname, '..', 'src/styles/theme-carbon.css');
 
 // Teintes Tailwind utilisées par l'admin : base (500) + variante lisible sur noir (300).
 const HUES = {
@@ -121,6 +121,25 @@ ${sel(['.divide-slate-100 > :not(:last-child)', '.divide-slate-200 > :not(:last-
   border-color: rgba(255, 255, 255, 0.07);
 }
 ${sel(['.ring-slate-200', '.ring-gray-200'])} { --tw-ring-color: rgba(255, 255, 255, 0.09); }
+
+/* Dégradés neutres clairs (cartes du planning, pistes de réservation) :
+   slate-50 → 200 deviennent les noirs de surface, slate/gray-300 → 400
+   (vignettes sans photo, réservations annulées) des gris acier. */
+${sel(['.from-slate-50', '.from-gray-50'])} { --tw-gradient-from: #121216; }
+${sel(['.from-slate-100', '.from-gray-100'])} { --tw-gradient-from: #1A1A20; }
+${sel(['.via-slate-50', '.via-slate-100'])} { --tw-gradient-via: #16161B; }
+${sel(['.to-slate-50', '.to-gray-50'])} { --tw-gradient-to: #121216; }
+${sel(['.to-slate-100', '.to-gray-100'])} { --tw-gradient-to: #1A1A20; }
+${sel(['.from-slate-300', '.from-gray-300'])} { --tw-gradient-from: #3A3A44; }
+${sel(['.to-slate-400', '.to-gray-400'])} { --tw-gradient-to: #2A2A31; }
+${sel([esc('.hover:from-slate-200') + ':hover', esc('.hover:from-slate-100') + ':hover'])} { --tw-gradient-from: #24242B; }
+${sel([esc('.hover:to-slate-100') + ':hover', esc('.hover:to-slate-50') + ':hover'])} { --tw-gradient-to: #1C1C22; }
+${sel([esc('.bg-slate-50/60'), esc('.bg-slate-50/50'), esc('.bg-gray-50/50')])} { background-color: rgba(255, 255, 255, 0.025); }
+
+/* Liserés blancs (pastilles, flèche d'infobulle blanche) : sur noir ils
+   deviennent la couleur de la surface qui les porte. */
+${sel(['.border-white'])} { border-color: #151519; }
+${sel(['.border-t-white'])} { border-top-color: #151519; }
 `;
 
 // ── 5. Composants ──
@@ -162,6 +181,28 @@ ${S} .btn-saas-outline:hover {
 }
 ${S} .btn-saas-secondary {
   background-image: linear-gradient(135deg, #2A2A31, #3A3A44);
+}
+
+/* Planning (ReservationTimelineView) : onglets actifs, bouton « Aujourd'hui »,
+   bandeaux de mois/semaine. En clair ils restent bleus ; en Carbone ils
+   prennent le rouge sang de l'accent, comme le reste du back-office. */
+${S} .cal-accent {
+  background-color: #C8102E;
+  background-image: linear-gradient(135deg, #C8102E, #8A0A1C);
+  box-shadow: 0 4px 14px rgba(200, 16, 46, 0.30);
+}
+${S} .cal-accent:hover {
+  background-image: linear-gradient(135deg, #D91535, #9A0C20);
+}
+${S} .cal-accent-soft.cal-accent-soft {
+  background-color: rgba(200, 16, 46, 0.14);
+  border-color: #C8102E;
+  color: #FF4D52;
+}
+${S} .cal-accent-band {
+  background-image: linear-gradient(90deg, #8A0A1C, #C8102E 55%, #2A2A31);
+  border: 1px solid rgba(255, 77, 82, 0.25);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
 }
 
 /* Champs natifs : sans cela le navigateur les rend en blanc sur blanc. */
@@ -216,6 +257,8 @@ ${sel([`.bg-${hue}-50`, `.bg-${hue}-100`])} { background-color: ${tint(14)}; }
 ${sel([esc(`.hover:bg-${hue}-50`) + ':hover', esc(`.hover:bg-${hue}-100`) + ':hover'])} { background-color: ${tint(22)}; }
 ${sel([`.from-${hue}-50`, `.from-${hue}-100`])} { --tw-gradient-from: ${tint(14)}; }
 ${sel([`.to-${hue}-50`, `.to-${hue}-100`])} { --tw-gradient-to: ${tint(14)}; }
+${sel([esc(`.bg-${hue}-50/30`), esc(`.bg-${hue}-50/40`), esc(`.bg-${hue}-50/50`)])} { background-color: ${edge(8)}; }
+${sel([esc(`.focus:ring-${hue}-200`) + ':focus'])} { --tw-ring-color: ${edge(38)}; }
 ${sel([`.border-${hue}-100`])} { border-color: ${edge(24)}; }
 ${sel([`.border-${hue}-200`])} { border-color: ${edge(38)}; }
 ${sel([`.border-${hue}-300`])} { border-color: ${edge(52)}; }

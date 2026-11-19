@@ -121,6 +121,36 @@ html[data-admin-theme="carbon"]:not([data-surface="site"]) .divide-gray-200 > :n
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .ring-slate-200,
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .ring-gray-200 { --tw-ring-color: rgba(255, 255, 255, 0.09); }
 
+/* Dégradés neutres clairs (cartes du planning, pistes de réservation) :
+   slate-50 → 200 deviennent les noirs de surface, slate/gray-300 → 400
+   (vignettes sans photo, réservations annulées) des gris acier. */
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-slate-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-gray-50 { --tw-gradient-from: #121216; }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-slate-100,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-gray-100 { --tw-gradient-from: #1A1A20; }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .via-slate-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .via-slate-100 { --tw-gradient-via: #16161B; }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-slate-50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-gray-50 { --tw-gradient-to: #121216; }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-slate-100,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-gray-100 { --tw-gradient-to: #1A1A20; }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-slate-300,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-gray-300 { --tw-gradient-from: #3A3A44; }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-slate-400,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-gray-400 { --tw-gradient-to: #2A2A31; }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:from-slate-200:hover,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:from-slate-100:hover { --tw-gradient-from: #24242B; }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:to-slate-100:hover,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .hover\:to-slate-50:hover { --tw-gradient-to: #1C1C22; }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-slate-50\/60,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-slate-50\/50,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-gray-50\/50 { background-color: rgba(255, 255, 255, 0.025); }
+
+/* Liserés blancs (pastilles, flèche d'infobulle blanche) : sur noir ils
+   deviennent la couleur de la surface qui les porte. */
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-white { border-color: #151519; }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-t-white { border-top-color: #151519; }
+
 /* ── 5. Classes composants (index.css) ── */
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .glass-card {
   border-color: rgba(255, 255, 255, 0.09);
@@ -158,6 +188,28 @@ html[data-admin-theme="carbon"]:not([data-surface="site"]) .btn-saas-outline:hov
 }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .btn-saas-secondary {
   background-image: linear-gradient(135deg, #2A2A31, #3A3A44);
+}
+
+/* Planning (ReservationTimelineView) : onglets actifs, bouton « Aujourd'hui »,
+   bandeaux de mois/semaine. En clair ils restent bleus ; en Carbone ils
+   prennent le rouge sang de l'accent, comme le reste du back-office. */
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .cal-accent {
+  background-color: #C8102E;
+  background-image: linear-gradient(135deg, #C8102E, #8A0A1C);
+  box-shadow: 0 4px 14px rgba(200, 16, 46, 0.30);
+}
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .cal-accent:hover {
+  background-image: linear-gradient(135deg, #D91535, #9A0C20);
+}
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .cal-accent-soft.cal-accent-soft {
+  background-color: rgba(200, 16, 46, 0.14);
+  border-color: #C8102E;
+  color: #FF4D52;
+}
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .cal-accent-band {
+  background-image: linear-gradient(90deg, #8A0A1C, #C8102E 55%, #2A2A31);
+  border: 1px solid rgba(255, 77, 82, 0.25);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
 }
 
 /* Champs natifs : sans cela le navigateur les rend en blanc sur blanc. */
@@ -207,6 +259,10 @@ html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-red-50,
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-red-100 { --tw-gradient-from: color-mix(in srgb, #ef4444 14%, #131318); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-red-50,
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-red-100 { --tw-gradient-to: color-mix(in srgb, #ef4444 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-red-50\/30,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-red-50\/40,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-red-50\/50 { background-color: color-mix(in srgb, #ef4444 8%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .focus\:ring-red-200:focus { --tw-ring-color: color-mix(in srgb, #ef4444 38%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-red-100 { border-color: color-mix(in srgb, #ef4444 24%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-red-200 { border-color: color-mix(in srgb, #ef4444 38%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-red-300 { border-color: color-mix(in srgb, #ef4444 52%, transparent); }
@@ -225,6 +281,10 @@ html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-rose-50,
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-rose-100 { --tw-gradient-from: color-mix(in srgb, #f43f5e 14%, #131318); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-rose-50,
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-rose-100 { --tw-gradient-to: color-mix(in srgb, #f43f5e 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-rose-50\/30,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-rose-50\/40,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-rose-50\/50 { background-color: color-mix(in srgb, #f43f5e 8%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .focus\:ring-rose-200:focus { --tw-ring-color: color-mix(in srgb, #f43f5e 38%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-rose-100 { border-color: color-mix(in srgb, #f43f5e 24%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-rose-200 { border-color: color-mix(in srgb, #f43f5e 38%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-rose-300 { border-color: color-mix(in srgb, #f43f5e 52%, transparent); }
@@ -243,6 +303,10 @@ html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-orange-50,
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-orange-100 { --tw-gradient-from: color-mix(in srgb, #f97316 14%, #131318); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-orange-50,
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-orange-100 { --tw-gradient-to: color-mix(in srgb, #f97316 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-orange-50\/30,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-orange-50\/40,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-orange-50\/50 { background-color: color-mix(in srgb, #f97316 8%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .focus\:ring-orange-200:focus { --tw-ring-color: color-mix(in srgb, #f97316 38%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-orange-100 { border-color: color-mix(in srgb, #f97316 24%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-orange-200 { border-color: color-mix(in srgb, #f97316 38%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-orange-300 { border-color: color-mix(in srgb, #f97316 52%, transparent); }
@@ -261,6 +325,10 @@ html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-amber-50,
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-amber-100 { --tw-gradient-from: color-mix(in srgb, #f59e0b 14%, #131318); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-amber-50,
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-amber-100 { --tw-gradient-to: color-mix(in srgb, #f59e0b 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-amber-50\/30,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-amber-50\/40,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-amber-50\/50 { background-color: color-mix(in srgb, #f59e0b 8%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .focus\:ring-amber-200:focus { --tw-ring-color: color-mix(in srgb, #f59e0b 38%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-amber-100 { border-color: color-mix(in srgb, #f59e0b 24%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-amber-200 { border-color: color-mix(in srgb, #f59e0b 38%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-amber-300 { border-color: color-mix(in srgb, #f59e0b 52%, transparent); }
@@ -279,6 +347,10 @@ html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-yellow-50,
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-yellow-100 { --tw-gradient-from: color-mix(in srgb, #eab308 14%, #131318); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-yellow-50,
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-yellow-100 { --tw-gradient-to: color-mix(in srgb, #eab308 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-yellow-50\/30,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-yellow-50\/40,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-yellow-50\/50 { background-color: color-mix(in srgb, #eab308 8%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .focus\:ring-yellow-200:focus { --tw-ring-color: color-mix(in srgb, #eab308 38%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-yellow-100 { border-color: color-mix(in srgb, #eab308 24%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-yellow-200 { border-color: color-mix(in srgb, #eab308 38%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-yellow-300 { border-color: color-mix(in srgb, #eab308 52%, transparent); }
@@ -297,6 +369,10 @@ html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-lime-50,
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-lime-100 { --tw-gradient-from: color-mix(in srgb, #84cc16 14%, #131318); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-lime-50,
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-lime-100 { --tw-gradient-to: color-mix(in srgb, #84cc16 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-lime-50\/30,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-lime-50\/40,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-lime-50\/50 { background-color: color-mix(in srgb, #84cc16 8%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .focus\:ring-lime-200:focus { --tw-ring-color: color-mix(in srgb, #84cc16 38%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-lime-100 { border-color: color-mix(in srgb, #84cc16 24%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-lime-200 { border-color: color-mix(in srgb, #84cc16 38%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-lime-300 { border-color: color-mix(in srgb, #84cc16 52%, transparent); }
@@ -315,6 +391,10 @@ html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-green-50,
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-green-100 { --tw-gradient-from: color-mix(in srgb, #22c55e 14%, #131318); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-green-50,
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-green-100 { --tw-gradient-to: color-mix(in srgb, #22c55e 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-green-50\/30,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-green-50\/40,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-green-50\/50 { background-color: color-mix(in srgb, #22c55e 8%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .focus\:ring-green-200:focus { --tw-ring-color: color-mix(in srgb, #22c55e 38%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-green-100 { border-color: color-mix(in srgb, #22c55e 24%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-green-200 { border-color: color-mix(in srgb, #22c55e 38%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-green-300 { border-color: color-mix(in srgb, #22c55e 52%, transparent); }
@@ -333,6 +413,10 @@ html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-emerald-50,
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-emerald-100 { --tw-gradient-from: color-mix(in srgb, #10b981 14%, #131318); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-emerald-50,
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-emerald-100 { --tw-gradient-to: color-mix(in srgb, #10b981 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-emerald-50\/30,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-emerald-50\/40,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-emerald-50\/50 { background-color: color-mix(in srgb, #10b981 8%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .focus\:ring-emerald-200:focus { --tw-ring-color: color-mix(in srgb, #10b981 38%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-emerald-100 { border-color: color-mix(in srgb, #10b981 24%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-emerald-200 { border-color: color-mix(in srgb, #10b981 38%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-emerald-300 { border-color: color-mix(in srgb, #10b981 52%, transparent); }
@@ -351,6 +435,10 @@ html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-teal-50,
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-teal-100 { --tw-gradient-from: color-mix(in srgb, #14b8a6 14%, #131318); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-teal-50,
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-teal-100 { --tw-gradient-to: color-mix(in srgb, #14b8a6 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-teal-50\/30,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-teal-50\/40,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-teal-50\/50 { background-color: color-mix(in srgb, #14b8a6 8%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .focus\:ring-teal-200:focus { --tw-ring-color: color-mix(in srgb, #14b8a6 38%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-teal-100 { border-color: color-mix(in srgb, #14b8a6 24%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-teal-200 { border-color: color-mix(in srgb, #14b8a6 38%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-teal-300 { border-color: color-mix(in srgb, #14b8a6 52%, transparent); }
@@ -369,6 +457,10 @@ html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-cyan-50,
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-cyan-100 { --tw-gradient-from: color-mix(in srgb, #06b6d4 14%, #131318); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-cyan-50,
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-cyan-100 { --tw-gradient-to: color-mix(in srgb, #06b6d4 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-cyan-50\/30,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-cyan-50\/40,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-cyan-50\/50 { background-color: color-mix(in srgb, #06b6d4 8%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .focus\:ring-cyan-200:focus { --tw-ring-color: color-mix(in srgb, #06b6d4 38%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-cyan-100 { border-color: color-mix(in srgb, #06b6d4 24%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-cyan-200 { border-color: color-mix(in srgb, #06b6d4 38%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-cyan-300 { border-color: color-mix(in srgb, #06b6d4 52%, transparent); }
@@ -387,6 +479,10 @@ html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-sky-50,
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-sky-100 { --tw-gradient-from: color-mix(in srgb, #0ea5e9 14%, #131318); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-sky-50,
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-sky-100 { --tw-gradient-to: color-mix(in srgb, #0ea5e9 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-sky-50\/30,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-sky-50\/40,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-sky-50\/50 { background-color: color-mix(in srgb, #0ea5e9 8%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .focus\:ring-sky-200:focus { --tw-ring-color: color-mix(in srgb, #0ea5e9 38%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-sky-100 { border-color: color-mix(in srgb, #0ea5e9 24%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-sky-200 { border-color: color-mix(in srgb, #0ea5e9 38%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-sky-300 { border-color: color-mix(in srgb, #0ea5e9 52%, transparent); }
@@ -405,6 +501,10 @@ html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-blue-50,
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-blue-100 { --tw-gradient-from: color-mix(in srgb, #3b82f6 14%, #131318); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-blue-50,
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-blue-100 { --tw-gradient-to: color-mix(in srgb, #3b82f6 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-blue-50\/30,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-blue-50\/40,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-blue-50\/50 { background-color: color-mix(in srgb, #3b82f6 8%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .focus\:ring-blue-200:focus { --tw-ring-color: color-mix(in srgb, #3b82f6 38%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-blue-100 { border-color: color-mix(in srgb, #3b82f6 24%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-blue-200 { border-color: color-mix(in srgb, #3b82f6 38%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-blue-300 { border-color: color-mix(in srgb, #3b82f6 52%, transparent); }
@@ -423,6 +523,10 @@ html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-indigo-50,
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-indigo-100 { --tw-gradient-from: color-mix(in srgb, #6366f1 14%, #131318); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-indigo-50,
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-indigo-100 { --tw-gradient-to: color-mix(in srgb, #6366f1 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-indigo-50\/30,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-indigo-50\/40,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-indigo-50\/50 { background-color: color-mix(in srgb, #6366f1 8%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .focus\:ring-indigo-200:focus { --tw-ring-color: color-mix(in srgb, #6366f1 38%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-indigo-100 { border-color: color-mix(in srgb, #6366f1 24%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-indigo-200 { border-color: color-mix(in srgb, #6366f1 38%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-indigo-300 { border-color: color-mix(in srgb, #6366f1 52%, transparent); }
@@ -441,6 +545,10 @@ html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-violet-50,
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-violet-100 { --tw-gradient-from: color-mix(in srgb, #8b5cf6 14%, #131318); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-violet-50,
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-violet-100 { --tw-gradient-to: color-mix(in srgb, #8b5cf6 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-violet-50\/30,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-violet-50\/40,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-violet-50\/50 { background-color: color-mix(in srgb, #8b5cf6 8%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .focus\:ring-violet-200:focus { --tw-ring-color: color-mix(in srgb, #8b5cf6 38%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-violet-100 { border-color: color-mix(in srgb, #8b5cf6 24%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-violet-200 { border-color: color-mix(in srgb, #8b5cf6 38%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-violet-300 { border-color: color-mix(in srgb, #8b5cf6 52%, transparent); }
@@ -459,6 +567,10 @@ html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-purple-50,
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-purple-100 { --tw-gradient-from: color-mix(in srgb, #a855f7 14%, #131318); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-purple-50,
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-purple-100 { --tw-gradient-to: color-mix(in srgb, #a855f7 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-purple-50\/30,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-purple-50\/40,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-purple-50\/50 { background-color: color-mix(in srgb, #a855f7 8%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .focus\:ring-purple-200:focus { --tw-ring-color: color-mix(in srgb, #a855f7 38%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-purple-100 { border-color: color-mix(in srgb, #a855f7 24%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-purple-200 { border-color: color-mix(in srgb, #a855f7 38%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-purple-300 { border-color: color-mix(in srgb, #a855f7 52%, transparent); }
@@ -477,6 +589,10 @@ html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-fuchsia-50,
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-fuchsia-100 { --tw-gradient-from: color-mix(in srgb, #d946ef 14%, #131318); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-fuchsia-50,
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-fuchsia-100 { --tw-gradient-to: color-mix(in srgb, #d946ef 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-fuchsia-50\/30,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-fuchsia-50\/40,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-fuchsia-50\/50 { background-color: color-mix(in srgb, #d946ef 8%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .focus\:ring-fuchsia-200:focus { --tw-ring-color: color-mix(in srgb, #d946ef 38%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-fuchsia-100 { border-color: color-mix(in srgb, #d946ef 24%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-fuchsia-200 { border-color: color-mix(in srgb, #d946ef 38%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-fuchsia-300 { border-color: color-mix(in srgb, #d946ef 52%, transparent); }
@@ -495,6 +611,10 @@ html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-pink-50,
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .from-pink-100 { --tw-gradient-from: color-mix(in srgb, #ec4899 14%, #131318); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-pink-50,
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .to-pink-100 { --tw-gradient-to: color-mix(in srgb, #ec4899 14%, #131318); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-pink-50\/30,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-pink-50\/40,
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .bg-pink-50\/50 { background-color: color-mix(in srgb, #ec4899 8%, transparent); }
+html[data-admin-theme="carbon"]:not([data-surface="site"]) .focus\:ring-pink-200:focus { --tw-ring-color: color-mix(in srgb, #ec4899 38%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-pink-100 { border-color: color-mix(in srgb, #ec4899 24%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-pink-200 { border-color: color-mix(in srgb, #ec4899 38%, transparent); }
 html[data-admin-theme="carbon"]:not([data-surface="site"]) .border-pink-300 { border-color: color-mix(in srgb, #ec4899 52%, transparent); }

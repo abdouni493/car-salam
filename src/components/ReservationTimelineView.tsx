@@ -401,7 +401,7 @@ export const ReservationTimelineView: React.FC<ReservationTimelineViewProps> = (
               onClick={() => setViewMode('month')}
               className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${
                 viewMode === 'month' 
-                  ? 'bg-blue-500 text-white shadow-lg' 
+                  ? 'cal-accent bg-blue-500 text-white shadow-lg' 
                   : 'bg-transparent text-slate-600 hover:bg-slate-100'
               }`}
             >
@@ -411,7 +411,7 @@ export const ReservationTimelineView: React.FC<ReservationTimelineViewProps> = (
               onClick={() => setViewMode('week')}
               className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${
                 viewMode === 'week' 
-                  ? 'bg-blue-500 text-white shadow-lg' 
+                  ? 'cal-accent bg-blue-500 text-white shadow-lg' 
                   : 'bg-transparent text-slate-600 hover:bg-slate-100'
               }`}
             >
@@ -421,7 +421,7 @@ export const ReservationTimelineView: React.FC<ReservationTimelineViewProps> = (
               onClick={() => setViewMode('cars')}
               className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${
                 viewMode === 'cars' 
-                  ? 'bg-blue-500 text-white shadow-lg' 
+                  ? 'cal-accent bg-blue-500 text-white shadow-lg' 
                   : 'bg-transparent text-slate-600 hover:bg-slate-100'
               }`}
             >
@@ -433,7 +433,7 @@ export const ReservationTimelineView: React.FC<ReservationTimelineViewProps> = (
               onClick={() => setViewMode('fleet')}
               className={`px-4 py-2 rounded-md text-sm font-bold transition-all flex items-center gap-2 border-2 ${
                 viewMode === 'fleet'
-                  ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-lg'
+                  ? 'cal-accent-soft border-blue-500 bg-blue-50 text-blue-700 shadow-lg'
                   : 'border-slate-300 bg-white text-slate-600 hover:border-blue-500 hover:bg-blue-50'
               }`}
             >
@@ -444,7 +444,7 @@ export const ReservationTimelineView: React.FC<ReservationTimelineViewProps> = (
         </div>
         <button
           onClick={handleToday}
-          className="px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-bold rounded-lg transition-all shadow-lg hover:shadow-xl"
+          className="cal-accent px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-bold rounded-lg transition-all shadow-lg hover:shadow-xl"
         >
           {lang === 'fr' ? "Aujourd'hui" : 'اليوم'}
         </button>
@@ -479,7 +479,7 @@ export const ReservationTimelineView: React.FC<ReservationTimelineViewProps> = (
       {/* MONTH VIEW */}
       {viewMode === 'month' && (
         <div className="space-y-4">
-          <div className="bg-gradient-to-r from-blue-500 via-blue-600 to-purple-600 rounded-2xl p-6 text-white shadow-lg">
+          <div className="cal-accent-band bg-gradient-to-r from-blue-500 via-blue-600 to-purple-600 rounded-2xl p-6 text-white shadow-lg">
             <div className="flex items-center justify-between">
               <motion.button 
                 whileHover={{ scale: 1.1 }}
@@ -663,7 +663,7 @@ export const ReservationTimelineView: React.FC<ReservationTimelineViewProps> = (
       {/* WEEK VIEW */}
       {viewMode === 'week' && (
         <div className="space-y-4">
-          <div className="bg-gradient-to-r from-purple-500 via-purple-600 to-pink-600 rounded-2xl p-6 text-white shadow-lg">
+          <div className="cal-accent-band bg-gradient-to-r from-purple-500 via-purple-600 to-pink-600 rounded-2xl p-6 text-white shadow-lg">
             <div className="flex items-center justify-between">
               <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => setSelectedDay(new Date(selectedDay?.getTime() || new Date().getTime() - 7 * 24 * 60 * 60 * 1000))} className="p-2 hover:bg-white/20 rounded-lg transition-all">
                 <ChevronLeft className="w-6 h-6" />
@@ -1125,7 +1125,7 @@ export const ReservationTimelineView: React.FC<ReservationTimelineViewProps> = (
                     onClick={() => setFleetStatusFilter(status)}
                     className={`px-3 py-2 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${
                       fleetStatusFilter === status
-                        ? 'bg-blue-600 text-white shadow-lg'
+                        ? 'cal-accent bg-blue-600 text-white shadow-lg'
                         : 'border border-slate-300 text-slate-600 hover:border-blue-500'
                     }`}
                   >
