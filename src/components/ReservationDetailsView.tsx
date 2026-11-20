@@ -309,11 +309,15 @@ const OverviewTab: React.FC<{ lang: Language; reservation: ReservationDetails }>
         </h3>
         <div className="space-y-3">
           <div className="flex items-center gap-3">
-            <img
-              src={reservation.car.images[0]}
-              alt={`${reservation.car.brand} ${reservation.car.model}`}
-              className="w-16 h-12 rounded-lg object-cover"
-            />
+            {reservation.car?.images?.[0] ? (
+              <img
+                src={reservation.car.images[0]}
+                alt={`${reservation.car.brand} ${reservation.car.model}`}
+                className="w-16 h-12 rounded-lg object-cover"
+              />
+            ) : (
+              <div className="w-16 h-12 rounded-lg bg-slate-100 flex items-center justify-center text-2xl">🚗</div>
+            )}
             <div>
               <p className="font-bold text-lg">{reservation.car.brand} {reservation.car.model}</p>
               <p className="text-slate-600">🏷️ {reservation.car.registration}</p>
@@ -1450,13 +1454,16 @@ export const ActivationModal: React.FC<{ lang: Language; reservation: Reservatio
                 });
 
                 // Update car mileage and fuel level only (no status changes for period-based availability)
-                await supabase
-                  .from('cars')
-                  .update({ 
-                    mileage: parseInt(mileage),
-                    fuel_level: fuelLevel
-                  })
-                  .eq('id', reservation.car.id);
+                // Véhicule supprimé (placeholder sans id) : rien à mettre à jour.
+                if (reservation.car?.id) {
+                  await supabase
+                    .from('cars')
+                    .update({ 
+                      mileage: parseInt(mileage),
+                      fuel_level: fuelLevel
+                    })
+                    .eq('id', reservation.car.id);
+                }
 
                 // Update the local reservation state
                 const updatedReservation = {
@@ -1628,13 +1635,16 @@ export const CompletionModal: React.FC<{ lang: Language; reservation: Reservatio
       console.log('🟢 Reservation completion successful, updating car info...');
 
       // Update car mileage and fuel level
-      const { error: carError } = await supabase
-        .from('cars')
-        .update({ 
-          mileage: parseInt(returnMileage),
-          fuel_level: returnFuelLevel
-        })
-        .eq('id', reservation.car.id);
+      // Véhicule supprimé (placeholder sans id) : rien à mettre à jour.
+      const { error: carError } = reservation.car?.id
+        ? await supabase
+            .from('cars')
+            .update({ 
+              mileage: parseInt(returnMileage),
+              fuel_level: returnFuelLevel
+            })
+            .eq('id', reservation.car.id)
+        : { error: null };
 
       if (carError) {
         console.error('❌ Car update error:', carError);

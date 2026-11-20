@@ -2,6 +2,64 @@ import { supabase } from '../supabase';
 import { ReservationDetails, VehicleInspection, Payment, ProtectionAssurance } from '../types';
 import { eurOrUndefined } from '../utils/currency';
 
+/**
+ * Une réservation dont le véhicule ou le client a été supprimé arrive avec une
+ * relation `null` (FK `on delete set null`). Les écrans (détails, planificateur,
+ * alertes, impressions) lisent `reservation.car.images`, `reservation.client
+ * .firstName`… sans garde : un `null` faisait planter toute la page. On renvoie
+ * donc un objet de remplacement, clairement libellé, plutôt que `null`.
+ * L'id vide garantit qu'il ne correspond à aucun véhicule / client réel.
+ */
+const deletedCarPlaceholder = (): any => ({
+  id: '',
+  brand: 'Véhicule supprimé',
+  model: '',
+  registration: '—',
+  year: undefined,
+  color: '',
+  energy: '',
+  transmission: '',
+  seats: undefined,
+  doors: undefined,
+  priceDay: 0,
+  priceWeek: 0,
+  priceMonth: 0,
+  deposit: 0,
+  priceDayEur: undefined,
+  priceWeekEur: undefined,
+  priceMonthEur: undefined,
+  depositEur: undefined,
+  images: [] as string[],
+  mileage: 0,
+  vin: '',
+  isDeleted: true,
+});
+
+const deletedClientPlaceholder = (clientId?: string | null): any => ({
+  id: clientId || '',
+  firstName: 'Client',
+  lastName: 'supprimé',
+  phone: '',
+  email: '',
+  profilePhoto: '',
+  dateOfBirth: '',
+  placeOfBirth: '',
+  wilaya: '',
+  completeAddress: '',
+  idCardNumber: '',
+  licenseNumber: '',
+  licenseExpirationDate: '',
+  licenseDeliveryDate: '',
+  licenseDeliveryPlace: '',
+  documentType: '',
+  documentNumber: '',
+  documentDeliveryDate: '',
+  documentExpirationDate: '',
+  documentDeliveryAddress: '',
+  createdAt: '',
+  isDeleted: true,
+});
+
 // Mappe un forfait d'assurance de protection embarqué (avec ses items + statut).
 function mapProtectionAssurance(pa: any): ProtectionAssurance | undefined {
   if (!pa) return undefined;
@@ -359,7 +417,7 @@ export class ReservationsService {
         documentExpirationDate: res.client.document_expiration_date || res.client.documentExpirationDate,
         documentDeliveryAddress: res.client.document_delivery_address || res.client.documentDeliveryAddress,
         createdAt: res.client.created_at,
-      } : null,
+      } : deletedClientPlaceholder(res.client_id),
       carId: res.car_id,
       car: res.car ? {
         id: res.car.id,
@@ -385,7 +443,7 @@ export class ReservationsService {
         images: res.car.image_url ? [res.car.image_url] : [],
         mileage: res.car.mileage,
         vin: res.car.vin,
-      } : null,
+      } : deletedCarPlaceholder(),
       step1: {
         carId: res.car_id,
         departureDate: res.departure_date,
@@ -592,7 +650,7 @@ export class ReservationsService {
         documentExpirationDate: data.client.document_expiration_date || data.client.documentExpirationDate,
         documentDeliveryAddress: data.client.document_delivery_address || data.client.documentDeliveryAddress,
         createdAt: data.client.created_at,
-      } : null,
+      } : deletedClientPlaceholder(data.client_id),
       carId: data.car_id,
       car: data.car ? {
         id: data.car.id,
@@ -618,7 +676,7 @@ export class ReservationsService {
         images: data.car.image_url ? [data.car.image_url] : [],
         mileage: data.car.mileage,
         vin: data.car.vin,
-      } : null,
+      } : deletedCarPlaceholder(),
       step1: {
         carId: data.car_id,
         departureDate: data.departure_date,

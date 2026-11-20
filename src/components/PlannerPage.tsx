@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Language, ReservationDetails, Client, Car } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { Calendar, Users, Car as CarIcon, Plus, Search, Filter, Eye, Edit, Trash2, CheckCircle, XCircle, Clock, MapPin, Fuel, Camera, FileText, CreditCard, DollarSign, Printer, AlertTriangle, MoreVertical, Grid3x3, CalendarDays, List, X, Zap, Gauge, Heart, Phone } from 'lucide-react';
@@ -72,12 +72,13 @@ const PENDING_STATUS_STYLE = {
 };
 
 /**
- * La liste du planificateur affiche le flux de travail *et* les réservations
- * terminées (elles restent consultables / réactivables). Seules
- * 'website_reservation', 'accepted' et 'cancelled' en sont exclues.
+ * Le planificateur n'affiche que le flux de travail en cours (en attente,
+ * confirmée, active). Les contrats terminés ('completed' / 'terminated') sont
+ * consultables dans la page « Contrats » ; 'website_reservation', 'accepted'
+ * et 'cancelled' en sont aussi exclues.
  */
 const isVisibleInPlanner = (status: string) =>
-  PLANNER_STATUSES.includes(status as PlannerStatus) || isTerminatedStatus(status);
+  PLANNER_STATUSES.includes(status as PlannerStatus);
 
 /**
  * Le filtre « Terminées » couvre les deux libellés historiques,
@@ -97,6 +98,7 @@ interface PlannerPageProps {
 
 export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = false, user = null }) => {
   const location = useLocation();
+  const navigate = useNavigate();
   const [currentView, setCurrentView] = useState<'list' | 'calendar' | 'create' | 'details' | 'edit' | 'web-orders'>('list');
   const [displayMode, setDisplayMode] = useState<'grid' | 'calendar'>('grid');
   const [selectedReservation, setSelectedReservation] = useState<ReservationDetails | null>(null);
@@ -545,7 +547,6 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
     pending:   filteredReservations.filter(r => r.status === 'pending').length,
     confirmed: filteredReservations.filter(r => r.status === 'confirmed').length,
     active:    filteredReservations.filter(r => r.status === 'active').length,
-    completed: filteredReservations.filter(r => isTerminatedStatus(r.status)).length,
     debt:      filteredReservations.filter(r => {
       const paid = (r.payments && r.payments.length > 0)
         ? r.payments.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0)
@@ -710,7 +711,6 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
           { key: 'pending',   dot: '🟡', label: lang === 'fr' ? 'En attente'  : 'في الانتظار', count: kpiCounts.pending,   cls: 'border-amber-200 bg-amber-50 text-amber-800',    active: 'border-amber-500 bg-amber-100' },
           { key: 'confirmed', dot: '🟦', label: lang === 'fr' ? 'Confirmées'  : 'مؤكدة',       count: kpiCounts.confirmed, cls: 'border-blue-200 bg-blue-50 text-blue-800',       active: 'border-blue-500 bg-blue-100' },
           { key: 'active',    dot: '🟢', label: lang === 'fr' ? 'Actives'     : 'نشطة',        count: kpiCounts.active,    cls: 'border-green-200 bg-green-50 text-green-800',    active: 'border-green-500 bg-green-100' },
-          { key: 'completed', dot: '🏁', label: lang === 'fr' ? 'Terminées'   : 'منتهية',      count: kpiCounts.completed, cls: 'border-purple-200 bg-purple-50 text-purple-800', active: 'border-purple-500 bg-purple-100' },
         ] as const).map(chip => (
           <button
             key={chip.key}
@@ -733,6 +733,16 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
           <span>💰</span>
           {lang === 'fr' ? 'Dettes' : 'الديون'}
           <span className="font-black">({kpiCounts.debt})</span>
+        </button>
+        {/* Les contrats terminés vivent dans la page « Contrats » */}
+        <button
+          onClick={() => navigate('/reservations')}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl border font-bold text-sm transition-all border-purple-200 bg-purple-50 text-purple-800 hover:brightness-95"
+          title={lang === 'fr' ? 'Les contrats terminés sont dans la page Contrats' : 'العقود المنتهية في صفحة العقود'}
+        >
+          <span>🏁</span>
+          {lang === 'fr' ? 'Contrats terminés' : 'العقود المنتهية'}
+          <span aria-hidden>→</span>
         </button>
       </div>
 
@@ -759,7 +769,6 @@ export const PlannerPage: React.FC<PlannerPageProps> = ({ lang, isAuthLoading = 
             { key: 'pending',   label: lang === 'fr' ? 'En attente': 'في الانتظار' },
             { key: 'confirmed', label: lang === 'fr' ? 'Confirmée' : 'مؤكد' },
             { key: 'active',    label: lang === 'fr' ? 'Active'    : 'نشط' },
-            { key: 'completed', label: lang === 'fr' ? 'Terminée'  : 'منتهي' },
           ] as const).map(pill => (
             <button
               key={pill.key}

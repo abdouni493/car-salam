@@ -22,6 +22,14 @@ export interface ReservationAlert {
 export const getReservationAlert = (
   reservation: ReservationDetails
 ): ReservationAlert | null => {
+  // Seules les réservations encore en cours (celles du planificateur) donnent
+  // lieu à une alerte. Une location terminée ('completed' ou l'ancien
+  // 'terminated'), annulée, ou une commande du site pas encore acceptée n'a
+  // plus rien à signaler — et la cliquer menait vers une réservation que le
+  // planificateur n'affiche pas.
+  if (!['pending', 'confirmed', 'active'].includes(reservation.status)) return null;
+  if (!reservation.step1?.departureDate || !reservation.step1?.returnDate) return null;
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -47,8 +55,8 @@ export const getReservationAlert = (
     returnDate.getTime() === today.getTime() && 
     (reservation.status === 'active' || reservation.status === 'confirmed')
   ) {
-    const clientName = `${reservation.client.firstName} ${reservation.client.lastName}`;
-    const vehicleName = `${reservation.car.brand} ${reservation.car.model}`;
+    const clientName = `${reservation.client?.firstName ?? ''} ${reservation.client?.lastName ?? ''}`;
+    const vehicleName = `${reservation.car?.brand ?? ''} ${reservation.car?.model ?? ''}`;
     return {
       id: `${reservation.id}-expiring-today`,
       reservationId: reservation.id,
@@ -70,8 +78,8 @@ export const getReservationAlert = (
     returnDate.getTime() === tomorrow.getTime() && 
     (reservation.status === 'active' || reservation.status === 'confirmed')
   ) {
-    const clientName = `${reservation.client.firstName} ${reservation.client.lastName}`;
-    const vehicleName = `${reservation.car.brand} ${reservation.car.model}`;
+    const clientName = `${reservation.client?.firstName ?? ''} ${reservation.client?.lastName ?? ''}`;
+    const vehicleName = `${reservation.car?.brand ?? ''} ${reservation.car?.model ?? ''}`;
     return {
       id: `${reservation.id}-expiring-tomorrow`,
       reservationId: reservation.id,
@@ -98,7 +106,7 @@ export const getReservationAlert = (
       type: 'pre_start',
       severity: 'medium',
       title: 'Départ Demain / غدا الانطلاق',
-      message: `La réservation de ${reservation.client.firstName} ${reservation.client.lastName} commence demain`,
+      message: `La réservation de ${reservation.client?.firstName ?? ''} ${reservation.client?.lastName ?? ''} commence demain`,
       icon: '🚗',
       daysUntil: 1,
       status: 'warning',
@@ -116,7 +124,7 @@ export const getReservationAlert = (
       type: 'pre_end',
       severity: 'medium',
       title: 'Retour Demain / العودة غدا',
-      message: `La réservation de ${reservation.client.firstName} ${reservation.client.lastName} prend fin demain`,
+      message: `La réservation de ${reservation.client?.firstName ?? ''} ${reservation.client?.lastName ?? ''} prend fin demain`,
       icon: '📅',
       daysUntil: 1,
       status: 'warning',
@@ -153,7 +161,7 @@ export const getReservationAlert = (
       type: 'late_activation',
       severity: daysLate > 3 ? 'critical' : 'high',
       title: 'Activation Retardée / تفعيل متأخر',
-      message: `Le client ${reservation.client.firstName} ${reservation.client.lastName} est en retard depuis ${daysLate} jour(s) pour récupérer le véhicule`,
+      message: `Le client ${reservation.client?.firstName ?? ''} ${reservation.client?.lastName ?? ''} est en retard depuis ${daysLate} jour(s) pour récupérer le véhicule`,
       icon: '⚠️',
       daysOverdue: daysLate,
       status: daysLate > 3 ? 'critical' : 'warning',

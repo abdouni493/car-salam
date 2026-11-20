@@ -40,6 +40,7 @@ const calcPaid = (r: ReservationDetails): number => {
 // ── Status badge ─────────────────────────────────────────────────────────────
 const STATUS_CLS: Record<string, string> = {
   completed: 'bg-violet-100 text-violet-700 border-violet-200',
+  terminated: 'bg-violet-100 text-violet-700 border-violet-200',
   active:    'bg-blue-100  text-blue-700  border-blue-200',
   confirmed: 'bg-teal-100  text-teal-700  border-teal-200',
   accepted:  'bg-indigo-100 text-indigo-700 border-indigo-200',
@@ -48,6 +49,7 @@ const STATUS_CLS: Record<string, string> = {
 };
 const STATUS_LABEL: Record<string, { fr: string; ar: string }> = {
   completed: { fr: 'Terminée',  ar: 'منتهية'  },
+  terminated: { fr: 'Terminée',  ar: 'منتهية'  },
   active:    { fr: 'Active',    ar: 'نشطة'    },
   confirmed: { fr: 'Confirmée', ar: 'مؤكدة'   },
   accepted:  { fr: 'Acceptée',  ar: 'مقبولة'  },
@@ -153,7 +155,8 @@ export const ReservationsPage: React.FC<ReservationsPageProps> = ({ lang, isAuth
   /** Contrats = only completed reservations in the selected period */
   const periodReservations = useMemo(
     () => reservations.filter(r =>
-      r.status === 'completed' &&
+      // 'terminated' : ancien libellé encore présent sur d'anciennes lignes.
+      (r.status === 'completed' || (r.status as string) === 'terminated') &&
       inRange(r.completedAt || r.step1?.returnDate || r.createdAt, startDate, endDate)
     ),
     [reservations, startDate, endDate]
