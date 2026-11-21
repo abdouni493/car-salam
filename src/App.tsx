@@ -179,7 +179,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
           toggleSidebar={() => setIsSidebarVisible(!isSidebarVisible)}
         />
 
-        <main className="flex-1 p-8 overflow-y-auto">
+        <main className="admin-main flex-1 min-w-0 p-3 sm:p-5 lg:p-8 overflow-y-auto overflow-x-hidden">
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}

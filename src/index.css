@@ -464,3 +464,101 @@ html[data-admin-theme="carbon"] .res-card:hover {
   .vel-sheen:hover::after { animation: none; }
   .vel-pulse-red { animation: none; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   BACK-OFFICE — ADAPTATION MOBILE (< 640 px)
+   Règles hors @layer : elles priment sur les utilitaires Tailwind de base,
+   mais seulement sous 640 px, où les variantes sm:/md:/lg: ne s'appliquent pas
+   encore. Elles resserrent les espacements pensés pour le bureau, rendent les
+   tableaux défilables horizontalement et adaptent les fenêtres modales à
+   l'écran — sans toucher au site public (html[data-surface="site"]).
+   ═══════════════════════════════════════════════════════════════════════════ */
+html, body { max-width: 100%; overflow-x: hidden; }
+
+@media (max-width: 639.98px) {
+  html:not([data-surface="site"]) {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* Espacements de bureau → mobile */
+  html:not([data-surface="site"]) .p-12,
+  html:not([data-surface="site"]) .p-10,
+  html:not([data-surface="site"]) .p-8 { padding: 1rem; }
+  html:not([data-surface="site"]) .p-6 { padding: .875rem; }
+  html:not([data-surface="site"]) .px-12,
+  html:not([data-surface="site"]) .px-10,
+  html:not([data-surface="site"]) .px-8 { padding-left: 1rem; padding-right: 1rem; }
+  html:not([data-surface="site"]) .px-6 { padding-left: .875rem; padding-right: .875rem; }
+  html:not([data-surface="site"]) .py-12,
+  html:not([data-surface="site"]) .py-10 { padding-top: 1.5rem; padding-bottom: 1.5rem; }
+  html:not([data-surface="site"]) .py-8 { padding-top: 1.25rem; padding-bottom: 1.25rem; }
+  html:not([data-surface="site"]) .gap-12,
+  html:not([data-surface="site"]) .gap-10,
+  html:not([data-surface="site"]) .gap-8 { gap: 1rem; }
+  html:not([data-surface="site"]) .gap-6 { gap: .875rem; }
+  html:not([data-surface="site"]) .space-y-10 > :not(:last-child),
+  html:not([data-surface="site"]) .space-y-8 > :not(:last-child) { margin-bottom: 1.25rem; }
+  html:not([data-surface="site"]) .rounded-\[2rem\],
+  html:not([data-surface="site"]) .rounded-\[2\.5rem\],
+  html:not([data-surface="site"]) .rounded-3xl { border-radius: 1.25rem; }
+
+  /* Titres de bureau trop grands pour un téléphone */
+  html:not([data-surface="site"]) .text-6xl,
+  html:not([data-surface="site"]) .text-5xl { font-size: 2rem; line-height: 1.15; }
+  html:not([data-surface="site"]) .text-4xl { font-size: 1.75rem; line-height: 1.2; }
+  html:not([data-surface="site"]) .text-3xl { font-size: 1.5rem; line-height: 1.25; }
+  html:not([data-surface="site"]) .text-8xl,
+  html:not([data-surface="site"]) .text-7xl { font-size: 3rem; line-height: 1; }
+
+  /* En-têtes « titre … actions » : les actions passent à la ligne au lieu de
+     déborder hors de l'écran. */
+  html:not([data-surface="site"]) .admin-main .flex.justify-between {
+    flex-wrap: wrap;
+    row-gap: .625rem;
+  }
+
+  /* Barres de boutons (filtres, actions) : retour à la ligne plutôt que
+     débordement — sauf les barres prévues pour défiler horizontalement. */
+  html:not([data-surface="site"]) .admin-main .flex:not(.flex-col):not(.overflow-x-auto):not(.flex-nowrap):has(> button:nth-child(3)),
+  html:not([data-surface="site"]) .admin-main .flex:not(.flex-col):not(.overflow-x-auto):not(.flex-nowrap):has(> a:nth-child(3)) {
+    flex-wrap: wrap;
+  }
+
+  /* Médias jamais plus larges que leur conteneur */
+  html:not([data-surface="site"]) .admin-main img,
+  html:not([data-surface="site"]) .admin-main video,
+  html:not([data-surface="site"]) .admin-main canvas { max-width: 100%; }
+
+  /* Champs à largeur fixe : jamais plus larges que l'écran */
+  html:not([data-surface="site"]) .admin-main .w-64,
+  html:not([data-surface="site"]) .admin-main .w-72,
+  html:not([data-surface="site"]) .admin-main .w-80,
+  html:not([data-surface="site"]) .admin-main .w-96 { max-width: 100%; }
+
+  /* iOS zoome sur tout champ < 16 px : on l'évite. */
+  html:not([data-surface="site"]) input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  html:not([data-surface="site"]) select,
+  html:not([data-surface="site"]) textarea { font-size: 16px; }
+
+  /* Tableaux : défilement horizontal dans leur conteneur plutôt que de
+     pousser toute la page. */
+  html:not([data-surface="site"]) div:has(> table) {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+  }
+  html:not([data-surface="site"]) .admin-main table th,
+  html:not([data-surface="site"]) .admin-main table td { white-space: nowrap; }
+
+  /* Fenêtres modales : pleine largeur, hauteur bornée à l'écran visible */
+  html:not([data-surface="site"]) .fixed.inset-0.flex { padding: .5rem; }
+  html:not([data-surface="site"]) .fixed.inset-0.flex > [class*="max-w-"] {
+    width: 100%;
+    max-height: calc(100dvh - 1rem);
+  }
+  html:not([data-surface="site"]) .fixed.inset-0.flex > [class*="max-w-"]:not([class*="overflow-hidden"]) {
+    overflow-y: auto;
+  }
+  html:not([data-surface="site"]) .max-h-\[90vh\],
+  html:not([data-surface="site"]) .max-h-\[95vh\] { max-height: calc(100dvh - 1rem); }
+}

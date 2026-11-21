@@ -288,8 +288,11 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
       const html = await buildReportHTML();
       if (!html) return;
 
+      // Iframe hors écran plutôt que `display:none` : plusieurs navigateurs
+      // mobiles impriment sinon une page vide (ou la page parente).
       const iframe = document.createElement('iframe');
-      iframe.style.display = 'none';
+      iframe.setAttribute('aria-hidden', 'true');
+      iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0;';
       document.body.appendChild(iframe);
 
       const doc = iframe.contentDocument || iframe.contentWindow?.document;
@@ -298,9 +301,10 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
         doc.write(html);
         doc.close();
         setTimeout(() => {
+          iframe.contentWindow?.focus();
           iframe.contentWindow?.print();
-          setTimeout(() => document.body.removeChild(iframe), 150);
-        }, 300);
+          setTimeout(() => iframe.remove(), 1000);
+        }, 500);
       }
     } catch (err) {
       console.error('Error printing report:', err);
@@ -316,8 +320,14 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
       const html = await buildReportHTML();
       if (!html) return;
 
+      // Le <body> du document est ignoré par innerHTML : le conteneur reprend
+      // donc ses réglages (police, sens d'écriture) et la largeur utile d'une
+      // page A4, pour que les tableaux ne soient jamais rognés.
       const holder = document.createElement('div');
       holder.innerHTML = html;
+      holder.setAttribute('dir', lang === 'fr' ? 'ltr' : 'rtl');
+      holder.style.cssText =
+        "width:194mm;background:#fff;color:#0f172a;font-family:'Segoe UI',Tahoma,Geneva,sans-serif;font-size:11px;line-height:1.45;";
       const fileBase = [
         T('rapport', 'تقرير', lang),
         selectedCar.brand, selectedCar.model, selectedCar.registration, startDate, endDate,
@@ -325,12 +335,12 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
 
       await (html2pdf() as any)
         .set({
-          margin: 0,
+          margin: [8, 8, 8, 8],
           filename: `${fileBase}.pdf`,
           image: { type: 'jpeg', quality: 0.98 },
-          html2canvas: { scale: 2, useCORS: true },
+          html2canvas: { scale: 2, useCORS: true, windowWidth: 794 },
           jsPDF: { orientation: 'portrait', unit: 'mm', format: 'a4' },
-          pagebreak: { mode: ['css', 'legacy'] },
+          pagebreak: { mode: ['css', 'legacy'], avoid: ['.contract', 'tr', '.calc-row', '.kpi', '.band'] },
         })
         .from(holder)
         .save();
@@ -1542,7 +1552,7 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
                 whileTap={{ scale: 0.98 }}
                 onClick={handlePrint}
                 disabled={loading}
-                className="flex items-center gap-2 rounded-xl bg-white px-6 py-3 text-sm font-bold text-slate-800 shadow-sm ring-1 ring-slate-200 transition hover:bg-slate-50 disabled:opacity-50"
+                className="flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl bg-white px-6 py-3 text-sm font-bold text-slate-800 shadow-sm ring-1 ring-slate-200 transition hover:bg-slate-50 disabled:opacity-50"
               >
                 <Printer size={16} />
                 {T('Imprimer le rapport', 'طباعة التقرير', lang)}
@@ -1553,7 +1563,7 @@ export const CarGainsPage: React.FC<CarGainsPageProps> = ({ lang }) => {
                 whileTap={{ scale: 0.98 }}
                 onClick={handleDownloadPdf}
                 disabled={exporting}
-                className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-teal-600/20 transition hover:from-teal-700 hover:to-emerald-700 disabled:opacity-50"
+                className="flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-teal-600/20 transition hover:from-teal-700 hover:to-emerald-700 disabled:opacity-50"
               >
                 {exporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
                 {g.isConsignment

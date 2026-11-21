@@ -1,6 +1,6 @@
 import { Car, Language, ReservationDetails, VehicleExpense } from '../../types';
 import { VehicleGains, calcPaid, commissionBreakdown, computeConsignmentSplit } from '../../utils/gainsMath';
-import { expenseTypeLabel, expenseFilters, summarizeExpensesByType } from '../../utils/expenseDetails';
+import { expenseTypeLabel, expenseDetailFields, summarizeExpensesByType } from '../../utils/expenseDetails';
 
 /**
  * RAPPORT « BÉNÉFICES PAR VÉHICULE » — document imprimable / PDF.
@@ -66,6 +66,21 @@ export const generateVehicleBenefitReportHTML = ({
       return d;
     }
   };
+  const fmtDT = (d?: string, t?: string) => {
+    if (!d) return '—';
+    const time = (t || '').slice(0, 5);
+    return time ? `${fmtD(d)} ${time}` : fmtD(d);
+  };
+  const fmtStamp = (d?: string) => {
+    if (!d) return '—';
+    try {
+      const dt = new Date(d);
+      if (isNaN(dt.getTime())) return d;
+      return `${dt.toLocaleDateString(isFrench ? 'fr-FR' : 'ar-DZ')} ${dt.toTimeString().slice(0, 5)}`;
+    } catch {
+      return d;
+    }
+  };
   const pctTxt = (v: number) =>
     `${(Number(v) || 0).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} %`;
 
@@ -102,8 +117,8 @@ export const generateVehicleBenefitReportHTML = ({
       <tr class="${cancelled ? 'row-muted' : ''}">
         <td class="num">${i + 1}</td>
         <td>${esc(`${r.client?.firstName || ''} ${r.client?.lastName || ''}`.trim() || '—')}</td>
-        <td class="nowrap">${ltr(fmtD(r.step1?.departureDate))}</td>
-        <td class="nowrap">${ltr(fmtD(r.step1?.returnDate))}</td>
+        <td>${ltr(fmtDT(r.step1?.departureDate, r.step1?.departureTime))}</td>
+        <td>${ltr(fmtDT(r.step1?.returnDate, r.step1?.returnTime))}</td>
         <td class="num">${r.totalDays || 0}</td>
         <td><span class="pill">${esc(T(st.fr, st.ar, lang))}</span></td>
         <td class="num strong">${fmt(total)}</td>
@@ -113,25 +128,197 @@ export const generateVehicleBenefitReportHTML = ({
       </tr>`;
   }).join('');
 
+  // ── Fiches détaillées : un bloc complet par contrat ──────────────────────
+  const PAY_METHOD: Record<string, [string, string]> = {
+    cash: ['Espèces', 'نقدًا'], card: ['Carte', 'بطاقة'],
+    transfer: ['Virement', 'تحويل'], check: ['Chèque', 'شيك'],
+  };
+  const FUEL: Record<string, [string, string]> = {
+    full: ['Plein', 'ممتلئ'], half: ['1/2', '1/2'], quarter: ['1/4', '1/4'],
+    eighth: ['1/8', '1/8'], empty: ['Vide', 'فارغ'],
+  };
+  const kv = (k: string, v: string) =>
+    `<div class="cf"><span class="k">${esc(k)}</span><span class="v">${v}</span></div>`;
+  const money = (n: number) => `${fmt(n)} DA`;
+
+  const contractCards = reservations.map((r, i) => {
+    const paid = calcPaid(r);
+    const total = Number(r.totalPrice) || 0;
+    const remaining = Math.max(0, total - paid);
+    const cancelled = r.status === 'cancelled';
+    const cb = owner && !cancelled ? commissionBreakdown(r, owner) : null;
+    const st = STATUS_LABEL[r.status] || STATUS_LABEL.pending;
+    const s1: any = r.step1 || {};
+    const cl: any = r.client || {};
+    const days = Number(r.totalDays) || 0;
+    const services = (r.additionalServices || []) as any[];
+    const payments = ((r.payments || []) as any[])
+      .slice()
+      .sort((a, b) => new Date(a.date || a.createdAt || a.created_at || 0).getTime()
+        - new Date(b.date || b.createdAt || b.created_at || 0).getTime());
+    const dep = r.departureInspection;
+    const ret = r.returnInspection;
+    const discount = Number(r.discountAmount) || 0;
+    const cautionAmt = Number(r.cautionAmountDzd ?? r.deposit) || 0;
+    const assurancePerDay = Number(r.protectionAssurancePrice) || 0;
+
+    const clientFields = [
+      kv(T('Client', 'العميل', lang), esc(`${cl.firstName || ''} ${cl.lastName || ''}`.trim() || '—')),
+      cl.phone ? kv(T('Téléphone', 'الهاتف', lang), ltr(cl.phone)) : '',
+      cl.email ? kv(T('Email', 'البريد', lang), ltr(cl.email)) : '',
+      cl.idCardNumber ? kv(T('N° pièce d’identité', 'رقم الهوية', lang), ltr(cl.idCardNumber)) : '',
+      cl.licenseNumber ? kv(T('N° permis', 'رقم الرخصة', lang), ltr(cl.licenseNumber)) : '',
+      cl.wilaya || cl.completeAddress
+        ? kv(T('Adresse', 'العنوان', lang), esc([cl.completeAddress, cl.wilaya].filter(Boolean).join(', ')))
+        : '',
+    ].join('');
+
+    const dateFields = [
+      kv(T('Départ', 'المغادرة', lang), ltr(fmtDT(s1.departureDate, s1.departureTime))),
+      s1.departureAgencyName ? kv(T('Agence de départ', 'وكالة المغادرة', lang), esc(s1.departureAgencyName)) : '',
+      kv(T('Retour', 'العودة', lang), ltr(fmtDT(s1.returnDate, s1.returnTime))),
+      s1.returnAgencyName ? kv(T('Agence de retour', 'وكالة العودة', lang), esc(s1.returnAgencyName)) : '',
+      kv(T('Durée', 'المدة', lang), `${days} ${T('jour(s)', 'يوم', lang)}`),
+      kv(T('Créé le', 'أنشئ في', lang), ltr(fmtStamp(r.createdAt))),
+      r.activatedAt ? kv(T('Activé le', 'فُعّل في', lang), ltr(fmtStamp(r.activatedAt))) : '',
+      r.completedAt ? kv(T('Clôturé le', 'أغلق في', lang), ltr(fmtStamp(r.completedAt))) : '',
+      r.createdByName ? kv(T('Créé par', 'أنشأه', lang), esc(r.createdByName)) : '',
+      kv(T('Origine', 'المصدر', lang), esc(r.source === 'website' ? T('Site web', 'الموقع', lang) : T('Agence', 'الوكالة', lang))),
+    ].join('');
+
+    const inspFields = [
+      dep ? kv(T('Km départ', 'كم المغادرة', lang), `${ltr(fmt(dep.mileage))} km`) : '',
+      dep?.fuelLevel ? kv(T('Carburant départ', 'وقود المغادرة', lang), esc(T(...(FUEL[dep.fuelLevel] || [dep.fuelLevel, dep.fuelLevel]) as [string, string], lang))) : '',
+      ret ? kv(T('Km retour', 'كم العودة', lang), `${ltr(fmt(ret.mileage))} km`) : '',
+      ret?.fuelLevel ? kv(T('Carburant retour', 'وقود العودة', lang), esc(T(...(FUEL[ret.fuelLevel] || [ret.fuelLevel, ret.fuelLevel]) as [string, string], lang))) : '',
+      dep && ret && Number(ret.mileage) >= Number(dep.mileage)
+        ? kv(T('Distance parcourue', 'المسافة المقطوعة', lang), `${ltr(fmt(Number(ret.mileage) - Number(dep.mileage)))} km`)
+        : '',
+      Number(r.excessMileage) > 0 ? kv(T('Km excédentaires', 'كم زائدة', lang), `${ltr(fmt(Number(r.excessMileage)))} km`) : '',
+      Number(r.missingFuel) > 0 ? kv(T('Carburant manquant', 'وقود ناقص', lang), esc(String(r.missingFuel))) : '',
+    ].join('');
+
+    const priceLines: [string, string][] = [];
+    if (days > 0 && total > 0) priceLines.push([T('Prix moyen / jour', 'متوسط السعر / يوم', lang), money(total / days)]);
+    services.forEach(sv => {
+      const name = sv.service_name || sv.name || sv.serviceName || T('Service', 'خدمة', lang);
+      priceLines.push([`${T('Service', 'خدمة', lang)} : ${name}`, money(Number(sv.price) || 0)]);
+    });
+    if (r.protectionAssuranceName || assurancePerDay > 0) {
+      priceLines.push([
+        `${T('Assurance', 'التأمين', lang)} : ${r.protectionAssuranceName || '—'} (${fmt(assurancePerDay)} DA × ${days} ${T('j', 'ي', lang)})`,
+        money(assurancePerDay * days),
+      ]);
+    }
+    if (Number(r.deliveryFee) > 0) {
+      priceLines.push([
+        `${T('Livraison', 'التوصيل', lang)} (${r.deliveryFeePayer === 'owner' ? T('à charge du propriétaire', 'على حساب المالك', lang) : T('à charge du client', 'على حساب العميل', lang)})`,
+        money(Number(r.deliveryFee)),
+      ]);
+    }
+    if (Number(r.longDurationFee) > 0) priceLines.push([T('Supplément longue durée', 'رسوم المدة الطويلة', lang), money(Number(r.longDurationFee))]);
+    if (Number(r.additionalFees) > 0) priceLines.push([T('Frais supplémentaires', 'رسوم إضافية', lang), money(Number(r.additionalFees))]);
+    if (discount > 0) {
+      priceLines.push([
+        `${T('Remise', 'التخفيض', lang)}${r.discountType === 'percentage' ? ` (${discount} %)` : ''}`,
+        r.discountType === 'percentage' ? `${discount} %` : `−${money(discount)}`,
+      ]);
+    }
+    priceLines.push([T('TVA appliquée', 'الضريبة المطبقة', lang), r.tvaApplied ? T('Oui', 'نعم', lang) : T('Non', 'لا', lang)]);
+    if (r.cautionEnabled !== false && cautionAmt > 0) {
+      priceLines.push([`${T('Caution', 'الضمان', lang)} (${r.cautionCurrency || 'DZD'})`, money(cautionAmt)]);
+    }
+    if (r.paymentCurrency === 'EUR' && r.totalPriceEur) {
+      priceLines.push([`${T('Total en euros', 'الإجمالي باليورو', lang)} (${T('taux', 'سعر الصرف', lang)} ${r.euroRate || '—'})`, `${fmt(Number(r.totalPriceEur))} €`]);
+    }
+
+    const payRows = payments.length
+      ? payments.map((p, j) => `
+          <tr>
+            <td class="num">${j + 1}</td>
+            <td>${ltr(fmtD(p.date || p.createdAt || p.created_at))}</td>
+            <td>${esc(T(...(PAY_METHOD[p.method] || [p.method || '—', p.method || '—']) as [string, string], lang))}</td>
+            <td>${esc(p.note || '—')}</td>
+            <td class="num ok">${fmt(Number(p.amount) || 0)}</td>
+          </tr>`).join('')
+      : `<tr><td colspan="5" class="muted">${T('Aucun paiement enregistré', 'لا توجد مدفوعات مسجلة', lang)}</td></tr>`;
+
+    return `
+    <div class="contract ${cancelled ? 'contract-cancelled' : ''}">
+      <div class="contract-head">
+        <div>
+          <strong>${T('Contrat', 'العقد', lang)} #${i + 1}</strong>
+          <span class="ref">${T('Réf.', 'المرجع', lang)} ${ltr((r.id || '').slice(0, 8).toUpperCase())}</span>
+        </div>
+        <div>
+          <span class="pill">${esc(T(st.fr, st.ar, lang))}</span>
+          <span class="ref">${ltr(fmtDT(s1.departureDate, s1.departureTime))} → ${ltr(fmtDT(s1.returnDate, s1.returnTime))}</span>
+        </div>
+      </div>
+      <div class="contract-body">
+        <div class="cgroup">
+          <div class="cg-title">${T('Client', 'العميل', lang)}</div>
+          <div class="cgrid">${clientFields}</div>
+        </div>
+        <div class="cgroup">
+          <div class="cg-title">${T('Dates & agences', 'التواريخ والوكالات', lang)}</div>
+          <div class="cgrid">${dateFields}</div>
+        </div>
+        ${inspFields ? `
+        <div class="cgroup">
+          <div class="cg-title">${T('État du véhicule', 'حالة المركبة', lang)}</div>
+          <div class="cgrid">${inspFields}</div>
+        </div>` : ''}
+        <div class="cgroup">
+          <div class="cg-title">${T('Tarification', 'التسعير', lang)}</div>
+          <table class="mini">
+            <tbody>
+              ${priceLines.map(([k, v]) => `<tr><td>${esc(k)}</td><td class="num">${v}</td></tr>`).join('')}
+            </tbody>
+          </table>
+          <div class="totals">
+            <div><span>${T('Total', 'الإجمالي', lang)}</span><strong>${money(total)}</strong></div>
+            <div class="ok"><span>${T('Encaissé', 'المحصّل', lang)}</span><strong>${money(paid)}</strong></div>
+            <div class="${remaining > 0 ? 'bad' : ''}"><span>${T('Reste à payer', 'المتبقي', lang)}</span><strong>${money(remaining)}</strong></div>
+            ${cb ? `<div class="acc"><span>${T('Commission agence', 'عمولة الوكالة', lang)}</span><strong>${money(cb.commission)}</strong></div>
+            <div><span>${T('Part propriétaire', 'حصة المالك', lang)}</span><strong>${money(cb.ownerPart)}</strong></div>` : ''}
+          </div>
+        </div>
+        <div class="cgroup">
+          <div class="cg-title">${T('Paiements', 'المدفوعات', lang)} (${payments.length})</div>
+          <table class="mini">
+            <thead><tr>
+              <th class="num">#</th><th>${T('Date', 'التاريخ', lang)}</th><th>${T('Mode', 'الطريقة', lang)}</th>
+              <th>${T('Note', 'ملاحظة', lang)}</th><th class="num">${T('Montant', 'المبلغ', lang)}</th>
+            </tr></thead>
+            <tbody>${payRows}</tbody>
+          </table>
+        </div>
+        ${r.notes ? `<div class="cgroup"><div class="cg-title">${T('Notes', 'ملاحظات', lang)}</div><div class="cnote">${esc(r.notes)}</div></div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
   // ── Dépenses : tableau détaillé + récapitulatif par type ────────────────
   const totalExp = Number(gains.expenses) || 0;
   const pctOfExp = (v: number) => pctTxt(totalExp > 0 ? (v / totalExp) * 100 : 0);
   const expRows = expenses.map((e, i) => {
     const cost = Number(e.cost) || 0;
-    const filters = expenseFilters(e, lang);
+    const details = expenseDetailFields(e, lang, fmtD)
+      .filter(f => f.label !== T('Désignation', 'التسمية', lang));
     return `
     <tr>
       <td class="num">${i + 1}</td>
-      <td><span class="pill">${esc(expenseTypeLabel(e.type, lang))}</span></td>
-      <td class="nowrap">${ltr(fmtD(e.date))}</td>
-      <td>${esc(e.expenseName || '—')}</td>
-      <td class="num nowrap">${e.currentMileage ? `${ltr(fmt(e.currentMileage))} km` : '—'}</td>
-      <td class="num nowrap">${e.nextVidangeKm ? `${ltr(fmt(e.nextVidangeKm))} km` : '—'}</td>
-      <td class="nowrap">${e.expirationDate ? ltr(fmtD(e.expirationDate)) : '—'}</td>
-      <td>${filters.length ? esc(filters.join(', ')) : '—'}</td>
-      <td>${esc(e.note || '—')}</td>
+      <td>${ltr(fmtD(e.date))}</td>
+      <td>
+        <span class="pill">${esc(expenseTypeLabel(e.type, lang))}</span>
+        <div class="strong" style="margin-top:2px">${esc(e.expenseName || '—')}</div>
+      </td>
+      <td class="details">${details.length
+        ? details.map(f => `<div><span class="dk">${esc(f.label)} :</span> ${esc(f.value)}</div>`).join('')
+        : '—'}</td>
       <td class="num muted">${pctOfExp(cost)}</td>
-      <td class="num bad nowrap">−${fmt(cost)}</td>
+      <td class="num bad">−${fmt(cost)}</td>
     </tr>`;
   }).join('');
 
@@ -305,7 +492,7 @@ export const generateVehicleBenefitReportHTML = ({
     color:#0f172a; background:#fff; direction:${dir};
     font-size:11px; line-height:1.45; padding:14px;
   }
-  .page { width:210mm; margin:0 auto; padding:10px; }
+  .page { width:100%; max-width:210mm; margin:0 auto; padding:10px; }
 
   .head {
     display:flex; gap:14px; align-items:flex-start;
@@ -380,6 +567,40 @@ export const generateVehicleBenefitReportHTML = ({
     color:#475569; font-size:8px; font-weight:700;
   }
 
+  td.details { font-size:8px; line-height:1.4; word-break:break-word; }
+  td.details .dk, .dk { color:#64748b; font-weight:700; }
+  .strong { font-weight:800; }
+  table { table-layout:auto; word-break:break-word; }
+  .exp-table { table-layout:fixed; }
+
+  .contract { border:1px solid #cbd5e1; border-radius:9px; margin-bottom:10px; overflow:hidden; page-break-inside:avoid; break-inside:avoid; }
+  .contract-cancelled { opacity:.6; }
+  .contract-head {
+    display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;
+    background:#f0fdfa; border-bottom:1px solid #99f6e4; padding:6px 10px; font-size:10px;
+  }
+  .contract-head strong { color:#0f766e; font-size:11px; }
+  .contract-head .ref { color:#475569; font-size:8.5px; margin-inline-start:6px; }
+  .contract-body { padding:7px 10px; }
+  .cgroup { margin-bottom:6px; }
+  .cgroup:last-child { margin-bottom:0; }
+  .cg-title { font-size:8px; font-weight:800; text-transform:uppercase; letter-spacing:.8px; color:#0f766e; margin-bottom:3px; }
+  .cgrid { display:flex; flex-wrap:wrap; gap:3px 14px; }
+  .cf { min-width:120px; }
+  .cf .k { display:block; font-size:7.5px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:#64748b; }
+  .cf .v { display:block; font-size:9.5px; font-weight:700; }
+  table.mini { font-size:8.5px; }
+  table.mini thead th { font-size:7.5px; padding:3px 5px; background:#334155; }
+  table.mini tbody td { padding:3px 5px; }
+  .totals { display:flex; flex-wrap:wrap; gap:6px; margin-top:5px; }
+  .totals > div { flex:1; min-width:90px; border:1px solid #e2e8f0; border-radius:6px; padding:4px 7px; background:#f8fafc; }
+  .totals span { display:block; font-size:7.5px; font-weight:700; text-transform:uppercase; color:#64748b; }
+  .totals strong { display:block; font-size:10.5px; }
+  .totals .ok strong { color:#047857; }
+  .totals .bad strong { color:#be123c; }
+  .totals .acc strong { color:#b45309; }
+  .cnote { font-size:8.5px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:5px; padding:4px 7px; white-space:pre-wrap; }
+
   .calc { border:1px solid #cbd5e1; border-radius:9px; overflow:hidden; margin-top:8px; }
   .calc-row { display:flex; align-items:center; gap:9px; padding:7px 11px; border-bottom:1px solid #e2e8f0; }
   .calc-row:last-child { border-bottom:none; }
@@ -408,7 +629,8 @@ export const generateVehicleBenefitReportHTML = ({
   .sign-box .lbl { font-size:8.5px; font-weight:800; text-transform:uppercase; letter-spacing:.7px; color:#0f766e; }
   .sign-box .line { border-top:1.5px solid #334155; height:34px; margin-top:16px; }
 
-  @media print { body { padding:0; } .page { margin:0; } }
+  @page { size:A4; margin:8mm; }
+  @media print { body { padding:0; } .page { margin:0; max-width:none; padding:0; } }
 </style>
 </head>
 <body>
@@ -504,6 +726,10 @@ export const generateVehicleBenefitReportHTML = ({
     ${commissionNote}${deliveryNote}${pendingNote}
   </div>` : ''}
 
+  ${reservations.length > 0 ? `
+  <h2 class="section">${T('Détail complet des contrats', 'التفاصيل الكاملة للعقود', lang)} (${reservations.length})</h2>
+  ${contractCards}` : ''}
+
   <h2 class="section">${T('Détail des dépenses du véhicule', 'تفاصيل مصاريف المركبة', lang)} (${expenses.length})</h2>
   ${expenses.length > 0 ? `
   ${isConsignment ? `<p class="note" style="margin:0 0 7px">${T(
@@ -513,23 +739,18 @@ export const generateVehicleBenefitReportHTML = ({
   <table class="exp-table">
     <thead>
       <tr>
-        <th class="num">#</th>
-        <th>${T('Type', 'النوع', lang)}</th>
-        <th>${T('Date', 'التاريخ', lang)}</th>
-        <th>${T('Désignation', 'التسمية', lang)}</th>
-        <th class="num">${T('Km', 'كم', lang)}</th>
-        <th class="num">${T('Proch. vidange', 'التغيير القادم', lang)}</th>
-        <th>${T('Expiration', 'الانتهاء', lang)}</th>
-        <th>${T('Filtres changés', 'الفلاتر', lang)}</th>
-        <th>${T('Note', 'ملاحظة', lang)}</th>
-        <th class="num">%</th>
-        <th class="num">${T('Montant', 'المبلغ', lang)}</th>
+        <th class="num" style="width:22px">#</th>
+        <th style="width:62px">${T('Date', 'التاريخ', lang)}</th>
+        <th style="width:24%">${T('Type / Désignation', 'النوع / التسمية', lang)}</th>
+        <th>${T('Détails', 'التفاصيل', lang)}</th>
+        <th class="num" style="width:44px">%</th>
+        <th class="num" style="width:78px">${T('Montant', 'المبلغ', lang)}</th>
       </tr>
     </thead>
     <tbody>${expRows}</tbody>
     <tfoot>
       <tr>
-        <td colspan="9">${T('TOTAL DES DÉPENSES', 'إجمالي المصاريف', lang)}</td>
+        <td colspan="4">${T('TOTAL DES DÉPENSES', 'إجمالي المصاريف', lang)}</td>
         <td class="num">100 %</td>
         <td class="num bad nowrap">−${fmt(totalExp)}</td>
       </tr>

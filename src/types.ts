@@ -264,6 +264,9 @@ export interface ReservationStep1 {
   returnDate: string;
   returnTime: string;
   returnAgency: string;
+  /** Noms des agences (jointure), pour l'affichage et les rapports. */
+  departureAgencyName?: string;
+  returnAgencyName?: string;
   differentReturnAgency: boolean;
 }
 

@@ -262,7 +262,7 @@ export const CarModal: React.FC<CarModalProps> = ({ isOpen, onClose, onSave, onD
                     : 'ex: 12345-123-16'}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="label-saas">Année</label>
                   <input name="year" type="number" value={formData.year} onChange={handleChange} className="input-saas" />

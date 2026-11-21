@@ -435,7 +435,7 @@ export const DocumentTemplateEditor: React.FC<DocumentTemplateEditorProps> = ({
           </button>
         </div>
 
-        <div className="p-6 grid grid-cols-4 gap-6">
+        <div className="p-4 sm:p-6 grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-6">
           {/* Sidebar - Saved Templates */}
           <div className="col-span-1 space-y-4 max-h-[calc(90vh-200px)] overflow-y-auto">
             <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">

@@ -340,7 +340,7 @@ export const ReservationTimelineView: React.FC<ReservationTimelineViewProps> = (
           </div>
 
           {/* Reservation Dates and Times */}
-          <div className="grid grid-cols-2 gap-4 mb-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
             <div className="bg-white/10 rounded-lg p-4">
               <p className="opacity-75 text-xs font-bold uppercase">{lang === 'fr' ? 'Date Départ' : 'تاريخ المغادرة'}</p>
               <p className="font-black text-xl mt-1">{new Date(res.step1.departureDate).toLocaleDateString(lang === 'fr' ? 'fr-FR' : 'ar-DZ')}</p>
@@ -1073,7 +1073,7 @@ export const ReservationTimelineView: React.FC<ReservationTimelineViewProps> = (
               >
                 <ChevronLeft className="w-6 h-6 text-slate-600" />
               </motion.button>
-              <h3 className="text-2xl font-black text-slate-900 min-w-[200px]">{monthName}</h3>
+              <h3 className="text-lg sm:text-2xl font-black text-slate-900 sm:min-w-[200px] text-center">{monthName}</h3>
               <motion.button
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
@@ -1146,7 +1146,7 @@ export const ReservationTimelineView: React.FC<ReservationTimelineViewProps> = (
                 {/* Sticky header row with day numbers */}
                 <div className="flex sticky top-0 z-20 bg-white border-b-2 border-slate-200">
                   {/* Left panel header */}
-                  <div className="w-[260px] min-w-[260px] p-4 font-black text-slate-900 text-sm uppercase tracking-widest border-r border-slate-200 bg-slate-50">
+                  <div className="w-[130px] min-w-[130px] sm:w-[260px] sm:min-w-[260px] p-2 sm:p-4 font-black text-slate-900 text-xs sm:text-sm uppercase tracking-widest border-r border-slate-200 bg-slate-50 sticky start-0 z-10">
                     {lang === 'fr' ? '🚗 Véhicule' : '🚗 المركبة'}
                   </div>
                   {/* Day columns header */}
@@ -1185,11 +1185,11 @@ export const ReservationTimelineView: React.FC<ReservationTimelineViewProps> = (
 
                         {/* LEFT: Car info panel */}
                         <div
-                          className="w-[260px] min-w-[260px] flex items-center gap-3 p-3 border-r border-slate-200 cursor-pointer hover:bg-blue-50 transition-colors"
+                          className="w-[130px] min-w-[130px] sm:w-[260px] sm:min-w-[260px] flex items-center gap-2 sm:gap-3 p-2 sm:p-3 border-r border-slate-200 cursor-pointer hover:bg-blue-50 transition-colors sticky start-0 z-[15] bg-inherit"
                           onClick={() => setExpandedCarId(isExpanded ? null : car.id)}
                         >
                           {/* Car Image */}
-                          <div className="relative w-16 h-12 rounded-lg overflow-hidden bg-slate-100 flex-shrink-0">
+                          <div className="relative hidden sm:block w-16 h-12 rounded-lg overflow-hidden bg-slate-100 flex-shrink-0">
                             {car.images?.[0] ? (
                               <img
                                 src={car.images[0]}

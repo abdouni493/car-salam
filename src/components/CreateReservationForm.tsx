@@ -746,7 +746,7 @@ export const Step1DatesLocations: React.FC<{
             <MapPin className="w-5 h-5" />
             {lang === 'fr' ? 'Départ' : 'المغادرة'}
           </h4>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block font-bold text-slate-900 mb-2">
                 📅 {lang === 'fr' ? 'Date' : 'التاريخ'}
@@ -840,7 +840,7 @@ export const Step1DatesLocations: React.FC<{
             <MapPin className="w-5 h-5" />
             {lang === 'fr' ? 'Retour' : 'العودة'}
           </h4>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block font-bold text-slate-900 mb-2">
                 📅 {lang === 'fr' ? 'Date' : 'التاريخ'}

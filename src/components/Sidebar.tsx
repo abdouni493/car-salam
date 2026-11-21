@@ -60,10 +60,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
           animate={{ x: 0, opacity: 1 }}
           exit={{ x: isRtl ? '100%' : '-100%', opacity: 0 }}
           transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-          className="fixed inset-y-0 left-0 z-50 w-72 bg-white text-saas-text-main flex flex-col shadow-xl ltr:left-0 rtl:right-0 border-r border-saas-border lg:static lg:h-screen lg:sticky lg:top-0 lg:shadow-none"
+          className="fixed inset-y-0 left-0 z-50 w-[85vw] max-w-72 lg:w-72 h-[100dvh] bg-white text-saas-text-main flex flex-col shadow-xl ltr:left-0 rtl:right-0 border-r border-saas-border lg:static lg:h-screen lg:sticky lg:top-0 lg:shadow-none"
           style={{ [isRtl ? 'right' : 'left']: 0 }}
         >
-          <div className="p-8 flex items-center justify-between border-b border-saas-border">
+          <div className="p-5 lg:p-8 flex items-center justify-between border-b border-saas-border">
             <div className="flex items-center gap-3 min-w-0">
               {/* L'écusson détouré, pas le wordmark : ce dernier est un bloc noir
                   3:2 que l'ancienne pastille ronde recadrait en `object-cover`,
@@ -89,7 +89,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
           </div>
 
-          <nav className="flex-1 overflow-y-auto px-4 py-8 space-y-1.5 custom-scrollbar">
+          <nav className="flex-1 overflow-y-auto px-3 lg:px-4 py-4 lg:py-8 space-y-1 lg:space-y-1.5 custom-scrollbar overscroll-contain">
             {SIDEBAR_ITEMS.map((item) => (
               <button
                 key={item.id}
@@ -177,7 +177,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             ))}
           </nav>
 
-          <div className="p-6 border-t border-saas-border bg-saas-bg/50">
+          <div className="p-4 lg:p-6 border-t border-saas-border bg-saas-bg/50">
             <button
               onClick={onLogout}
               className="w-full flex items-center gap-3.5 p-3.5 rounded-xl text-saas-danger-start hover:bg-saas-danger-start/5 transition-all font-bold uppercase tracking-widest text-xs border border-transparent hover:border-saas-danger-start/10"

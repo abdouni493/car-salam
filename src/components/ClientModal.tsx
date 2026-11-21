@@ -255,7 +255,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, onSav
             <h3 className="text-xs font-black text-saas-primary-via uppercase tracking-[0.2em]">
               👤 {lang === 'fr' ? 'Informations Personnelles' : 'المعلومات الشخصية'}
             </h3>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-2">
                 <label className="label-saas">✍️ {lang === 'fr' ? 'Nom de Famille *' : 'اسم العائلة *'}</label>
                 <input
@@ -307,7 +307,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, onSav
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-2">
                 <label className="label-saas">🎂 {lang === 'fr' ? 'Date Naissance' : 'تاريخ الميلاد'}</label>
                 <input
@@ -349,7 +349,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, onSav
                 required
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-2">
                 <label className="label-saas">📅 {{fr: 'Délivrance Permis', ar: 'استخراج الرخصة'}[lang]}</label>
                 <input
@@ -411,7 +411,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, onSav
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-2">
                 <label className="label-saas">📅 {{fr: 'Délivrance', ar: 'الاستخراج'}[lang]}</label>
                 <input

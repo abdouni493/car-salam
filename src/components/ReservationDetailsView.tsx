@@ -289,7 +289,7 @@ const OverviewTab: React.FC<{ lang: Language; reservation: ReservationDetails }>
               <p className="text-slate-600">📧 {reservation.client.email}</p>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4 text-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
             <div>
               <p className="font-bold text-slate-900">🆔 {lang === 'fr' ? 'Permis' : 'رخصة'}</p>
               <p className="text-slate-600">{reservation.client.licenseNumber}</p>
@@ -324,7 +324,7 @@ const OverviewTab: React.FC<{ lang: Language; reservation: ReservationDetails }>
               <p className="text-slate-600">🎨 {reservation.car.color}</p>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4 text-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
             <div>
               <p className="font-bold text-slate-900">📅 {lang === 'fr' ? 'Année' : 'السنة'}</p>
               <p className="text-slate-600">{reservation.car.year}</p>

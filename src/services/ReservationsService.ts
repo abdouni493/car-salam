@@ -452,6 +452,8 @@ export class ReservationsService {
         returnDate: res.return_date,
         returnTime: res.return_time,
         returnAgency: res.return_agency_id,
+        departureAgencyName: res.departure_agency?.name || undefined,
+        returnAgencyName: res.return_agency?.name || undefined,
         differentReturnAgency: res.departure_agency_id !== res.return_agency_id,
       },
       step2: {
@@ -685,6 +687,8 @@ export class ReservationsService {
         returnDate: data.return_date,
         returnTime: data.return_time,
         returnAgency: data.return_agency_id,
+        departureAgencyName: data.departure_agency?.name || undefined,
+        returnAgencyName: data.return_agency?.name || undefined,
         differentReturnAgency: data.departure_agency_id !== data.return_agency_id,
       },
       step2: {
