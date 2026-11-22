@@ -99,7 +99,7 @@ export const generateContractHTML = (
 
   const termsList = isFrench
     ? [
-        "1- Toute extension doit être confirmée au minimum 48 heures avant l'expiration du contrat de location, incluant le kilométrage et le carburant à la retour.",
+        "1- Toute extension doit être confirmée au minimum 48 heures avant l'expiration du contrat de location, incluant le kilométrage et le carburant retour.",
         '2- Ne pas conduire le véhicule avec un carburant de réserve (réserve).',
         "3- Le renouvellement du contrat de location commence à partir de la date d'expiration du contrat et est la responsabilité du client.",
         '4- Le non-respect du contrat de location expose le client à une pénalité du montant journalier complet.'
